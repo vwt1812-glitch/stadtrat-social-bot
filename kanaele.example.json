@@ -2,5 +2,7 @@
   "instagram": { "post_type": "post" },
   "tiktok": { "privacy_level": "PUBLIC_TO_EVERYONE", "comment": true },
   "youtube": { "type": "public" },
+  "x": { "who_can_reply_post": "everyone" },
+  "pinterest": { "board": "HIER-DIE-BOARD-ID" },
   "HIER-EINE-KANAL-ID-AUS-/kanaele": { "post_type": "story" }
 }

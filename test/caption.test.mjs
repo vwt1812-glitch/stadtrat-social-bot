@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { einfacherVorschlag, captionVorschlag } from "../src/caption.mjs";
 
-const o = { modell: "x", stil: "", hashtags: "#Nürnberg" };
+const o = { anbieter: null, modell: "x", stil: "", hashtags: "#Nürnberg" };
 
 test("eigener Text hat Vorrang", () => {
   assert.deepEqual(einfacherVorschlag({ notizen: " Mein Text ", transkript: "Egal." }, "#N"), { text: "Mein Text", quelle: "eigene" });

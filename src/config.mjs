@@ -22,6 +22,24 @@ const pfad = (wert) => (wert ? path.resolve(BOT_DIR, wert) : wert);
 
 process.env.TZ = env("ZEITZONE", "Europe/Berlin");
 
+function captionConfig() {
+  const anthropicKey = env("ANTHROPIC_API_KEY");
+  const openaiKey = env("OPENAI_API_KEY");
+  const anbieter = env("CAPTION_ANBIETER", anthropicKey ? "claude" : openaiKey ? "openai" : "");
+  if (anbieter && !["claude", "openai"].includes(anbieter)) throw new Error(`CAPTION_ANBIETER muss claude oder openai sein, nicht „${anbieter}“.`);
+  if (anbieter === "claude" && !anthropicKey) throw new Error("CAPTION_ANBIETER=claude braucht ANTHROPIC_API_KEY.");
+  if (anbieter === "openai" && !openaiKey) throw new Error("CAPTION_ANBIETER=openai braucht OPENAI_API_KEY.");
+  return {
+    anbieter: anbieter || null,
+    anthropicKey,
+    openaiKey,
+    openaiUrl: env("OPENAI_BASE_URL"),
+    modell: env("CAPTION_MODELL", anbieter === "openai" ? "gpt-5.5" : "claude-opus-5-5"),
+    stil: env("CAPTION_STIL", ""),
+    hashtags: env("CAPTION_HASHTAGS", "#Nürnberg #Stadtrat"),
+  };
+}
+
 export function ladeConfig() {
   return {
     telegram: {
@@ -33,6 +51,7 @@ export function ladeConfig() {
       url: pflicht("POSTIZ_URL").replace(/\/$/, ""),
       apiKey: pflicht("POSTIZ_API_KEY"),
       kanaele: liste("POSTIZ_KANAELE"),
+      kunde: env("POSTIZ_KUNDE", ""),
       einstellungen: pfad(env("KANAL_EINSTELLUNGEN", "kanaele.json")),
     },
     whisper: {
@@ -60,12 +79,7 @@ export function ladeConfig() {
       preset: env("VIDEO_PRESET", "veryfast"),
       crf: env("VIDEO_CRF", "21"),
     },
-    caption: {
-      anthropicKey: env("ANTHROPIC_API_KEY"),
-      modell: env("CAPTION_MODELL", "claude-opus-5-5"),
-      stil: env("CAPTION_STIL", ""),
-      hashtags: env("CAPTION_HASHTAGS", "#Nürnberg #Stadtrat"),
-    },
+    caption: captionConfig(),
     datenDir: pfad(env("DATEN_DIR", "daten")),
   };
 }

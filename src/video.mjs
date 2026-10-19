@@ -121,8 +121,8 @@ export async function fotoRendern({ eingabe, ausgabe, layout, mitLogo }) {
   await ausfuehren("ffmpeg", args);
 }
 
-/** Verkleinerte Kopie, die Claude für den Caption-Vorschlag ansieht. */
-export async function fotoFuerClaude(eingabe, ausgabe) {
+/** Verkleinerte Kopie, die die KI für den Caption-Vorschlag ansieht. */
+export async function fotoFuerKi(eingabe, ausgabe) {
   await ausfuehren("ffmpeg", [
     "-y", "-v", "error", "-i", eingabe,
     "-vf", "scale='min(1568,iw)':'min(1568,ih)':force_original_aspect_ratio=decrease",

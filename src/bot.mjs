@@ -5,9 +5,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { ladeConfig } from "./config.mjs";
 import { Telegram, html } from "./telegram.mjs";
-import { Postiz, passendeKanaele, BRAUCHT_MEDIEN, NUR_VIDEO } from "./postiz.mjs";
+import {
+  Postiz, passendeKanaele, BRAUCHT_MEDIEN, NUR_VIDEO, kundenAus, findeKunde, kanaeleVonKunde,
+  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG,
+} from "./postiz.mjs";
 import { Auftraege } from "./auftraege.mjs";
-import { untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerClaude } from "./video.mjs";
+import { ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { captionVorschlag, einfacherVorschlag } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, parseKorrekturen, wendeKorrekturenAn, volltext } from "./untertitel.mjs";
@@ -27,14 +30,31 @@ async function alleKanaele() {
   return kanalCache.liste;
 }
 
+/** Vorauswahl: Kanäle des Kunden, ggf. eingeschränkt auf POSTIZ_KANAELE, passend zur Beitragsart. */
+function standardKanaele(alle, auftrag) {
+  const vomKunden = kanaeleVonKunde(alle, auftrag.kunde);
+  const vorgabe = vomKunden.filter((k) => config.postiz.kanaele.includes(k.id));
+  return passendeKanaele(vorgabe.length ? vorgabe : vomKunden, art(auftrag)).map((k) => k.id);
+}
+
 async function gewaehlteKanaele(auftrag) {
   const alle = await alleKanaele();
-  if (!auftrag.kanaele) {
-    const vorgabe = config.postiz.kanaele.length ? alle.filter((k) => config.postiz.kanaele.includes(k.id)) : alle;
-    const standard = passendeKanaele(vorgabe, art(auftrag));
-    auftraege.aendern(auftrag.id, { kanaele: standard.map((k) => k.id) });
-  }
+  if (auftrag.kunde === undefined) auftraege.aendern(auftrag.id, { kunde: findeKunde(alle, config.postiz.kunde)?.id ?? null });
+  if (!auftrag.kanaele) auftraege.aendern(auftrag.id, { kanaele: standardKanaele(alle, auftrag) });
   return alle.filter((k) => auftrag.kanaele.includes(k.id));
+}
+
+const verzoegerungText = (ms) => REPOST_VERZOEGERUNG.find(([, wert]) => wert === ms)?.[0] ?? "sofort";
+
+/** Zusatzzeilen für Kunde, Collab und Repost. */
+function details(auftrag, alle) {
+  const zeilen = [];
+  const kunde = kundenAus(alle).find((k) => k.id === auftrag.kunde);
+  if (kundenAus(alle).length) zeilen.push(`👤 ${kunde ? html(kunde.name) : "<i>alle Kunden</i>"}`);
+  if (auftrag.collabs?.length) zeilen.push(`🤝 Collab: ${auftrag.collabs.map((c) => `@${html(c)}`).join(", ")}`);
+  const reposter = alle.filter((k) => auftrag.repost?.kanaele.includes(k.id));
+  if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
+  return zeilen;
 }
 
 /** Ältere Aufträge stammen aus der Zeit, als es nur Videos gab. */
@@ -53,17 +73,21 @@ Schick mir
 • ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zur Caption.
 • einfach <b>Text</b> – daraus wird ein Textbeitrag (nicht für Instagram, TikTok, YouTube).
 
-Danach kannst du Caption, Kanäle und Zeit anpassen und mit <b>Ja</b> posten.
+Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpassen und mit <b>Ja</b> posten.
 
-/kanaele – verbundene Postiz-Kanäle anzeigen
+/kanaele – verbundene Postiz-Kanäle nach Kunden
+/status – prüft Postiz, Whisper, ffmpeg und KI
 /hilfe – diese Hilfe`;
 
 // ---------- Menüs ----------
 
 async function menueInhalt(auftrag) {
   let kanalText;
+  let kanaele = [];
+  let alle = [];
   try {
-    const kanaele = await gewaehlteKanaele(auftrag);
+    kanaele = await gewaehlteKanaele(auftrag);
+    alle = await alleKanaele();
     kanalText = kanaele.length ? kanaele.map((k) => html(k.name)).join(", ") : "<i>keine gewählt</i>";
   } catch (e) {
     kanalText = `<i>Postiz nicht erreichbar (${html(e.message.slice(0, 120))})</i>`;
@@ -73,7 +97,7 @@ async function menueInhalt(auftrag) {
     hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
   }[auftrag.captionQuelle] ?? "";
   const titel = art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
-  const text = `<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>\n📺 ${kanalText}`;
+  const text = [`<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, ...details(auftrag, alle), `📺 ${kanalText}`].join("\n");
   const extra = {
     video: [knopf("📝 Untertitel", auftrag, "untertitel")],
     foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
@@ -81,10 +105,15 @@ async function menueInhalt(auftrag) {
   }[art(auftrag)];
   const zeilen = [
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
-    [knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anthropicKey ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])],
+    [knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])],
     [...extra, knopf("📺 Kanäle", auftrag, "kanaele")],
-    [knopf("🗑️ Verwerfen", auftrag, "verwerfen")],
   ];
+  const optionen = [];
+  if (kundenAus(alle).length) optionen.push(knopf("👤 Kunde", auftrag, "kunde"));
+  if (art(auftrag) !== "text" && kanaele.some((k) => k.identifier.startsWith("instagram"))) optionen.push(knopf("🤝 Collab", auftrag, "collab"));
+  if (repostKandidaten(alle, kanaele).length) optionen.push(knopf("🔁 Repost", auftrag, "repost"));
+  if (optionen.length) zeilen.push(optionen);
+  zeilen.push([knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
 }
 
@@ -115,11 +144,43 @@ async function zeitMenue(auftrag) {
 async function kanalMenue(auftrag) {
   const alle = await alleKanaele();
   await gewaehlteKanaele(auftrag);
-  const zeilen = alle.map((k, i) => [
-    knopf(`${auftrag.kanaele.includes(k.id) ? "✅" : "⬜"} ${k.name} (${k.identifier})`, auftrag, `k:${i}`),
+  const sichtbar = new Set(kanaeleVonKunde(alle, auftrag.kunde).map((k) => k.id));
+  // Indizes beziehen sich auf die Gesamtliste, damit die Knöpfe eindeutig bleiben
+  const zeilen = alle.flatMap((k, i) => sichtbar.has(k.id)
+    ? [[knopf(`${auftrag.kanaele.includes(k.id) ? "✅" : "⬜"} ${k.name} (${k.identifier})`, auftrag, `k:${i}`)]]
+    : []);
+  const kunde = kundenAus(alle).find((k) => k.id === auftrag.kunde);
+  const unten = [knopf("✔️ Fertig", auftrag, "zurueck")];
+  if (kundenAus(alle).length) unten.unshift(knopf("👤 Kunde wechseln", auftrag, "kunde"));
+  zeilen.push(unten);
+  const titel = kunde ? `<b>Kanäle von ${html(kunde.name)}</b>` : "<b>Auf welchen Kanälen posten?</b>";
+  await zeigeMenue(auftrag, { text: titel, reply_markup: { inline_keyboard: zeilen } });
+}
+
+async function kundeMenue(auftrag) {
+  const kunden = kundenAus(await alleKanaele());
+  const zeilen = kunden.map((k, i) => [knopf(`${auftrag.kunde === k.id ? "🔘" : "⚪"} ${k.name}`, auftrag, `ku:${i}`)]);
+  zeilen.push([knopf(`${auftrag.kunde ? "⚪" : "🔘"} Alle Kanäle`, auftrag, "ku:alle")]);
+  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  await zeigeMenue(auftrag, {
+    text: "<b>Für welchen Kunden?</b>\nDanach sind dessen Kanäle vorausgewählt.",
+    reply_markup: { inline_keyboard: zeilen },
+  });
+}
+
+async function repostMenue(auftrag) {
+  const alle = await alleKanaele();
+  const kandidaten = repostKandidaten(alle, await gewaehlteKanaele(auftrag));
+  const repost = auftrag.repost ?? { kanaele: [], verzoegerung: 0 };
+  const zeilen = kandidaten.map((k) => [
+    knopf(`${repost.kanaele.includes(k.id) ? "✅" : "⬜"} ${k.name} (${k.identifier})`, auftrag, `rp:${alle.indexOf(k)}`),
   ]);
+  zeilen.push([knopf(`⏱️ Repost ${verzoegerungText(repost.verzoegerung)}`, auftrag, "rv")]);
   zeilen.push([knopf("✔️ Fertig", auftrag, "zurueck")]);
-  await zeigeMenue(auftrag, { text: "<b>Auf welchen Kanälen posten?</b>", reply_markup: { inline_keyboard: zeilen } });
+  await zeigeMenue(auftrag, {
+    text: "<b>Welche Konten sollen den Beitrag reposten?</b>\nGeht bei Postiz nur auf X und LinkedIn: Die gewählten Konten teilen den Beitrag, nachdem er erschienen ist. Ein Konto repostet sich nicht selbst.",
+    reply_markup: { inline_keyboard: zeilen },
+  });
 }
 
 async function bestaetigung(auftrag, typ, zeit) {
@@ -135,7 +196,11 @@ async function bestaetigung(auftrag, typ, zeit) {
   auftraege.aendern(auftrag.id, { plan: { typ, zeit: zeit.toISOString() } });
   const wann = typ === "now" ? "<b>jetzt</b>" : `am <b>${zeitText(zeit)}</b>`;
   return {
-    text: `Wirklich ${wann} auf ${kanaele.map((k) => `<b>${html(k.name)}</b>`).join(", ")} posten?\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`,
+    text: [
+      `Wirklich ${wann} auf ${kanaele.map((k) => `<b>${html(k.name)}</b>`).join(", ")} posten?`,
+      ...details(auftrag, await alleKanaele()),
+      `<blockquote expandable>${html(auftrag.caption)}</blockquote>`,
+    ].join("\n"),
     reply_markup: { inline_keyboard: [[knopf("✅ Ja, posten", auftrag, "ja"), knopf("↩️ Zurück", auftrag, "zurueck")]] },
   };
 }
@@ -179,7 +244,7 @@ async function verarbeiten(id, fileId) {
 
     await schritt(auftrag, "✍️ Schreibe Caption-Vorschlag …");
     const vorschlag = await captionVorschlag({ art: "video", transkript: volltext(cues) }, config.caption);
-    if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ Claude nicht erreichbar (${html(vorschlag.fehler)}) – einfacher Vorschlag stattdessen.`);
+    if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ KI nicht erreichbar (${html(vorschlag.fehler)}) – einfacher Vorschlag stattdessen.`);
     auftraege.aendern(id, { caption: vorschlag.text, captionQuelle: vorschlag.quelle });
 
     await renderUndVorschau(id);
@@ -267,24 +332,24 @@ async function verarbeiteFotos(id) {
   try {
     await schritt(auftrag, "⬇️ Lade Fotos …");
     const originale = [];
-    const fuerClaude = [];
+    const fuerKi = [];
     for (const [i, foto] of auftrag.fotos.entries()) {
       const original = datei(auftrag, `original-${i + 1}${path.extname(foto.name) || ".jpg"}`);
       await tg.herunterladen(foto.fileId, original);
       originale.push(original);
-      if (config.caption.anthropicKey) {
-        fuerClaude.push(datei(auftrag, `claude-${i + 1}.jpg`));
-        await fotoFuerClaude(original, fuerClaude.at(-1));
+      if (config.caption.anbieter) {
+        fuerKi.push(datei(auftrag, `ki-${i + 1}.jpg`));
+        await fotoFuerKi(original, fuerKi.at(-1));
       }
     }
-    auftrag = auftraege.aendern(id, { originale, fuerClaude });
+    auftrag = auftraege.aendern(id, { originale, fuerKi });
 
     // Eigener Text in der Bildunterschrift hat Vorrang vor einem Vorschlag
     let vorschlag = einfacherVorschlag({ notizen: auftrag.notizen }, config.caption.hashtags);
-    if (vorschlag.quelle !== "eigene" && config.caption.anthropicKey) {
+    if (vorschlag.quelle !== "eigene" && config.caption.anbieter) {
       await schritt(auftrag, "✍️ Schreibe Caption-Vorschlag …");
-      vorschlag = await captionVorschlag({ art: "foto", bilder: fuerClaude }, config.caption);
-      if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ Claude nicht erreichbar (${html(vorschlag.fehler)}).`);
+      vorschlag = await captionVorschlag({ art: "foto", bilder: fuerKi }, config.caption);
+      if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ KI nicht erreichbar (${html(vorschlag.fehler)}).`);
     }
     auftraege.aendern(id, { caption: vorschlag.text, captionQuelle: vorschlag.quelle });
     await fotosRendernUndVorschau(id);
@@ -342,7 +407,10 @@ async function veroeffentlichen(auftrag) {
       auftrag = auftraege.aendern(auftrag.id, { hochgeladen });
     }
     await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
-    await postiz.beitrag({ typ, zeit, caption: auftrag.caption, medien: auftrag.hochgeladen ?? [], kanaele });
+    await postiz.beitrag({
+      typ, zeit, caption: auftrag.caption, medien: auftrag.hochgeladen ?? [], kanaele,
+      collabs: art(auftrag) === "text" ? [] : auftrag.collabs, repost: auftrag.repost,
+    });
     auftraege.aendern(auftrag.id, { status: typ === "now" ? "gepostet" : "geplant" });
     const namen = kanaele.map((k) => html(k.name)).join(", ");
     const text = typ === "now"
@@ -419,6 +487,41 @@ async function knopfGedrueckt(cq) {
     case "kanaele":
       await kanalMenue(auftrag);
       return antwort();
+    case "kunde":
+      await kundeMenue(auftrag);
+      return antwort();
+    case "ku": {
+      const kunde = arg === "alle" ? null : kundenAus(await alleKanaele())[Number(arg)];
+      auftrag = auftraege.aendern(id, { kunde: kunde?.id ?? null });
+      auftrag = auftraege.aendern(id, { kanaele: standardKanaele(await alleKanaele(), auftrag) });
+      await zeigeMenue(auftrag);
+      return antwort(kunde ? `Kanäle von ${kunde.name} gewählt` : "Alle Kanäle");
+    }
+    case "collab":
+      auftraege.aendern(id, { wartetAuf: "collab" });
+      await tg.senden(auftrag.chatId, "Instagram-Namen der Collab-Partner (bis zu 3), z. B. <code>@piraten_nuernberg @humanisten</code>.\n<code>-</code> entfernt alle. Bei Storys gibt es keine Collabs.");
+      return antwort();
+    case "repost":
+      await repostMenue(auftrag);
+      return antwort();
+    case "rp": {
+      const kanal = (await alleKanaele())[Number(arg)];
+      const repost = auftrag.repost ?? { kanaele: [], verzoegerung: 0 };
+      if (kanal) {
+        repost.kanaele = repost.kanaele.includes(kanal.id) ? repost.kanaele.filter((k) => k !== kanal.id) : [...repost.kanaele, kanal.id];
+        auftrag = auftraege.aendern(id, { repost });
+      }
+      await repostMenue(auftrag);
+      return antwort();
+    }
+    case "rv": {
+      const repost = auftrag.repost ?? { kanaele: [], verzoegerung: 0 };
+      const i = REPOST_VERZOEGERUNG.findIndex(([, ms]) => ms === repost.verzoegerung);
+      repost.verzoegerung = REPOST_VERZOEGERUNG[(i + 1) % REPOST_VERZOEGERUNG.length][1];
+      auftrag = auftraege.aendern(id, { repost });
+      await repostMenue(auftrag);
+      return antwort();
+    }
     case "k": {
       const kanal = (await alleKanaele())[Number(arg)];
       if (kanal) {
@@ -457,10 +560,16 @@ async function texteingabe(auftrag, text) {
     case "hinweis": {
       await tg.senden(auftrag.chatId, "✍️ Formuliere neu …");
       const hinweis = text.trim() === "-" ? "" : text.trim();
-      const material = { art: art(auftrag), transkript: auftrag.transkript, notizen: auftrag.notizen, bilder: auftrag.fuerClaude, bisher: auftrag.caption };
+      const material = { art: art(auftrag), transkript: auftrag.transkript, notizen: auftrag.notizen, bilder: auftrag.fuerKi, bisher: auftrag.caption };
       const v = await captionVorschlag(material, config.caption, hinweis || "neu formulieren");
       if (v.fehler) await tg.senden(auftrag.chatId, `⚠️ ${html(v.fehler)}`);
       auftrag = auftraege.aendern(auftrag.id, { caption: v.text, captionQuelle: v.quelle, wartetAuf: null });
+      return neuesMenue(auftrag);
+    }
+    case "collab": {
+      const collabs = text.trim() === "-" ? [] : parseCollabs(text);
+      if (collabs.length > 3) return tg.senden(auftrag.chatId, "Instagram erlaubt höchstens 3 Collab-Partner – bitte nochmal.");
+      auftrag = auftraege.aendern(auftrag.id, { collabs, wartetAuf: null });
       return neuesMenue(auftrag);
     }
     case "zeit": {
@@ -521,14 +630,46 @@ async function nachricht(msg) {
   const text = msg.text ?? "";
   if (/^\/(start|hilfe|help)\b/.test(text)) return tg.senden(chatId, HILFE);
   if (/^\/kanaele\b/.test(text)) {
+    kanalCache.zeit = 0;
     const kanaele = await alleKanaele();
-    return tg.senden(chatId, kanaele.length
-      ? kanaele.map((k) => `• <b>${html(k.name)}</b> (${k.identifier})\n  <code>${k.id}</code>`).join("\n")
-      : "In Postiz sind noch keine Kanäle verbunden.");
+    if (!kanaele.length) return tg.senden(chatId, "In Postiz sind noch keine Kanäle verbunden.");
+    const gruppen = [...kundenAus(kanaele).map((k) => [k.name, kanaeleVonKunde(kanaele, k.id)]), ["Ohne Kunde", kanaele.filter((k) => !k.customer)]];
+    return tg.senden(chatId, gruppen
+      .filter(([, liste]) => liste.length)
+      .map(([name, liste]) => `👤 <b>${html(name)}</b>\n${liste.map((k) => `• ${html(k.name)} (${k.identifier})\n  <code>${k.id}</code>`).join("\n")}`)
+      .join("\n\n"));
   }
+  if (/^\/status\b/.test(text)) return tg.senden(chatId, await status());
   if (wartend && text) return texteingabe(wartend, text);
   if (text && !text.startsWith("/")) return textBeitrag(chatId, text);
   return tg.senden(chatId, "Schick mir ein Video, Fotos oder einfach Text – oder /hilfe.");
+}
+
+async function status() {
+  const pruefe = async (name, fn) => {
+    try {
+      return `✅ ${name}: ${await fn()}`;
+    } catch (e) {
+      return `❌ ${name}: ${html(e.message.split("\n").at(-1).slice(0, 200))}`;
+    }
+  };
+  return [
+    await pruefe("Postiz", async () => {
+      kanalCache.zeit = 0;
+      const kanaele = await alleKanaele();
+      const kunde = findeKunde(kanaele, config.postiz.kunde);
+      if (config.postiz.kunde && !kunde) throw new Error(`Kunde „${config.postiz.kunde}“ (POSTIZ_KUNDE) gibt es nicht`);
+      return `${kanaele.length} Kanäle, ${kundenAus(kanaele).length} Kunden${kunde ? `, Standard: ${html(kunde.name)}` : ""}`;
+    }),
+    await pruefe("ffmpeg", async () => (await ausfuehren("ffmpeg", ["-version"])).split("\n")[0].split(" ").slice(0, 3).join(" ")),
+    await pruefe("Whisper", async () => {
+      await fs.access(config.whisper.modell);
+      await ausfuehren(config.whisper.bin, ["--help"]);
+      return path.basename(config.whisper.modell);
+    }),
+    `${config.caption.anbieter ? "✅" : "➖"} Caption-KI: ${config.caption.anbieter ? `${config.caption.anbieter} (${html(config.caption.modell)})` : "aus"}`,
+    `ℹ️ Telegram: ${tg.lokal ? "lokaler Bot-API-Server" : "api.telegram.org (max. 20 MB)"}`,
+  ].join("\n");
 }
 
 async function fehlerMelden(chatId, e) {

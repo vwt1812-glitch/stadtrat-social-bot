@@ -16,6 +16,80 @@ export function passendeKanaele(kanaele, art) {
   return kanaele;
 }
 
+/** Kunden, wie sie an den Kanälen hängen: [{id, name}] nach Name sortiert. */
+export function kundenAus(kanaele) {
+  const kunden = new Map();
+  for (const k of kanaele) if (k.customer) kunden.set(k.customer.id, k.customer);
+  return [...kunden.values()].sort((a, b) => a.name.localeCompare(b.name, "de"));
+}
+
+/** Kunde per Name oder ID finden (Groß-/Kleinschreibung egal). */
+export function findeKunde(kanaele, suche) {
+  if (!suche) return null;
+  const s = suche.toLowerCase();
+  return kundenAus(kanaele).find((k) => k.id === suche || k.name.toLowerCase() === s) ?? null;
+}
+
+/** Kanäle eines Kunden; kundeId null = alle. */
+export function kanaeleVonKunde(kanaele, kundeId) {
+  return kundeId ? kanaele.filter((k) => k.customer?.id === kundeId) : kanaele;
+}
+
+/** Postiz-„Re-poster“: Andere Konten teilen den Beitrag nach dem Posten. */
+export const REPOST = {
+  x: { plug: "x-repost-post-users", konten: ["x"] },
+  linkedin: { plug: "linkedin-repost-post-users", konten: ["linkedin", "linkedin-page"] },
+  "linkedin-page": { plug: "linkedin-repost-post-users", konten: ["linkedin", "linkedin-page"] },
+};
+
+/** Konten, die mindestens einen der gewählten Beiträge reposten können. */
+export function repostKandidaten(alle, gewaehlte) {
+  const arten = new Set(gewaehlte.flatMap((k) => REPOST[k.identifier]?.konten ?? []));
+  return alle.filter((k) => arten.has(k.identifier));
+}
+
+/** Instagram erlaubt bis zu drei Collab-Partner; @ und Leerzeichen werden entfernt. */
+export function parseCollabs(text) {
+  return [...new Set(text.split(/[\s,;]+/).map((n) => n.replace(/^@/, "").trim()).filter(Boolean))];
+}
+
+export const REPOST_VERZOEGERUNG = [
+  ["sofort", 0],
+  ["nach 1 Std.", 3600e3],
+  ["nach 2 Std.", 7200e3],
+  ["nach 6 Std.", 6 * 3600e3],
+  ["nach 1 Tag", 86400e3],
+];
+
+/**
+ * Alle Einstellungen eines Kanals für Postiz.
+ * @param {{id:string, identifier:string}} kanal
+ * @param {object} o
+ * @param {string} o.caption
+ * @param {string[]} [o.collabs] Instagram-Namen
+ * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
+ * @param {object} [o.eigene] Inhalt von kanaele.json
+ */
+export function einstellungenFuer(kanal, { caption, collabs = [], repost, eigene = {} }) {
+  const settings = {
+    ...standardEinstellungen(kanal.identifier, caption),
+    ...eigene[kanal.identifier],
+    ...eigene[kanal.id],
+    __type: kanal.identifier,
+  };
+  if (collabs.length && kanal.identifier.startsWith("instagram") && settings.post_type !== "story") {
+    settings.collaborators = collabs.map((label) => ({ label }));
+  }
+  const plug = REPOST[kanal.identifier];
+  const reposter = (repost?.kanaele ?? []).filter((id) => id !== kanal.id);
+  if (plug && reposter.length) {
+    settings[`plug--${plug.plug}--active`] = true;
+    settings[`plug--${plug.plug}--integrations`] = reposter.map((id) => ({ id }));
+    settings[`plug--${plug.plug}--delay`] = String(repost.verzoegerung ?? 0);
+  }
+  return settings;
+}
+
 const MEDIENTYP = { ".mp4": "video/mp4", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png" };
 
 /** Pflichtangaben je Netzwerk, damit Postiz den Beitrag annimmt. */
@@ -27,6 +101,8 @@ export function standardEinstellungen(identifier, caption) {
       return { post_type: "post", collaborators: [] };
     case "facebook":
       return { post_type: "post" };
+    case "x":
+      return { who_can_reply_post: "everyone" };
     case "tiktok":
     case "tiktok-business":
       return {
@@ -72,7 +148,7 @@ export class Postiz {
     return text ? JSON.parse(text) : null;
   }
 
-  /** @returns {Promise<{id:string,name:string,identifier:string,disabled:boolean}[]>} */
+  /** @returns {Promise<{id:string,name:string,identifier:string,disabled:boolean,customer?:{id:string,name:string}}[]>} */
   async kanaele() {
     const alle = await this.#anfrage("GET", "/integrations");
     return alle.filter((k) => !k.disabled);
@@ -108,8 +184,10 @@ export class Postiz {
    * @param {string} o.caption
    * @param {{id:string,path:string}[]} o.medien leer bei reinen Textbeiträgen
    * @param {{id:string,identifier:string}[]} o.kanaele
+   * @param {string[]} [o.collabs]
+   * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
    */
-  async beitrag({ typ, zeit, caption, medien, kanaele }) {
+  async beitrag({ typ, zeit, caption, medien, kanaele, collabs, repost }) {
     const eigene = this.#eigeneEinstellungen();
     const body = {
       type: typ,
@@ -119,12 +197,7 @@ export class Postiz {
       posts: kanaele.map((k) => ({
         integration: { id: k.id },
         value: [{ content: alsHtml(caption), image: medien }],
-        settings: {
-          ...standardEinstellungen(k.identifier, caption),
-          ...eigene[k.identifier],
-          ...eigene[k.id],
-          __type: k.identifier,
-        },
+        settings: einstellungenFuer(k, { caption, collabs, repost, eigene }),
       })),
     };
     return this.#anfrage("POST", "/posts", body);

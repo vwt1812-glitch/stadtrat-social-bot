@@ -2,8 +2,8 @@
 
 Telegram-Bot für den Raspberry Pi: Video, Fotos oder Text reinschicken → Vorschau mit Logo, Untertiteln und
 Caption-Vorschlag zurück → anpassen → mit **Ja** sofort oder zu einer bestimmten Zeit über [Postiz](https://postiz.com) posten.
-Alles läuft lokal. Nur wenn ein `ANTHROPIC_API_KEY` eingetragen ist, gehen Transkript, Fotos bzw. Text für den
-Caption-Vorschlag an Claude.
+Alles läuft lokal, Postiz ist selbst gehostet. Nur wenn ein KI-Schlüssel eingetragen ist (Claude oder OpenAI),
+gehen Transkript, Fotos bzw. Text für den Caption-Vorschlag an den jeweiligen Anbieter.
 
 ## Ablauf in Telegram
 
@@ -25,8 +25,14 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🔄 Neu formulieren | nur mit Claude: Wunsch eingeben (`kürzer`, `lockerer`, …) |
 | 📝 Untertitel | nur Video: schickt die `.srt`; Korrekturen als `falsch => richtig` zurückschreiben oder die korrigierte Datei schicken – das Video wird neu gebaut |
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
-| 📺 Kanäle | Postiz-Kanäle an-/abwählen |
+| 👤 Kunde | Postiz-Kunde wählen, z. B. „Lukas Küffner“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
+| 📺 Kanäle | Kanäle des gewählten Kunden an-/abwählen |
+| 🤝 Collab | Instagram-Collab-Partner (bis zu 3), z. B. `@piraten_nuernberg` – erscheint, wenn ein Instagram-Kanal gewählt ist |
+| 🔁 Repost | andere X- bzw. LinkedIn-Konten teilen den Beitrag nach dem Erscheinen, sofort oder verzögert (Postiz-„Re-poster“) |
 | 🗑️ Verwerfen | Vorschlag löschen |
+
+Kunden ordnest du in Postiz den Kanälen zu; der Bot liest sie von dort, eine eigene Liste gibt es nicht.
+Reposts kann Postiz nur auf X und LinkedIn – bei Instagram, Facebook, TikTok usw. gibt es dafür keine Schnittstelle.
 
 `abbrechen` beendet jede laufende Eingabe. Geplante Beiträge lassen sich danach im Postiz-Kalender ändern.
 
@@ -66,7 +72,10 @@ sh ./models/download-ggml-model.sh small     # oder base: schneller, ungenauer
 ### 3. Bot anlegen
 
 1. In Telegram **@BotFather** → `/newbot` → Token notieren.
-2. In Postiz: **Einstellungen → Developers → Public API** → API-Key kopieren.
+2. In deinem Postiz: **Einstellungen → Developers → Public API** → API-Key kopieren.
+3. Adresse für `POSTIZ_URL`: der Wert von `NEXT_PUBLIC_BACKEND_URL` aus deiner Postiz-Konfiguration
+   (`docker-compose.yml` bzw. `.env` von Postiz). Beim Standard-Setup ist das die Postiz-Adresse mit `/api`
+   dahinter, z. B. `http://localhost:5000/api`, wenn Postiz auf demselben Pi läuft.
 
 ### 4. Bot installieren
 
@@ -81,7 +90,8 @@ npm start
 ```
 
 Dem Bot in Telegram schreiben – er antwortet mit deiner ID. Die in `ERLAUBTE_NUTZER` eintragen und neu starten.
-Mit `/kanaele` prüfen, ob Postiz erreichbar ist.
+Dann `/status` schicken: zeigt, ob Postiz, ffmpeg, Whisper und die KI erreichbar sind. `/kanaele` listet die Kanäle
+nach Kunden mit ihren IDs.
 
 ### 5. Als Dienst starten
 
@@ -120,6 +130,9 @@ journalctl -u social-bot -f
 - **Glossar:** `glossar.txt` – Namen, die Whisper richtig schreiben soll, und automatische Ersetzungen.
 - **Netzwerk-Einstellungen:** `kanaele.example.json` nach `kanaele.json` kopieren. Schlüssel ist der Netzwerk-Typ
   (`instagram`, `tiktok`, `youtube`, …) oder eine Kanal-ID aus `/kanaele`. Die Werte gehen als `settings` an Postiz.
+  Für Pinterest ist dort die Board-ID Pflicht.
+- **Caption-KI:** `ANTHROPIC_API_KEY` oder `OPENAI_API_KEY` eintragen; bei beiden entscheidet `CAPTION_ANBIETER`.
+  Mit `OPENAI_BASE_URL` geht auch ein OpenAI-kompatibler Dienst, etwa ein lokales Modell über Ollama.
 - **Caption-Stil:** `CAPTION_STIL` und `CAPTION_HASHTAGS` in `.env`; der Grundtext steht in `src/caption.mjs`.
 
 ## Aufbau
@@ -130,8 +143,8 @@ journalctl -u social-bot -f
 | `src/video.mjs` | ffprobe/ffmpeg: Video untersuchen, Ton herauslösen, Logo + Untertitel einbrennen, Fotos mit Logo |
 | `src/whisper.mjs` | Spracherkennung mit whisper.cpp, Glossar |
 | `src/untertitel.mjs` | SRT lesen/schreiben, Korrekturen, Umbruch, ASS-Gestaltung |
-| `src/caption.mjs` | Caption-Vorschlag aus Transkript, Fotos oder Stichpunkten (Claude oder einfacher Vorschlag) |
-| `src/postiz.mjs` | Postiz Public API: Kanäle, Upload, Beitrag anlegen; welche Netzwerke welche Beiträge nehmen |
+| `src/caption.mjs` | Caption-Vorschlag aus Transkript, Fotos oder Stichpunkten (Claude, OpenAI oder einfacher Vorschlag) |
+| `src/postiz.mjs` | Postiz Public API: Kanäle, Kunden, Upload, Beitrag anlegen; Einstellungen je Netzwerk, Collab, Repost |
 | `src/zeit.mjs` | Zeitangaben wie „morgen 18 Uhr“ verstehen |
 | `src/auftraege.mjs` | Stand je Video in `daten/auftraege.json`; fertige Aufträge werden nach 14 Tagen gelöscht |
 
