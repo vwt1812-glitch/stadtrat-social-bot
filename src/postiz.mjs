@@ -1,8 +1,10 @@
 // Postiz Public API: https://docs.postiz.com/public-api
-// Selbst gehostet: POSTIZ_URL = Backend-Adresse, z. B. http://localhost:5000/api
+// Selbst gehostet: POSTIZ_URL = Postiz-Adresse, z. B. http://localhost:5000 (API unter /api/public/v1).
+// Quelle: apps/backend/src/public-api/routes/v1/public.integrations.controller.ts in gitroomhq/postiz-app.
 
 import fs from "node:fs";
 import path from "node:path";
+import twitter from "twitter-text";
 
 /** Netzwerke, die ohne Bild oder Video nichts annehmen. */
 export const BRAUCHT_MEDIEN = ["instagram", "instagram-standalone", "tiktok", "tiktok-business", "youtube", "pinterest"];
@@ -16,18 +18,20 @@ export function passendeKanaele(kanaele, art) {
   return kanaele;
 }
 
-/** Zeichenlimits der Netzwerke (Text inkl. Hashtags). In kanaele.json per „maxZeichen“ änderbar. */
+/**
+ * Zeichenlimits wie in Postiz (maxLength der Provider). In kanaele.json per „maxZeichen“ änderbar,
+ * etwa für X Premium.
+ */
 export const ZEICHENLIMIT = {
   x: 280,
   bluesky: 300,
   threads: 500,
   mastodon: 500,
-  nostr: 1000,
   pinterest: 500,
-  discord: 2000,
+  discord: 1980,
   instagram: 2200,
   "instagram-standalone": 2200,
-  tiktok: 2200,
+  tiktok: 2000,
   "tiktok-business": 2200,
   linkedin: 3000,
   "linkedin-page": 3000,
@@ -37,18 +41,84 @@ export const ZEICHENLIMIT = {
 };
 
 export function zeichenLimit(kanal, eigene = {}) {
-  return eigene[kanal.id]?.maxZeichen ?? eigene[kanal.identifier]?.maxZeichen ?? ZEICHENLIMIT[kanal.identifier] ?? null;
+  return kanal.maxZeichen ?? eigene[kanal.id]?.maxZeichen ?? eigene[kanal.identifier]?.maxZeichen ?? ZEICHENLIMIT[kanal.identifier] ?? null;
 }
 
 /**
- * Zeichen so zählen, wie das Netzwerk es ungefähr tut. X zählt Emojis und
- * asiatische Schriftzeichen doppelt und jeden Link als 23 Zeichen.
+ * Zeichen zählen wie Postiz (libraries/helpers/src/utils/count.length.ts): X gewichtet über
+ * twitter-text (Emojis doppelt, Links 23), Threads in Bytes, alle anderen in JavaScript-Zeichen
+ * (ein Emoji sind dort meist 2).
  */
 export function zeichenZahl(text, identifier) {
-  if (identifier !== "x") return Array.from(text).length;
-  const ohneLinks = text.replace(/https?:\/\/\S+/g, () => "x".repeat(23));
-  return Array.from(ohneLinks).reduce((n, z) => n + (z.codePointAt(0) > 0x10ff ? 2 : 1), 0);
+  if (identifier === "x") return twitter.parseTweet(text).weightedLength;
+  // Mastodon direkt (ohne Postiz): Codepoints, Links 23
+  if (identifier === "mastodon-direkt") return [...text.replace(/https?:\/\/\S+/g, "x".repeat(23))].length;
+  if (identifier === "threads") return new TextEncoder().encode(text).length;
+  return text.length;
 }
+
+/** Postiz-Adresse in die Basis der Public API umrechnen – mit oder ohne /api angegeben. */
+export function apiBasis(url) {
+  const ohne = url.replace(/\/+$/, "");
+  if (/\/public\/v1$/.test(ohne)) return ohne;
+  if (/\/api$/.test(ohne)) return `${ohne}/public/v1`;
+  return `${ohne}/api/public/v1`;
+}
+
+/** Kanal per ID, Name oder Profil/Handle finden (für POSTIZ_KANAELE). */
+export function passtZu(kanal, eintrag) {
+  const norm = (t) => String(t ?? "").trim().toLowerCase().replace(/^@/, "");
+  return [kanal.id, kanal.name, kanal.profile].some((wert) => wert && norm(wert) === norm(eintrag));
+}
+
+/**
+ * Postiz begrenzt die Public API pro Stunde (API_LIMIT in der Postiz-Konfiguration, Standard 30).
+ * Zählt die eigenen Anfragen der letzten Stunde mit, auch über Neustarts hinweg.
+ */
+export class AnfragenZaehler {
+  constructor(datei, max) {
+    this.datei = datei;
+    this.max = max;
+    try {
+      this.zeiten = JSON.parse(fs.readFileSync(datei, "utf8"));
+    } catch {
+      this.zeiten = [];
+    }
+  }
+
+  #aufraeumen(jetzt) {
+    this.zeiten = this.zeiten.filter((t) => jetzt - t < 3600e3);
+  }
+
+  zaehlen(jetzt = Date.now()) {
+    this.#aufraeumen(jetzt);
+    this.zeiten.push(jetzt);
+    if (this.datei) fs.writeFileSync(this.datei, JSON.stringify(this.zeiten));
+  }
+
+  /** Anfragen in der letzten Stunde */
+  anzahl(jetzt = Date.now()) {
+    this.#aufraeumen(jetzt);
+    return this.zeiten.length;
+  }
+
+  /** null, wenn `bedarf` Anfragen jetzt gehen, sonst der Zeitpunkt, ab dem sie gehen (Infinity: nie). */
+  wiederFrei(bedarf, jetzt = Date.now()) {
+    if (!this.max) return null;
+    this.#aufraeumen(jetzt);
+    const zuViel = this.zeiten.length + bedarf - this.max;
+    if (zuViel <= 0) return null;
+    if (bedarf > this.max) return Infinity;
+    return new Date(this.zeiten[zuViel - 1] + 3600e3);
+  }
+}
+
+/** Netzwerke mit Stories und die Einstellung dafür. */
+export const STORY = {
+  instagram: { post_type: "story", collaborators: [] },
+  "instagram-standalone": { post_type: "story", collaborators: [] },
+  facebook: { post_type: "story" },
+};
 
 /** Kunden, wie sie an den Kanälen hängen: [{id, name}] nach Name sortiert. */
 export function kundenAus(kanaele) {
@@ -165,16 +235,19 @@ export function alsHtml(text) {
 }
 
 export class Postiz {
-  constructor({ url, apiKey, einstellungen }) {
-    this.url = `${url}/public/v1`;
+  constructor({ url, apiKey, einstellungen, zaehler = new AnfragenZaehler(null, 0) }) {
+    this.url = apiBasis(url);
     this.apiKey = apiKey;
     this.einstellungenDatei = einstellungen;
+    this.zaehler = zaehler;
   }
 
   async #anfrage(methode, pfad, body) {
+    this.zaehler.zaehlen();
     const istForm = body instanceof FormData;
     const res = await fetch(this.url + pfad, {
       method: methode,
+      // Postiz erwartet den Key ohne „Bearer“
       headers: { Authorization: this.apiKey, ...(body && !istForm ? { "Content-Type": "application/json" } : {}) },
       body: istForm ? body : body ? JSON.stringify(body) : undefined,
     });
@@ -187,6 +260,12 @@ export class Postiz {
   async kanaele() {
     const alle = await this.#anfrage("GET", "/integrations");
     return alle.filter((k) => !k.disabled);
+  }
+
+  /** Posts mit Termin im Zeitraum, samt state (QUEUE, PUBLISHED, ERROR, DRAFT) und error. */
+  async posts(von, bis) {
+    const query = new URLSearchParams({ startDate: von.toISOString(), endDate: bis.toISOString() });
+    return (await this.#anfrage("GET", `/posts?${query}`))?.posts ?? [];
   }
 
   /** Nächster freier Termin laut Postiz-Zeitplan. */
@@ -223,8 +302,10 @@ export class Postiz {
    * @param {{id:string,identifier:string}[]} o.kanaele
    * @param {string[]} [o.collabs]
    * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
+   * @param {boolean} [o.story] zusätzlich eine Story auf Instagram/Facebook (erstes Bild/Video)
+   * @returns {Promise<{post: {postId:string}[], story?: {postId:string}[]}>} IDs für die Kontrolle
    */
-  async beitrag({ typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost }) {
+  async beitrag({ typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false }) {
     const eigene = this.eigeneEinstellungen();
     const body = {
       type: typ,
@@ -237,6 +318,23 @@ export class Postiz {
         settings: einstellungenFuer(k, { caption: captions[k.id] ?? caption, collabs, repost, eigene }),
       })),
     };
-    return this.#anfrage("POST", "/posts", body);
+    const ergebnis = { post: await this.#anfrage("POST", "/posts", body) };
+    const storyKanaele = kanaele.filter((k) => STORY[k.identifier]);
+    if (story && medien.length && storyKanaele.length) {
+      ergebnis.story = await this.#anfrage("POST", "/posts", {
+        ...body,
+        posts: storyKanaele.map((k) => ({
+          integration: { id: k.id },
+          value: [{ content: "", image: [medien[0]] }],
+          settings: { __type: k.identifier, ...STORY[k.identifier] },
+        })),
+      });
+    }
+    return ergebnis;
+  }
+
+  /** So viele Anfragen braucht ein Beitrag (Uploads + Post + ggf. Story). */
+  static bedarf({ medien, hochgeladen, story, kanaele }) {
+    return (hochgeladen ? 0 : medien) + 1 + (story && medien && kanaele.some((k) => STORY[k.identifier]) ? 1 : 0);
   }
 }

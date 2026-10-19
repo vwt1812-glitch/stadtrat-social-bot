@@ -7,8 +7,10 @@ import { ladeConfig } from "./config.mjs";
 import { Telegram, html } from "./telegram.mjs";
 import {
   Postiz, passendeKanaele, BRAUCHT_MEDIEN, NUR_VIDEO, kundenAus, findeKunde, kanaeleVonKunde,
-  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG, zeichenLimit, zeichenZahl,
+  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG, zeichenLimit, zeichenZahl, AnfragenZaehler, STORY, passtZu,
 } from "./postiz.mjs";
+import { Mastodon, DIREKT, mastodonMedien } from "./mastodon.mjs";
+import { erwartetePosts, faelligeKontrollen, abfragezeitraum, auswerten } from "./kontrolle.mjs";
 import { Auftraege } from "./auftraege.mjs";
 import { ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
@@ -18,22 +20,54 @@ import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
-const postiz = new Postiz(config.postiz);
 const auftraege = new Auftraege(config.datenDir);
+const postiz = new Postiz({ ...config.postiz, zaehler: new AnfragenZaehler(path.join(config.datenDir, "postiz-anfragen.json"), config.postiz.maxAnfragen) });
+const mastodon = config.mastodon ? new Mastodon(config.mastodon) : null;
 const MB = 1024 * 1024;
 
 // ---------- Hilfsfunktionen ----------
 
 let kanalCache = { zeit: 0, liste: [] };
+let mastodonKonto = null;
 async function alleKanaele() {
-  if (Date.now() - kanalCache.zeit > 10 * 60e3) kanalCache = { zeit: Date.now(), liste: await postiz.kanaele() };
+  if (Date.now() - kanalCache.zeit > 10 * 60e3) {
+    let liste = await postiz.kanaele();
+    if (mastodon) {
+      // Mastodon läuft direkt – Postiz-Mastodon-Kanäle ausblenden, sonst käme alles doppelt und öffentlich
+      mastodonKonto ??= await mastodon.konto().catch(() => null);
+      liste = liste.filter((k) => k.identifier !== "mastodon");
+      liste.push({
+        id: DIREKT,
+        name: mastodonKonto ? `Mastodon @${mastodonKonto}` : "Mastodon (direkt)",
+        identifier: DIREKT,
+        customer: findeKunde(liste, config.postiz.kunde) ?? undefined,
+        maxZeichen: 500 - mastodon.cwLaenge,
+      });
+    }
+    kanalCache = { zeit: Date.now(), liste };
+  }
   return kanalCache.liste;
+}
+
+const erlaubt = (...ids) => ids.some((id) => config.telegram.erlaubt.includes(id));
+
+/** Bedarf an Postiz-Anfragen prüfen; Fehlertext, wenn das Stundenlimit nicht reicht. */
+function limitFehler(auftrag, kanaele) {
+  const postizKanaele = kanaele.filter((k) => k.id !== DIREKT);
+  if (!postizKanaele.length) return null;
+  const medien = (auftrag.medien ?? [datei(auftrag, "fertig.mp4")]).length;
+  const bedarf = Postiz.bedarf({ medien, hochgeladen: Boolean(auftrag.hochgeladen), story: auftrag.story, kanaele: postizKanaele });
+  const frei = postiz.zaehler.wiederFrei(bedarf);
+  if (!frei) return null;
+  return frei === Infinity
+    ? `Der Beitrag braucht ${bedarf} Postiz-Anfragen, erlaubt sind nur ${config.postiz.maxAnfragen} pro Stunde (POSTIZ_MAX_ANFRAGEN bzw. API_LIMIT in Postiz erhöhen).`
+    : `Postiz-Limit für diese Stunde erreicht – ab ${frei.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr geht es wieder. Planen kannst du trotzdem: einfach dann nochmal „Ja“.`;
 }
 
 /** Vorauswahl: Kanäle des Kunden, ggf. eingeschränkt auf POSTIZ_KANAELE, passend zur Beitragsart. */
 function standardKanaele(alle, auftrag) {
   const vomKunden = kanaeleVonKunde(alle, auftrag.kunde);
-  const vorgabe = vomKunden.filter((k) => config.postiz.kanaele.includes(k.id));
+  const vorgabe = vomKunden.filter((k) => config.postiz.kanaele.some((e) => passtZu(k, e)));
   return passendeKanaele(vorgabe.length ? vorgabe : vomKunden, art(auftrag)).map((k) => k.id);
 }
 
@@ -59,6 +93,7 @@ const NETZ_STIL = {
   facebook: "Persönlich und erklärend, höchstens 2 Hashtags.",
   tiktok: "Sehr kurz und locker, 3–5 Hashtags.",
   "tiktok-business": "Sehr kurz und locker, 3–5 Hashtags.",
+  [DIREKT]: "Sachlich und kurz, Hashtags in CamelCase (z. B. #StadtratNürnberg).",
 };
 
 const captionFuer = (auftrag, kanal) => auftrag.captions?.[kanal.id] ?? auftrag.caption;
@@ -133,6 +168,7 @@ function details(auftrag, alle) {
   if (auftrag.collabs?.length) zeilen.push(`🤝 Collab: ${auftrag.collabs.map((c) => `@${html(c)}`).join(", ")}`);
   const reposter = alle.filter((k) => auftrag.repost?.kanaele.includes(k.id));
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
+  if (auftrag.story && art(auftrag) !== "text") zeilen.push("📱 Zusätzlich als Story auf Instagram/Facebook");
   return zeilen;
 }
 
@@ -156,6 +192,7 @@ Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpas
 
 /kanaele – verbundene Postiz-Kanäle nach Kunden
 /status – prüft Postiz, Whisper, ffmpeg und KI
+/id – zeigt deine Telegram-ID (und die der Gruppe)
 /hilfe – diese Hilfe`;
 
 // ---------- Menüs ----------
@@ -201,6 +238,7 @@ async function menueInhalt(auftrag) {
   if (kundenAus(alle).length) optionen.push(knopf("👤 Kunde", auftrag, "kunde"));
   if (art(auftrag) !== "text" && kanaele.some((k) => k.identifier.startsWith("instagram"))) optionen.push(knopf("🤝 Collab", auftrag, "collab"));
   if (repostKandidaten(alle, kanaele).length) optionen.push(knopf("🔁 Repost", auftrag, "repost"));
+  if (art(auftrag) !== "text" && kanaele.some((k) => STORY[k.identifier])) optionen.push(knopf(auftrag.story ? "📱 Story ✓" : "📱 Story", auftrag, "story"));
   if (optionen.length) zeilen.push(optionen);
   zeilen.push([knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
@@ -286,6 +324,8 @@ async function bestaetigung(auftrag, typ, zeit) {
   const zuLang = liste.filter((l) => l.zuLang);
   if (zuLang.length) return { fehler: `Zu lang für ${zuLang.map((l) => `${l.kanal.name} (${zahlText(l)})`).join(", ")} – bitte unter „✂️ Pro Kanal“ anpassen.` };
   const eigen = liste.filter((l) => l.eigen).map((l) => html(l.kanal.name));
+  const limit = limitFehler(auftrag, kanaele);
+  if (limit) return { fehler: limit };
   auftraege.aendern(auftrag.id, { plan: { typ, zeit: zeit.toISOString() } });
   const wann = typ === "now" ? "<b>jetzt</b>" : `am <b>${zeitText(zeit)}</b>`;
   return {
@@ -493,24 +533,50 @@ async function veroeffentlichen(auftrag) {
   const zeit = typ === "now" ? new Date() : new Date(auftrag.plan.zeit);
   try {
     const kanaele = await gewaehlteKanaele(auftrag);
+    const postizKanaele = kanaele.filter((k) => k.id !== DIREKT);
+    const direkt = kanaele.find((k) => k.id === DIREKT);
     const medien = auftrag.medien ?? [datei(auftrag, "fertig.mp4")];
-    if (medien.length && !auftrag.hochgeladen) {
-      await zeigeMenue(auftrag, { text: `⏫ Lade ${medien.length === 1 ? "Datei" : `${medien.length} Dateien`} zu Postiz hoch …`, reply_markup: { inline_keyboard: [] } });
-      const hochgeladen = [];
-      for (const d of medien) hochgeladen.push(await postiz.hochladen(d));
-      auftrag = auftraege.aendern(auftrag.id, { hochgeladen });
+    const hinweise = [];
+
+    if (postizKanaele.length && !auftrag.postiz) {
+      const limit = limitFehler(auftrag, kanaele);
+      if (limit) throw new Error(limit);
+      if (medien.length && !auftrag.hochgeladen) {
+        await zeigeMenue(auftrag, { text: `⏫ Lade ${medien.length === 1 ? "Datei" : `${medien.length} Dateien`} zu Postiz hoch …`, reply_markup: { inline_keyboard: [] } });
+        const hochgeladen = [];
+        for (const d of medien) hochgeladen.push(await postiz.hochladen(d));
+        auftrag = auftraege.aendern(auftrag.id, { hochgeladen });
+      }
+      await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
+      const ergebnis = await postiz.beitrag({
+        typ, zeit, caption: auftrag.caption, captions: auftrag.captions, medien: auftrag.hochgeladen ?? [], kanaele: postizKanaele,
+        collabs: art(auftrag) === "text" ? [] : auftrag.collabs, repost: auftrag.repost, story: auftrag.story && art(auftrag) !== "text",
+      });
+      auftrag = auftraege.aendern(auftrag.id, { postiz: ergebnis });
     }
-    await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
-    await postiz.beitrag({
-      typ, zeit, caption: auftrag.caption, captions: auftrag.captions, medien: auftrag.hochgeladen ?? [], kanaele,
-      collabs: art(auftrag) === "text" ? [] : auftrag.collabs, repost: auftrag.repost,
-    });
+
+    // Mastodon direkt: Ein Fehler hier darf den Postiz-Beitrag nicht wiederholen lassen
+    if (direkt && !auftrag.mastodon) {
+      await zeigeMenue(auftrag, { text: "🐘 Poste auf Mastodon …", reply_markup: { inline_keyboard: [] } });
+      const mastoMedien = mastodonMedien(medien);
+      if (mastoMedien.length < medien.length) hinweise.push(`Mastodon nimmt höchstens 4 Bilder – dort sind nur die ersten ${mastoMedien.length} dabei.`);
+      try {
+        const m = await mastodon.posten({ text: captionFuer(auftrag, direkt), medien: mastoMedien, zeit: typ === "now" ? null : zeit, schluessel: `stadtrat-${auftrag.id}` });
+        auftrag = auftraege.aendern(auftrag.id, { mastodon: m });
+      } catch (e) {
+        if (!postizKanaele.length) throw e;
+        hinweise.push(`⚠️ Mastodon fehlgeschlagen: ${e.message}`);
+      }
+    }
+
     auftraege.aendern(auftrag.id, { status: typ === "now" ? "gepostet" : "geplant" });
-    const namen = kanaele.map((k) => html(k.name)).join(", ");
+    const namen = kanaele.filter((k) => k.id !== DIREKT || auftrag.mastodon).map((k) => html(k.name)).join(", ");
     const text = typ === "now"
       ? `✅ <b>Wird jetzt gepostet</b> auf ${namen}.`
-      : `📅 <b>Geplant für ${zeitText(zeit)}</b> auf ${namen}.\nÄndern oder löschen kannst du ihn im Postiz-Kalender.`;
-    await zeigeMenue(auftrag, { text: `${text}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, reply_markup: { inline_keyboard: [] } });
+      : `📅 <b>Geplant für ${zeitText(zeit)}</b> auf ${namen}.\nÄndern oder löschen kannst du ihn im Postiz-Kalender${auftrag.mastodon ? " (Mastodon: in den geplanten Beiträgen dort)" : ""}.`;
+    const kontrolle = postizKanaele.length ? "\nIch schaue nach dem Termin nach, ob Postiz wirklich veröffentlicht hat." : "";
+    await zeigeMenue(auftrag, { text: `${text}${kontrolle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, reply_markup: { inline_keyboard: [] } });
+    if (hinweise.length) await tg.senden(auftrag.chatId, html(hinweise.join("\n")));
   } catch (e) {
     console.error(e);
     auftrag = auftraege.aendern(auftrag.id, { status: "vorschau" });
@@ -671,6 +737,10 @@ async function knopfGedrueckt(cq) {
     case "repost":
       await repostMenue(auftrag);
       return antwort();
+    case "story":
+      auftrag = auftraege.aendern(id, { story: !auftrag.story });
+      await zeigeMenue(auftrag);
+      return antwort(auftrag.story ? "Kommt zusätzlich als Story (erstes Bild bzw. Video)" : "Keine Story");
     case "rp": {
       const kanal = (await alleKanaele())[Number(arg)];
       const repost = auftrag.repost ?? { kanaele: [], verzoegerung: 0 };
@@ -787,8 +857,14 @@ async function srtDatei(auftrag, dokument) {
 async function nachricht(msg) {
   const chatId = msg.chat.id;
   const nutzer = msg.from?.id;
-  if (!config.telegram.erlaubt.includes(nutzer)) {
-    await tg.senden(chatId, `Kein Zugriff. Deine Telegram-ID ist <code>${nutzer}</code> – zum Freischalten in <code>ERLAUBTE_NUTZER</code> eintragen.`);
+  if (/^\/id\b/.test(msg.text ?? "")) {
+    return tg.senden(chatId, `Deine Telegram-ID: <code>${nutzer}</code>${msg.chat.type !== "private" ? `\nID dieser Gruppe: <code>${chatId}</code>` : ""}`);
+  }
+  if (!erlaubt(nutzer, chatId)) {
+    // In Gruppen nicht auf jede Nachricht antworten
+    if (msg.chat.type === "private") {
+      await tg.senden(chatId, `Kein Zugriff. Deine Telegram-ID ist <code>${nutzer}</code> – zum Freischalten in <code>ERLAUBTE_NUTZER</code> eintragen.`);
+    }
     return;
   }
 
@@ -842,9 +918,26 @@ async function status() {
       await ausfuehren(config.whisper.bin, ["--help"]);
       return path.basename(config.whisper.modell);
     }),
+    ...(mastodon ? [await pruefe("Mastodon direkt", async () => `@${await mastodon.konto()} (${mastodon.sichtbarkeit}${mastodon.inhaltswarnung ? `, Inhaltswarnung „${html(mastodon.inhaltswarnung)}“` : ""})`)] : []),
+    `ℹ️ Postiz-Anfragen letzte Stunde: ${postiz.zaehler.anzahl()}${config.postiz.maxAnfragen ? `/${config.postiz.maxAnfragen}` : ""}`,
     `${config.caption.anbieter ? "✅" : "➖"} Caption-KI: ${config.caption.anbieter ? `${config.caption.anbieter} (${html(config.caption.modell)})` : "aus"}`,
     `ℹ️ Telegram: ${tg.lokal ? "lokaler Bot-API-Server" : "api.telegram.org (max. 20 MB)"}`,
   ].join("\n");
+}
+
+/** Fällige Postiz-Posts nachsehen und Probleme melden (fragt Postiz nur, wenn etwas fällig ist). */
+async function kontrollieren() {
+  const datei = path.join(config.datenDir, "kontrolle.json");
+  let kontrolle = { erledigt: {}, gemeldet: {} };
+  try {
+    kontrolle = JSON.parse(await fs.readFile(datei, "utf8"));
+  } catch {}
+  const faellig = faelligeKontrollen(erwartetePosts(Object.values(auftraege.alle)), kontrolle);
+  if (!faellig.length || postiz.zaehler.wiederFrei(1)) return;
+  const { von, bis } = abfragezeitraum(faellig);
+  const meldungen = auswerten(await postiz.posts(von, bis), faellig, kontrolle);
+  for (const [chatId, texte] of meldungen) for (const text of texte) await tg.senden(chatId, html(text)).catch(() => {});
+  await fs.writeFile(datei, JSON.stringify(kontrolle));
 }
 
 async function fehlerMelden(chatId, e) {
@@ -870,6 +963,9 @@ async function main() {
   }
   auftraege.aufraeumen();
   setInterval(() => auftraege.aufraeumen(), 24 * 3600e3);
+  const kontrolleLauf = () => kontrollieren().catch((e) => console.error("Kontrolle:", e.message));
+  kontrolleLauf(); // gleich nach dem Start, z. B. nach einem Neustart des Pi
+  setInterval(kontrolleLauf, 5 * 60e3);
 
   let offset = 0;
   for (;;) {
@@ -885,7 +981,7 @@ async function main() {
       offset = u.update_id + 1;
       const verarbeite = u.message
         ? nachricht(u.message)
-        : u.callback_query && config.telegram.erlaubt.includes(u.callback_query.from.id)
+        : u.callback_query && erlaubt(u.callback_query.from.id, u.callback_query.message?.chat.id)
           ? knopfGedrueckt(u.callback_query)
           : null;
       verarbeite?.catch((e) => fehlerMelden(u.message?.chat.id ?? u.callback_query?.message?.chat.id, e));

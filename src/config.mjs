@@ -45,6 +45,7 @@ export function ladeConfig() {
     telegram: {
       token: pflicht("TELEGRAM_BOT_TOKEN"),
       api: env("TELEGRAM_API_URL", "https://api.telegram.org").replace(/\/$/, ""),
+      // Telegram-IDs von Personen oder Gruppen (Gruppen-IDs sind negativ)
       erlaubt: liste("ERLAUBTE_NUTZER").map(Number),
     },
     postiz: {
@@ -52,6 +53,8 @@ export function ladeConfig() {
       apiKey: pflicht("POSTIZ_API_KEY"),
       kanaele: liste("POSTIZ_KANAELE"),
       kunde: env("POSTIZ_KUNDE", ""),
+      // Postiz-Standard API_LIMIT=30 pro Stunde; 0 = nicht mitzählen
+      maxAnfragen: Number(env("POSTIZ_MAX_ANFRAGEN", "28")),
       einstellungen: pfad(env("KANAL_EINSTELLUNGEN", "kanaele.json")),
     },
     whisper: {
@@ -80,6 +83,14 @@ export function ladeConfig() {
       crf: env("VIDEO_CRF", "21"),
     },
     caption: captionConfig(),
+    mastodon: env("MASTODON_URL") && env("MASTODON_TOKEN")
+      ? {
+          url: env("MASTODON_URL"),
+          token: env("MASTODON_TOKEN"),
+          sichtbarkeit: env("MASTODON_SICHTBARKEIT", "unlisted"),
+          inhaltswarnung: env("MASTODON_INHALTSWARNUNG", ""),
+        }
+      : null,
     datenDir: pfad(env("DATEN_DIR", "daten")),
   };
 }
