@@ -1,0 +1,14 @@
+# Begriffe, die Whisper kennen soll – einer pro Zeile.
+# „falsch => richtig“ wird nach der Erkennung automatisch ersetzt.
+Küffner
+Kuffner => Küffner
+Nürnberg
+Stadtrat
+Stadtratssitzung
+PIRATEN & Humanisten
+Piraten => PIRATEN
+Ratsinformationssystem
+Plärrer
+Fürth
+Erlangen
+VAG

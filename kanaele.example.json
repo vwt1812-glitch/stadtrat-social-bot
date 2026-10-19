@@ -1,0 +1,6 @@
+{
+  "instagram": { "post_type": "post" },
+  "tiktok": { "privacy_level": "PUBLIC_TO_EVERYONE", "comment": true },
+  "youtube": { "type": "public" },
+  "HIER-EINE-KANAL-ID-AUS-/kanaele": { "post_type": "story" }
+}
