@@ -4,7 +4,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { untertitelGroesse } from "./untertitel.mjs";
+import { untertitelGroesse, untertitelPosition } from "./untertitel.mjs";
 
 export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -53,11 +53,14 @@ const pxl = (n, s) => Math.max(1, Math.round(n * s));
 const gerade = (n) => Math.round(n / 2) * 2;
 const ffFarbe = (farbe) => `0x${farbe.replace("#", "")}`;
 
-/** Ränder, die die Bedienelemente von Reels/TikTok frei lassen. */
-function raender(masse) {
+/**
+ * Ränder, die die Bedienelemente von Reels/TikTok frei lassen: Hochkant-Videos oben 14 %
+ * (Reiter, Kamera, Suche). Fotos haben keine solche Leiste, dort genügen 7,3 %.
+ */
+function raender(masse, video = true) {
   const rand = Math.round(Math.min(masse.breite, masse.hoehe) * 0.05);
   const hochkant = masse.hoehe > masse.breite;
-  return { rand, oben: hochkant ? Math.round(masse.hoehe * 0.073) : rand };
+  return { rand, oben: hochkant ? Math.round(masse.hoehe * (video ? 0.14 : 0.073)) : rand };
 }
 
 /**
@@ -100,7 +103,7 @@ export async function textBreite(textdatei, schrift, groesse) {
  * Logo als fertige Grafik: auf dunkler Karte mit Schatten und farbigem Akzent (Stil „karte“)
  * oder frei. Gibt Datei und Position im Video zurück.
  */
-export async function logoGrafik({ layout, masse, ordner }) {
+export async function logoGrafik({ layout, masse, ordner, video = true }) {
   try {
     await fs.access(layout.logo);
   } catch {
@@ -133,7 +136,7 @@ export async function logoGrafik({ layout, masse, ordner }) {
   }
 
   // Position der sichtbaren Fläche im Video, dann auf die Bildecke mit Schatten umrechnen
-  const { rand, oben } = raender(masse);
+  const { rand, oben } = raender(masse, video);
   const sichtbarX = layout.logoPosition.includes("rechts") ? masse.breite - rand - grafik.w : rand;
   const sichtbarY = layout.logoPosition.includes("unten") ? masse.hoehe - rand - grafik.h : oben;
   return { datei: ziel, x: sichtbarX - grafik.x, y: sichtbarY - grafik.y };
@@ -212,13 +215,15 @@ export async function balkenBauchbinde({ name, funktion, layout, masse, ordner }
     ], { cwd: ordner });
   }
 
-  // Unten links wie beim Cutter (Unterkante bei 85 % der Höhe), sonst über den Untertiteln
+  // Unten links unter den Untertiteln, aber über Name und Caption von TikTok/Reels
+  // (die belegen hochkant die unteren 22 %); passt sie dort nicht hin: über den Untertiteln
   const hochkant = masse.hoehe > masse.breite;
   const x = hochkant ? Math.round(Math.min(masse.breite, masse.hoehe) * 0.1) : rand;
-  const untertitelUnten = masse.hoehe * (1 - layout.position);
-  let unten = hochkant ? masse.hoehe * 0.85 : masse.hoehe - 1.5 * rand;
+  const position = untertitelPosition({ ...masse, ...layout });
+  const untertitelUnten = masse.hoehe * (1 - position);
+  let unten = hochkant ? masse.hoehe * 0.76 : masse.hoehe - 1.5 * rand;
   if (unten - hoehe < untertitelUnten + pxl(30, s)) {
-    unten = untertitelUnten - 2.6 * untertitelGroesse(masse) - pxl(30, s);
+    unten = untertitelUnten - (layout.zeilen === 1 ? 1.5 : 2.6) * untertitelGroesse(masse) - pxl(30, s);
   }
   return { art: "balken", dateien, x, y: Math.round(unten - hoehe), breite, hoehe, steigung: schraeg / ho };
 }
@@ -260,7 +265,7 @@ export async function karteBauchbinde({ name, funktion, layout, masse, ordner })
 
   // Über dem Untertitelblock (zwei Zeilen), links bündig
   const { rand } = raender(masse);
-  const untertitelOben = masse.hoehe * (1 - layout.position) - 2.6 * untertitelGroesse(masse);
+  const untertitelOben = masse.hoehe * (1 - untertitelPosition({ ...masse, ...layout })) - 2.6 * untertitelGroesse(masse);
   const y = Math.round(untertitelOben - pxl(30, s) - h);
   return { art: "karte", datei: ziel, x: rand - k.x, y: y - k.y };
 }
@@ -370,7 +375,7 @@ export async function fotoRendern({ eingabe, ausgabe, layout, mitLogo }) {
   let letzte = "klein";
   const args = ["-y", "-v", "error", "-i", eingabe];
   if (mitLogo && layout.logo) {
-    const logo = await logoGrafik({ layout, masse, ordner: path.dirname(ausgabe) });
+    const logo = await logoGrafik({ layout, masse, ordner: path.dirname(ausgabe), video: false });
     args.push("-i", logo.datei);
     filter.push(`[${letzte}][1:v]overlay=${logo.x}:${logo.y}:format=auto[mitlogo]`);
     letzte = "mitlogo";

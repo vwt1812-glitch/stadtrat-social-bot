@@ -90,27 +90,37 @@ export function umbrechen(text, maxZeichen) {
 }
 
 /**
- * Teilt zu lange Untertitel an Wortgrenzen auf (Zeit anteilig nach Zeichen),
- * damit nie mehr als zwei Zeilen gleichzeitig stehen.
+ * Zerlegt einen Text an Wortgrenzen in Stücke von höchstens `max` Zeichen: so wenige wie
+ * möglich, ähnlich lang und bevorzugt nach Satzzeichen („Hi, Lukas hier, | ich teste jetzt mal“).
  */
-export function aufteilen(cues, maxZeichen) {
+export function zerlegen(text, max) {
+  const woerter = text.split(" ");
+  // beste[i]: günstigste Zerlegung der ersten i Wörter
+  const beste = [{ kosten: 0, teile: [] }];
+  for (let i = 1; i <= woerter.length; i++) {
+    for (let j = i - 1; j >= 0; j--) {
+      const teil = woerter.slice(j, i).join(" ");
+      if (teil.length > max && i - j > 1) break;
+      const mitten = i < woerter.length && !/[,.;:!?–]$/.test(teil);
+      const kosten = beste[j].kosten + 100 + (Math.max(0, max - teil.length) ** 2) / max + (mitten ? max / 2 : 0);
+      if (!beste[i] || kosten < beste[i].kosten) beste[i] = { kosten, teile: [...beste[j].teile, teil] };
+    }
+  }
+  return beste[woerter.length].teile;
+}
+
+/**
+ * Teilt zu lange Untertitel an Wortgrenzen auf (Zeit anteilig nach Zeichen),
+ * damit nie mehr als `zeilen` Zeilen gleichzeitig stehen.
+ */
+export function aufteilen(cues, maxZeichen, zeilen = 2) {
   const ergebnis = [];
   for (const c of cues) {
-    if (c.text.length <= maxZeichen * 2) {
+    if (c.text.length <= maxZeichen * zeilen) {
       ergebnis.push(c);
       continue;
     }
-    const teile = [];
-    let aktuell = "";
-    for (const wort of c.text.split(" ")) {
-      if (aktuell && (aktuell + " " + wort).length > maxZeichen * 2) {
-        teile.push(aktuell);
-        aktuell = wort;
-      } else {
-        aktuell = aktuell ? `${aktuell} ${wort}` : wort;
-      }
-    }
-    if (aktuell) teile.push(aktuell);
+    const teile = zerlegen(c.text, maxZeichen * zeilen);
     const gesamt = teile.reduce((n, t) => n + t.length, 0);
     let start = c.start;
     for (const [i, t] of teile.entries()) {
@@ -145,9 +155,23 @@ export function untertitelGroesse({ breite, hoehe }) {
   return Math.round(Math.min(breite, hoehe) * (hoehe > breite ? 0.062 : 0.058));
 }
 
+/** Wählbare Lagen pro Video; „unten“ ist die Einstellung aus der .env. */
+export const UNTERTITEL_LAGEN = { oben: { hochkant: 0.62, quer: 0.8 }, mitte: { hochkant: 0.47, quer: 0.42 } };
+
+/**
+ * Abstand der Untertitel vom unteren Rand (Anteil der Bildhöhe) nach Format und gewählter Lage.
+ * Hochkant liegt der Standard über dem Bereich, den TikTok und Reels für Name und Caption brauchen.
+ */
+export function untertitelPosition(o) {
+  const hochkant = o.hoehe > o.breite;
+  const lage = UNTERTITEL_LAGEN[o.lage]?.[hochkant ? "hochkant" : "quer"];
+  return lage ?? (hochkant ? o.position : (o.positionQuer ?? 0.08));
+}
+
 export function zuAss(cues, o) {
   const hochkant = o.hoehe > o.breite;
   const groesse = untertitelGroesse(o);
+  // Hochkant: 24 Zeichen Inter Bold sind gut 2/3 der Breite – frei von der Knopfleiste rechts (Like, Kommentar, Teilen)
   const maxZeichen = hochkant ? 24 : 38;
   const rahmen = Math.max(2, Math.round(groesse * 0.09));
   const box = o.stil === "box";
@@ -168,13 +192,15 @@ export function zuAss(cues, o) {
     2, // Alignment: unten mittig
     Math.round(o.breite * 0.06),
     Math.round(o.breite * 0.06),
-    Math.round(o.hoehe * o.position),
+    Math.round(o.hoehe * untertitelPosition(o)),
     1,
   ].join(",");
 
-  const events = aufteilen(cues, maxZeichen).map(
+  // 1 = kurze Häppchen in einer Zeile, 2 = bis zu zwei Zeilen
+  const zeilen = o.zeilen === 1 ? 1 : 2;
+  const events = aufteilen(cues, maxZeichen, zeilen).map(
     (c) =>
-      `Dialogue: 0,${assZeit(c.start)},${assZeit(c.end)},Untertitel,,0,0,0,,${umbrechen(assText(c.text), maxZeichen).join("\\N")}`,
+      `Dialogue: 0,${assZeit(c.start)},${assZeit(c.end)},Untertitel,,0,0,0,,${zeilen === 1 ? assText(c.text) : umbrechen(assText(c.text), maxZeichen).join("\\N")}`,
   );
 
   return `[Script Info]

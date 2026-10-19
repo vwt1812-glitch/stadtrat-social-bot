@@ -12,3 +12,5 @@ Plärrer
 Fürth
 Erlangen
 VAG
+Bot
+Board => Bot

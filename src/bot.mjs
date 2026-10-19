@@ -177,6 +177,23 @@ function bauchbindeMenue(auftrag) {
   };
 }
 
+// ---------- Lage der Untertitel ----------
+
+const LAGE_TEXT = { oben: "⬆️ Oben", mitte: "↕️ Mitte", unten: "⬇️ Unten (Standard)" };
+
+function lageMenue(auftrag) {
+  const jetzt = auftrag.untertitelLage ?? "unten";
+  const zeilen = Object.entries(LAGE_TEXT).map(([lage, text]) => [knopf(`${lage === jetzt ? "🔘" : "⚪"} ${text}`, auftrag, `pos:${lage}`)]);
+  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  return {
+    text: "<b>Untertitel-Position</b> – „Unten“ liegt über Name und Caption von TikTok und Reels. Verdecken die Untertitel etwas Wichtiges (Gesicht, Schild), weiter nach oben schieben.",
+    reply_markup: { inline_keyboard: zeilen },
+  };
+}
+
+/** Layout für diesen Auftrag: Einstellungen aus der .env plus gewählte Lage der Untertitel. */
+const layoutFuer = (auftrag) => ({ ...config.layout, lage: auftrag.untertitelLage ?? null });
+
 const verzoegerungText = (ms) => REPOST_VERZOEGERUNG.find(([, wert]) => wert === ms)?.[0] ?? "sofort";
 
 /** Zusatzzeilen für Kunde, Collab und Repost. */
@@ -189,6 +206,7 @@ function details(auftrag, alle) {
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
   if (auftrag.story && art(auftrag) !== "text") zeilen.push("📱 Zusätzlich als Story auf Instagram/Facebook");
   if (auftrag.bauchbinde && art(auftrag) === "video") zeilen.push(`🪪 Bauchbinde: ${bauchbindeText(auftrag.bauchbinde)}`);
+  if (auftrag.untertitelLage && art(auftrag) === "video") zeilen.push(`📍 Untertitel: ${LAGE_TEXT[auftrag.untertitelLage]}`);
   return zeilen;
 }
 
@@ -245,14 +263,15 @@ async function menueInhalt(auftrag) {
   }
   const text = [`<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise].join("\n");
   const extra = {
-    video: [knopf("📝 Untertitel", auftrag, "untertitel"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
+    video: [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📍 Position", auftrag, "pos"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
     foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
   const zeilen = [
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
     [knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])],
-    [...extra, knopf("📺 Kanäle", auftrag, "kanaele"), ...(kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
+    ...(extra.length ? [extra] : []),
+    [knopf("📺 Kanäle", auftrag, "kanaele"), ...(kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
   ];
   const optionen = [];
   if (kundenAus(alle).length) optionen.push(knopf("👤 Kunde", auftrag, "kunde"));
@@ -424,11 +443,11 @@ async function renderUndVorschau(id) {
     let ass = null;
     if (cues.length) {
       ass = datei(auftrag, "untertitel.ass");
-      await fs.writeFile(ass, zuAss(cues, { ...auftrag.masse, ...config.layout }));
+      await fs.writeFile(ass, zuAss(cues, { ...auftrag.masse, ...layoutFuer(auftrag) }));
     }
     const fertig = datei(auftrag, "fertig.mp4");
     await rendern({
-      eingabe: auftrag.original, ausgabe: fertig, ass, masse: auftrag.masse, layout: config.layout, video: config.video,
+      eingabe: auftrag.original, ausgabe: fertig, ass, masse: auftrag.masse, layout: layoutFuer(auftrag), video: config.video,
       bauchbinde: auftrag.bauchbinde,
     });
     auftraege.aendern(id, { medien: [fertig], hochgeladen: null }); // neues Video → neu hochladen
@@ -776,6 +795,20 @@ async function knopfGedrueckt(cq) {
       const neu = arg === "std" ? standardBauchbinde() : null;
       await antwort();
       return neuRendern(auftraege.aendern(id, { bauchbinde: neu }), neu ? "Bauchbinde kommt rein." : "Bauchbinde ist raus.");
+    }
+    case "pos": {
+      if (!arg) {
+        await zeigeMenue(auftrag, lageMenue(auftrag));
+        return antwort();
+      }
+      const lage = arg === "unten" ? null : arg;
+      if (!LAGE_TEXT[arg] || lage === (auftrag.untertitelLage ?? null)) {
+        await zeigeMenue(auftrag);
+        return antwort("Bleibt, wie es ist.");
+      }
+      await antwort();
+      const info = { oben: "Untertitel kommen nach oben.", mitte: "Untertitel kommen in die Mitte.", unten: "Untertitel kommen wieder nach unten." }[arg];
+      return neuRendern(auftraege.aendern(id, { untertitelLage: lage }), info);
     }
     case "story":
       auftrag = auftraege.aendern(id, { story: !auftrag.story });

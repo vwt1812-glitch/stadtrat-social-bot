@@ -37,7 +37,10 @@ test("Logo-Karte oben links, sichtbar 5 % vom Rand", { skip: !ffmpegDa }, async 
   // Logo 518 px + 2 × 38 px Innenabstand + 2 × 32 px Schattenrand
   assert.equal(bild.breite, 518 + 76 + 64);
   assert.equal(logo.x + 32, 54);
-  assert.equal(logo.y + 24, Math.round(1920 * 0.073));
+  // Hochkant-Video: unter Reitern, Kamera und Suche von TikTok/Reels (obere 14 %), Fotos höher
+  assert.equal(logo.y + 24, Math.round(1920 * 0.14));
+  const foto = await logoGrafik({ layout: LAYOUT, masse, ordner, video: false });
+  assert.equal(foto.y + 24, Math.round(1920 * 0.073));
   const rechts = await logoGrafik({ layout: { ...LAYOUT, logoPosition: "oben-rechts" }, masse, ordner });
   assert.equal(rechts.x + 32 + 518 + 76, 1080 - 54);
 });
@@ -56,9 +59,10 @@ test("Balken-Bauchbinde unten links unter den Untertiteln, Breite nach Text", { 
     const bild = await untersuche(datei);
     assert.deepEqual([bild.breite, bild.hoehe], [lang.breite, lang.hoehe]);
   }
-  // Orange 102 px, schwarz 42 px, 20 px überlappend; Unterkante bei 85 % der Höhe, 10 % vom linken Rand
+  // Orange 102 px, schwarz 42 px, 20 px überlappend; Unterkante bei 76 % der Höhe – darunter
+  // blenden TikTok/Reels Name und Caption ein –, 10 % vom linken Rand
   assert.equal(lang.hoehe, 124);
-  assert.equal(lang.y + lang.hoehe, Math.round(1920 * 0.85));
+  assert.equal(lang.y + lang.hoehe, Math.round(1920 * 0.76));
   assert.equal(lang.x, 108);
   // Untertitel weiter unten: Bauchbinde rutscht darüber
   const drueber = await bauchbindeGrafik({ name: "Lukas Küffner", funktion: "Stadtrat", layout: LAYOUT, masse, ordner });

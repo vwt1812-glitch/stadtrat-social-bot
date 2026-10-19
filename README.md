@@ -23,6 +23,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🕐 Planen | Heute/Morgen-Vorschläge, nächster freier Postiz-Slot oder freie Eingabe wie `Fr 18 Uhr`, `24.10. 19:30`, `in 2 Stunden` |
 | ✏️ Caption ändern | schickt den aktuellen Text zum Kopieren, die nächste Nachricht ist die neue Caption |
 | 🔄 Neu formulieren | nur mit Claude: Wunsch eingeben (`kürzer`, `lockerer`, …) |
+| 📍 Position | nur Video: Untertitel oben, in der Mitte oder unten (Standard) – das Video wird neu gebaut |
 | 🪪 Bauchbinde | nur Video: Name und Funktion am Anfang einblenden – Standard aus `BAUCHBINDE_NAME`/`_FUNKTION` oder ein anderer Name, z. B. für Gäste |
 | 📝 Untertitel | nur Video: schickt die `.srt`; Korrekturen als `falsch => richtig` zurückschreiben oder die korrigierte Datei schicken – das Video wird neu gebaut |
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
@@ -186,7 +187,13 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   stattdessen dieselbe Karte wie das Logo. Logo, Farben, Position und Größe in `.env`. Die offiziellen Logos
   liegen als SVG und PNG in `assets/logos/` (`quer-dunkel` für dunkle Flächen, `quer-hell` für helle), die Schrift
   Inter (SIL Open Font License) in `assets/fonts/`. Untertitel werden für Hochkant und Querformat passend gesetzt,
-  Stil `rand` oder `box`.
+  Stil `rand` oder `box`, als kurze einzeilige Häppchen, möglichst nach Satzzeichen getrennt
+  (`UNTERTITEL_ZEILEN=2` für bis zu zwei Zeilen).
+- **Bedienelemente von TikTok und Reels:** Hochkant blenden die Apps oben Reiter und Kamera ein (gut 10 %),
+  unten Name, Caption und Ton (gut 20 %) und rechts eine Knopfleiste (Like, Kommentar, Teilen). Das Logo beginnt
+  daher bei 14 % der Höhe, die Bauchbinde endet bei 76 %, Untertitel stehen mit `UNTERTITEL_POSITION=0.33` darüber
+  und sind höchstens 24 Zeichen breit. Querformat hat eigene Untertitel unten (`UNTERTITEL_POSITION_QUER=0.08`).
+  Verdecken die Untertitel etwas, im Menü unter **📍 Position** pro Video oben, Mitte oder unten wählen.
 - **Glossar:** `glossar.txt` – Namen, die Whisper richtig schreiben soll, und automatische Ersetzungen.
 - **Netzwerk-Einstellungen:** `kanaele.example.json` nach `kanaele.json` kopieren. Schlüssel ist der Netzwerk-Typ
   (`instagram`, `tiktok`, `youtube`, …) oder eine Kanal-ID aus `/kanaele`. Die Werte gehen als `settings` an Postiz.

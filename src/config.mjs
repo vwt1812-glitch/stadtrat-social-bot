@@ -85,7 +85,11 @@ export function ladeConfig() {
       farbe: env("UNTERTITEL_FARBE", "#FFFFFF"),
       rand: env("UNTERTITEL_RAND", "#000000"),
       stil: env("UNTERTITEL_STIL", "rand"),
-      position: Number(env("UNTERTITEL_POSITION", "0.18")),
+      // Abstand vom unteren Rand als Anteil der Höhe – hochkant über Name und Caption von TikTok/Reels
+      position: Number(env("UNTERTITEL_POSITION", "0.33")),
+      positionQuer: Number(env("UNTERTITEL_POSITION_QUER", "0.08")),
+      // 1 = kurze Häppchen in einer Zeile, 2 = bis zu zwei Zeilen
+      zeilen: Number(env("UNTERTITEL_ZEILEN", "1")),
       // balken = schräge Balken orange/schwarz, die einwischen; karte = dunkle Karte wie das Logo
       bauchbindeStil: env("BAUCHBINDE_STIL", "balken"),
       bauchbindeStart: Number(env("BAUCHBINDE_START", "0.5")),

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSrt, formatSrt, parseKorrekturen, wendeKorrekturenAn, umbrechen, aufteilen, zuAss, assFarbe, parseBauchbinde } from "../src/untertitel.mjs";
+import { parseSrt, formatSrt, parseKorrekturen, wendeKorrekturenAn, umbrechen, aufteilen, zerlegen, zuAss, untertitelPosition, assFarbe, parseBauchbinde } from "../src/untertitel.mjs";
 
 const SRT = `1
 00:00:00,000 --> 00:00:02,500
@@ -40,6 +40,29 @@ test("lange Untertitel werden aufgeteilt", () => {
   assert.equal(teile.at(-1).end, 4000);
   assert.ok(teile.every((t) => t.text.length <= 20));
   assert.equal(teile.map((t) => t.text).join(" "), lang.text);
+});
+
+test("einzeilige Häppchen, bevorzugt nach Satzzeichen getrennt", () => {
+  assert.deepEqual(zerlegen("Hi, Lukas hier, ich teste jetzt mal", 24), ["Hi, Lukas hier,", "ich teste jetzt mal"]);
+  assert.deepEqual(zerlegen("und ihr könnt mitbestimmen,", 24), ["und ihr könnt", "mitbestimmen,"]);
+  assert.deepEqual(zerlegen("Donaudampfschifffahrtsgesellschaftskapitän", 24), ["Donaudampfschifffahrtsgesellschaftskapitän"]);
+  const ass = zuAss([{ start: 0, end: 3000, text: "Hi, Lukas hier, ich teste jetzt mal" }],
+    { breite: 1080, hoehe: 1920, schrift: "Inter", farbe: "#FFFFFF", rand: "#000000", stil: "rand", position: 0.35, zeilen: 1 });
+  assert.match(ass, /,,Hi, Lukas hier,\n/);
+  assert.match(ass, /,,ich teste jetzt mal\n/);
+  assert.doesNotMatch(ass, /\\N/);
+});
+
+test("Untertitel-Position nach Format und gewählter Lage", () => {
+  const hoch = { breite: 1080, hoehe: 1920, position: 0.33, positionQuer: 0.08 };
+  const quer = { ...hoch, breite: 1920, hoehe: 1080 };
+  assert.equal(untertitelPosition(hoch), 0.33);
+  assert.equal(untertitelPosition(quer), 0.08);
+  assert.equal(untertitelPosition({ ...hoch, lage: "oben" }), 0.62);
+  assert.equal(untertitelPosition({ ...quer, lage: "mitte" }), 0.42);
+  assert.equal(untertitelPosition({ ...hoch, lage: "unbekannt" }), 0.33);
+  const ass = zuAss([{ start: 0, end: 1000, text: "Hallo" }], { ...quer, schrift: "Inter", farbe: "#FFFFFF", rand: "#000000", stil: "rand" });
+  assert.match(ass, /,2,115,115,86,1$/m); // MarginV = 8 % von 1080
 });
 
 test("ASS-Datei", () => {
