@@ -295,20 +295,32 @@ export function wischFilter({ breite, hoehe, steigung, gesamt, verzoegerung = 0,
  * @param {object} o.layout siehe config.layout
  * @param {object} o.video siehe config.video
  * @param {{name:string, funktion?:string}|null} [o.bauchbinde] einblenden, wenn gesetzt
+ * @param {boolean} [o.story] Eingabe erst auf eine Story-Fläche setzen; `masse` sind dann die der Story
  */
-export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bauchbinde = null }) {
+export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bauchbinde = null, story = false }) {
   const ordner = path.dirname(ausgabe);
   const args = ["-y", "-v", "error", "-i", eingabe];
   const filter = [];
   let letzte = "0:v";
   let eingang = 1;
+  if (story) {
+    filter.push(`[0:v]${storyFlaeche(masse)}[flaeche]`);
+    letzte = "flaeche";
+    if (layout.logo && layout.logoStil === "frei") {
+      const schleier = path.join(ordner, "story-schleier.png");
+      await storySchleier(masse, schleier);
+      args.push("-i", schleier);
+      filter.push(`[flaeche][${eingang++}:v]overlay=0:0:format=auto[verlauf]`);
+      letzte = "verlauf";
+    }
+  }
   if (ass) {
     const fonts = layout.schriftOrdner ? `:fontsdir=${layout.schriftOrdner.replace(/[\\:']/g, "\\$&")}` : "";
     filter.push(`[${letzte}]ass=${path.basename(ass)}${fonts}[sub]`);
     letzte = "sub";
   }
   if (layout.logo) {
-    const logo = await logoGrafik({ layout, masse, ordner });
+    const logo = await logoGrafik({ layout: story ? { ...layout, logo: await logoFuerStory(layout) } : layout, masse, ordner });
     args.push("-i", logo.datei);
     filter.push(`[${letzte}][${eingang++}:v]overlay=${logo.x}:${logo.y}:format=auto[mitlogo]`);
     letzte = "mitlogo";
@@ -383,6 +395,74 @@ export async function fotoRendern({ eingabe, ausgabe, layout, mitLogo }) {
   filter.push(`[${letzte}]format=yuvj420p[bild]`);
   args.push("-filter_complex", filter.join(";"), "-map", "[bild]", "-frames:v", "1", "-q:v", "3", ausgabe);
   await ausfuehren("ffmpeg", args);
+}
+
+// ---------- Storys ----------
+// Instagram und Facebook zeigen Storys in 9:16. Alles andere landet dort klein mit Balken –
+// dafür eine eigene Fassung: Bild mittig, dahinter eine unscharfe Kopie.
+// Oben (Fortschrittsbalken, Profil) und unten (Antwortfeld) blenden die Apps je gut 10 % ein;
+// das Hochkant-Layout (Logo ab 14 %, Bauchbinde bis 76 %) lässt das schon frei.
+
+/** Fotos in der Story: höchstens 80 % der Höhe, damit das Logo des Fotos unter der Kopfzeile bleibt. */
+export const STORY_FOTO_HOEHE = 0.8;
+
+export const STORY_MASSE = { breite: 1080, hoehe: 1920 };
+
+/** Schon 9:16 (mit etwas Spielraum)? Dann taugt die normale Fassung auch als Story. */
+export const istStoryFormat = (masse) => Math.abs(masse.hoehe / masse.breite - 16 / 9) < 0.03;
+
+/**
+ * Filter: beliebiges Bild → 1080×1920, mittig auf einer unscharfen Kopie seiner selbst.
+ * Nicht abgedunkelt: Das Logo mit dunkler Schrift soll auf dem Hintergrund lesbar bleiben.
+ * `vorneHoehe` begrenzt die Höhe des scharfen Bildes (für Fotos, s. STORY_FOTO_HOEHE).
+ */
+export function storyFlaeche({ breite, hoehe } = STORY_MASSE, { vorneHoehe = hoehe } = {}) {
+  return `split[sgrund][sbild];` +
+    `[sgrund]scale=${breite}:${hoehe}:force_original_aspect_ratio=increase,crop=${breite}:${hoehe},` +
+    `boxblur=40:2,eq=saturation=0.85[sunscharf];` +
+    `[sbild]scale=${breite}:${gerade(vorneHoehe)}:force_original_aspect_ratio=decrease:force_divisible_by=2[svorne];` +
+    `[sunscharf][svorne]overlay=(W-w)/2:(H-h)/2,setsar=1`;
+}
+
+/**
+ * Weicher dunkler Verlauf oben auf der Story-Fläche (halb deckend bis 26 % der Höhe, bis 40 % auslaufend):
+ * Darauf ist das Logo mit heller Schrift auf jedem Hintergrund lesbar – auch auf hellem Himmel oder
+ * gemischtem Grund, wo weder helle noch dunkle Schrift allein sicher wäre.
+ */
+export async function storySchleier(masse, ziel) {
+  const { breite, hoehe } = masse;
+  await ausfuehren("ffmpeg", [
+    "-y", "-v", "error", "-f", "lavfi", "-i", `color=c=black:s=${breite}x${hoehe}:d=1`,
+    "-vf", `format=rgba,geq=r=0:g=0:b=0:a='128*clip((0.40-Y/${hoehe})/0.14,0,1)'`,
+    "-frames:v", "1", ziel,
+  ]);
+}
+
+/**
+ * Logo für die Story-Fläche: Das freie Logo steht dort auf dem dunklen Verlauf, also die Variante
+ * mit heller Schrift (quer-hell → quer-dunkel), sofern es sie gibt. Mit Karte bleibt es, wie es ist.
+ */
+export async function logoFuerStory(layout) {
+  if (layout.logoStil !== "frei" || !/-hell\.png$/.test(layout.logo)) return layout.logo;
+  const dunkel = layout.logo.replace(/-hell\.png$/, "-dunkel.png");
+  try {
+    await fs.access(dunkel);
+    return dunkel;
+  } catch {
+    return layout.logo;
+  }
+}
+
+/**
+ * Story-Fassung eines Fotos: das fertige Feed-Foto (samt Logo, wie im Beitrag) auf 1080×1920,
+ * höchstens 80 % hoch – so liegt sein Logo immer unter der Kopfzeile der Story.
+ */
+export async function storyFoto({ eingabe, ausgabe }) {
+  await ausfuehren("ffmpeg", [
+    "-y", "-v", "error", "-i", eingabe,
+    "-filter_complex", `[0:v]${storyFlaeche(STORY_MASSE, { vorneHoehe: STORY_MASSE.hoehe * STORY_FOTO_HOEHE })},format=yuvj420p[bild]`,
+    "-map", "[bild]", "-frames:v", "1", "-q:v", "3", ausgabe,
+  ]);
 }
 
 /** Verkleinerte Kopie, die die KI für den Caption-Vorschlag ansieht. */

@@ -112,6 +112,9 @@ test("Postiz-Anfragen pro Stunde mitzählen", () => {
   assert.equal(new AnfragenZaehler(null, 0).wiederFrei(100), null);
   assert.equal(Postiz.bedarf({ medien: 3, hochgeladen: false, story: true, kanaele: [{ identifier: "instagram" }] }), 5);
   assert.equal(Postiz.bedarf({ medien: 3, hochgeladen: true, story: true, kanaele: [{ identifier: "x" }] }), 1);
+  // eigene Story-Fassung (9:16) braucht einen Upload mehr – aber nur, wenn es Story-Kanäle gibt
+  assert.equal(Postiz.bedarf({ medien: 1, hochgeladen: false, story: true, storyUpload: true, kanaele: [{ identifier: "instagram" }] }), 4);
+  assert.equal(Postiz.bedarf({ medien: 1, hochgeladen: false, story: true, storyUpload: true, kanaele: [{ identifier: "x" }] }), 2);
 });
 
 test("Zeichenlimit mit eigener Vorgabe", () => {

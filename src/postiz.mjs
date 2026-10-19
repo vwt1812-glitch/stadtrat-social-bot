@@ -303,9 +303,10 @@ export class Postiz {
    * @param {string[]} [o.collabs]
    * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
    * @param {boolean} [o.story] zusätzlich eine Story auf Instagram/Facebook (erstes Bild/Video)
+   * @param {{id:string,path:string}} [o.storyMedium] eigene Story-Fassung (9:16), sonst das erste Medium
    * @returns {Promise<{post: {postId:string}[], story?: {postId:string}[]}>} IDs für die Kontrolle
    */
-  async beitrag({ typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false }) {
+  async beitrag({ typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, storyMedium = null }) {
     const eigene = this.eigeneEinstellungen();
     const body = {
       type: typ,
@@ -325,7 +326,7 @@ export class Postiz {
         ...body,
         posts: storyKanaele.map((k) => ({
           integration: { id: k.id },
-          value: [{ content: "", image: [medien[0]] }],
+          value: [{ content: "", image: [storyMedium ?? medien[0]] }],
           settings: { __type: k.identifier, ...STORY[k.identifier] },
         })),
       });
@@ -333,8 +334,9 @@ export class Postiz {
     return ergebnis;
   }
 
-  /** So viele Anfragen braucht ein Beitrag (Uploads + Post + ggf. Story). */
-  static bedarf({ medien, hochgeladen, story, kanaele }) {
-    return (hochgeladen ? 0 : medien) + 1 + (story && medien && kanaele.some((k) => STORY[k.identifier]) ? 1 : 0);
+  /** So viele Anfragen braucht ein Beitrag (Uploads + Post + ggf. Story samt eigenem Upload). */
+  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false }) {
+    const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
+    return (hochgeladen ? 0 : medien) + 1 + (mitStory ? 1 + (storyUpload ? 1 : 0) : 0);
   }
 }

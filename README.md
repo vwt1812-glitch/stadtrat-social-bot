@@ -32,7 +32,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | ✂️ Pro Kanal | eigener Text je Kanal (siehe unten) |
 | 🤝 Collab | Instagram-Collab-Partner (bis zu 3), z. B. `@piraten_nuernberg` – erscheint, wenn ein Instagram-Kanal gewählt ist |
 | 🔁 Repost | andere X- bzw. LinkedIn-Konten teilen den Beitrag nach dem Erscheinen, sofort oder verzögert (Postiz-„Re-poster“) |
-| 📱 Story | Foto/Video zusätzlich als Story auf Instagram und Facebook (erstes Bild bzw. das Video) |
+| 📱 Story | Foto/Video zusätzlich als Story auf Instagram und Facebook (erstes Bild bzw. das Video); was nicht 9:16 ist, bekommt eine eigene Story-Fassung mit Vorschau |
 | 🗑️ Verwerfen | Vorschlag löschen |
 
 ### Texte pro Kanal
@@ -194,6 +194,12 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   daher bei 14 % der Höhe, die Bauchbinde endet bei 76 %, Untertitel stehen mit `UNTERTITEL_POSITION=0.33` darüber
   und sind höchstens 24 Zeichen breit. Querformat hat eigene Untertitel unten (`UNTERTITEL_POSITION_QUER=0.08`).
   Verdecken die Untertitel etwas, im Menü unter **📍 Position** pro Video oben, Mitte oder unten wählen.
+- **Storys:** Instagram und Facebook blenden oben Fortschrittsbalken und Profil, unten das Antwortfeld ein (je
+  gut 10 %). Hochkant-Videos (9:16) gehen unverändert als Story raus – ihr Layout lässt das schon frei. Für alle
+  anderen baut der Bot bei **📱 Story** eine eigene Fassung in 1080×1920 und schickt sie als „Story-Vorschau“:
+  Videos mittig auf einer unscharfen Kopie, oben ein weicher dunkler Verlauf mit dem Logo in heller Schrift
+  (`quer-dunkel`), Untertitel und Bauchbinde wie hochkant. Fotos kommen samt ihrem Logo wie im Beitrag, höchstens
+  80 % hoch, damit das Logo unter der Kopfzeile bleibt. Die Story-Fassung wird beim Posten extra hochgeladen.
 - **Glossar:** `glossar.txt` – Namen, die Whisper richtig schreiben soll, und automatische Ersetzungen.
 - **Netzwerk-Einstellungen:** `kanaele.example.json` nach `kanaele.json` kopieren. Schlüssel ist der Netzwerk-Typ
   (`instagram`, `tiktok`, `youtube`, …) oder eine Kanal-ID aus `/kanaele`. Die Werte gehen als `settings` an Postiz.

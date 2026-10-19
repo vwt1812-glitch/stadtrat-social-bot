@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { karteFilter, logoGrafik, bauchbindeGrafik, wischFilter, untersuche } from "../src/video.mjs";
+import { karteFilter, logoGrafik, bauchbindeGrafik, wischFilter, untersuche, istStoryFormat, storyFoto, rendern, logoFuerStory, storySchleier, STORY_MASSE } from "../src/video.mjs";
 
 const ffmpegDa = (() => {
   try {
@@ -91,4 +91,49 @@ test("Karten-Bauchbinde passt sich der Textlänge an und liegt über den Unterti
   const untertitelOben = 1920 * (1 - 0.18) - 2.6 * Math.round(1080 * 0.062);
   assert.equal(langBild.hoehe, 168 + 64);
   assert.equal(lang.y + 24 + 168, Math.round(untertitelOben - 30));
+});
+
+test("Story-Format: 9:16 mit etwas Spielraum", () => {
+  assert.ok(istStoryFormat({ breite: 1080, hoehe: 1920 }));
+  assert.ok(istStoryFormat({ breite: 720, hoehe: 1280 }));
+  assert.ok(istStoryFormat({ breite: 1080, hoehe: 1916 }));
+  assert.ok(!istStoryFormat({ breite: 1080, hoehe: 1350 })); // 4:5
+  assert.ok(!istStoryFormat({ breite: 1920, hoehe: 1080 }));
+  assert.ok(!istStoryFormat({ breite: 1080, hoehe: 1080 }));
+});
+
+test("Story-Fassung: Querformat-Foto und -Video werden 1080×1920", { skip: !ffmpegDa }, async () => {
+  const ordner = fs.mkdtempSync(path.join(os.tmpdir(), "story-"));
+  const foto = path.join(ordner, "quer.jpg");
+  execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1600x900:d=1", "-frames:v", "1", foto]);
+  const storyBild = path.join(ordner, "story.jpg");
+  await storyFoto({ eingabe: foto, ausgabe: storyBild });
+  const bild = await untersuche(storyBild);
+  assert.deepEqual([bild.breite, bild.hoehe], [1080, 1920]);
+
+  const video = path.join(ordner, "quer.mp4");
+  execFileSync("ffmpeg", ["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=640x360:d=1.5", "-pix_fmt", "yuv420p", video]);
+  const storyVideo = path.join(ordner, "story.mp4");
+  const masse = { breite: 1080, hoehe: 1920, dauer: 1.5 };
+  await rendern({ eingabe: video, ausgabe: storyVideo, ass: null, masse, layout: LAYOUT, story: true,
+    video: { encoder: "libx264", preset: "ultrafast", crf: "30" } });
+  const fertig = await untersuche(storyVideo);
+  assert.deepEqual([fertig.breite, fertig.hoehe], [1080, 1920]);
+});
+
+test("Story-Logo: helle Schrift auf dem Verlauf, mit Karte unverändert", async () => {
+  const layout = { ...LAYOUT, logo: "assets/logos/quer-hell.png", logoStil: "frei" };
+  assert.equal(await logoFuerStory(layout), "assets/logos/quer-dunkel.png");
+  assert.equal(await logoFuerStory({ ...layout, logoStil: "karte" }), "assets/logos/quer-hell.png");
+  assert.equal(await logoFuerStory({ ...layout, logo: "assets/logos/signet.png" }), "assets/logos/signet.png");
+});
+
+test("Story-Verlauf: oben halb deckend, ab 40 % durchsichtig", { skip: !ffmpegDa }, async () => {
+  const ordner = fs.mkdtempSync(path.join(os.tmpdir(), "schleier-"));
+  const ziel = path.join(ordner, "s.png");
+  await storySchleier(STORY_MASSE, ziel);
+  const alpha = (y) => execFileSync("ffmpeg", ["-v", "error", "-i", ziel, "-vf", `crop=1:1:500:${y},format=rgba`, "-f", "rawvideo", "-"])[3];
+  assert.equal(alpha(100), 128);
+  assert.equal(alpha(Math.round(1920 * 0.2)), 128);
+  assert.equal(alpha(Math.round(1920 * 0.45)), 0);
 });
