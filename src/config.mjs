@@ -86,6 +86,8 @@ export function ladeConfig() {
       rand: env("UNTERTITEL_RAND", "#000000"),
       stil: env("UNTERTITEL_STIL", "rand"),
       position: Number(env("UNTERTITEL_POSITION", "0.18")),
+      // balken = schräge Balken orange/schwarz, die einwischen; karte = dunkle Karte wie das Logo
+      bauchbindeStil: env("BAUCHBINDE_STIL", "balken"),
       bauchbindeStart: Number(env("BAUCHBINDE_START", "0.5")),
       bauchbindeDauer: Number(env("BAUCHBINDE_DAUER", "4")),
     },

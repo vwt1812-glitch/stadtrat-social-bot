@@ -180,8 +180,10 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
 
 - **Layout:** Das Logo sitzt auf einer dunklen, abgerundeten Karte in Logo-Schwarz mit weichem Schatten und
   oranger Linie (`LOGO_STIL=karte`), oben links mit Abstand zu den Bedienelementen von Reels und TikTok. Die
-  Bauchbinde nimmt dieselbe Karte mit orangem Balken; sie gleitet nach `BAUCHBINDE_START` Sekunden herein und
-  blendet nach `BAUCHBINDE_DAUER` Sekunden aus. Logo, Farben, Position und Größe in `.env`. Die offiziellen Logos
+  Bauchbinde (`BAUCHBINDE_STIL=balken`) ist ein schräger oranger Balken mit dem Namen und davor ein schwarzer mit
+  der Funktion, unten links unter den Untertiteln; sie wischt nach `BAUCHBINDE_START` Sekunden mit weißer Kante
+  herein und ist samt Auswischen `BAUCHBINDE_DAUER` Sekunden zu sehen. Mit `BAUCHBINDE_STIL=karte` nimmt sie
+  stattdessen dieselbe Karte wie das Logo. Logo, Farben, Position und Größe in `.env`. Die offiziellen Logos
   liegen als SVG und PNG in `assets/logos/` (`quer-dunkel` für dunkle Flächen, `quer-hell` für helle), die Schrift
   Inter (SIL Open Font License) in `assets/fonts/`. Untertitel werden für Hochkant und Querformat passend gesetzt,
   Stil `rand` oder `box`.

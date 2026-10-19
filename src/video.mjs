@@ -140,10 +140,93 @@ export async function logoGrafik({ layout, masse, ordner }) {
 }
 
 /**
- * Bauchbinde mit Name und Funktion: dunkle Karte, farbiger Balken links,
- * links über den Untertiteln. Gibt Datei und Position im Video zurück.
+ * Bauchbinde mit Name und Funktion, Stil nach `layout.bauchbindeStil`:
+ * „balken“ (Standard) oder „karte“. Gibt Grafik(en) und Position im Video zurück.
  */
-export async function bauchbindeGrafik({ name, funktion, layout, masse, ordner }) {
+export async function bauchbindeGrafik(o) {
+  return o.layout.bauchbindeStil === "karte" ? karteBauchbinde(o) : balkenBauchbinde(o);
+}
+
+/**
+ * Stil „balken“: schräger oranger Balken mit dem Namen, davor ein schwarzer mit der Funktion,
+ * unten links unter den Untertiteln (passen sie dort nicht hin: darüber). Zwei Grafiken gleicher
+ * Größe, damit beim Einwischen der schwarze Balken etwas später kommen kann.
+ */
+export async function balkenBauchbinde({ name, funktion, layout, masse, ordner }) {
+  const s = skala(masse);
+  const fett = path.join(layout.schriftOrdner, "Inter-Bold.otf");
+  const nameDatei = path.join(ordner, "bauchbinde-name.txt");
+  const funktionDatei = path.join(ordner, "bauchbinde-funktion.txt");
+  await fs.writeFile(nameDatei, name);
+  await fs.writeFile(funktionDatei, funktion ?? "");
+  const gName = pxl(58, s);
+  const gFunktion = pxl(30, s);
+
+  // Oranger Balken: Höhe ho, schräge Kanten (oben um schraeg nach rechts versetzt)
+  const ho = pxl(102, s);
+  const schraeg = pxl(15, s);
+  const innen = pxl(27, s);
+  const { rand } = raender(masse);
+  const maxBreite = masse.breite - 2 * rand;
+  const wo = Math.min(await textBreite(nameDatei, fett, gName) + 2 * innen + schraeg, maxBreite);
+  // Schwarzer Balken: überlappt den orangen unten, leicht nach rechts versetzt
+  const hb = pxl(42, s);
+  const by = ho - pxl(20, s);
+  const bx = pxl(35, s);
+  const sb = Math.round((schraeg * hb) / ho);
+  const innenB = pxl(18, s);
+  const wb = funktion
+    ? Math.min(Math.max(await textBreite(funktionDatei, fett, gFunktion) + 2 * innenB + sb, Math.round(wo * 0.7)), maxBreite - bx)
+    : 0;
+  const breite = gerade(Math.max(wo, bx + wb));
+  const hoehe = gerade(funktion ? by + hb : ho);
+
+  // Flächen 4-fach überabgetastet zeichnen, damit die schrägen Kanten glatt werden
+  const k = 4;
+  const flaeche = (farbe, innerhalb) =>
+    `color=c=${ffFarbe(farbe)}:s=${breite * k}x${hoehe * k}:d=1,format=rgba,` +
+    `geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*${innerhalb}',scale=${breite}:${hoehe}:flags=area`;
+  const xs = `(X/${k})`;
+  const ys = `(Y/${k})`;
+  const orange = `lt(${ys},${ho})*gte(${xs},${schraeg}*(1-${ys}/${ho}))*lt(${xs},${wo}-${schraeg}*${ys}/${ho})`;
+  const schwarz = `gte(${ys},${by})*lt(${ys},${by + hb})*gte(${xs},${bx}+${sb}*(1-(${ys}-${by})/${hb}))*lt(${xs},${bx + wb}-${sb}*(${ys}-${by})/${hb})`;
+  // y so, dass die Großbuchstaben mittig im Balken stehen (Versalhöhe von Inter ≈ 0,73 × Schriftgröße)
+  const mittig = (oben, h, g) => `${Math.round(oben + h / 2 + 0.365 * g)}-ascent`;
+
+  const dateien = { orange: path.join(ordner, "bauchbinde-orange.png"), schwarz: null };
+  await ausfuehren("ffmpeg", [
+    "-y", "-v", "error", "-filter_complex",
+    `${flaeche(layout.akzentFarbe || "#F18616", orange)},` +
+      `drawtext=fontfile=${fett}:textfile=${path.basename(nameDatei)}:fontsize=${gName}:fontcolor=white:` +
+      `x=${Math.round(schraeg / 2 + innen)}:y=${mittig(0, ho, gName)}`,
+    "-frames:v", "1", path.basename(dateien.orange),
+  ], { cwd: ordner });
+  if (funktion) {
+    dateien.schwarz = path.join(ordner, "bauchbinde-schwarz.png");
+    await ausfuehren("ffmpeg", [
+      "-y", "-v", "error", "-filter_complex",
+      `${flaeche(layout.karteFarbe || "#1D1D1B", schwarz)},` +
+        `drawtext=fontfile=${fett}:textfile=${path.basename(funktionDatei)}:fontsize=${gFunktion}:fontcolor=white:` +
+        `x=${Math.round(bx + sb / 2 + innenB)}:y=${mittig(by, hb, gFunktion)}`,
+      "-frames:v", "1", path.basename(dateien.schwarz),
+    ], { cwd: ordner });
+  }
+
+  // Unten links wie beim Cutter (Unterkante bei 85 % der Höhe), sonst über den Untertiteln
+  const hochkant = masse.hoehe > masse.breite;
+  const x = hochkant ? Math.round(Math.min(masse.breite, masse.hoehe) * 0.1) : rand;
+  const untertitelUnten = masse.hoehe * (1 - layout.position);
+  let unten = hochkant ? masse.hoehe * 0.85 : masse.hoehe - 1.5 * rand;
+  if (unten - hoehe < untertitelUnten + pxl(30, s)) {
+    unten = untertitelUnten - 2.6 * untertitelGroesse(masse) - pxl(30, s);
+  }
+  return { art: "balken", dateien, x, y: Math.round(unten - hoehe), breite, hoehe, steigung: schraeg / ho };
+}
+
+/**
+ * Stil „karte“: dunkle Karte, farbiger Balken links, links über den Untertiteln.
+ */
+export async function karteBauchbinde({ name, funktion, layout, masse, ordner }) {
   const s = skala(masse);
   const fett = path.join(layout.schriftOrdner, "Inter-Bold.otf");
   const normal = path.join(layout.schriftOrdner, "Inter-Medium.otf");
@@ -179,7 +262,23 @@ export async function bauchbindeGrafik({ name, funktion, layout, masse, ordner }
   const { rand } = raender(masse);
   const untertitelOben = masse.hoehe * (1 - layout.position) - 2.6 * untertitelGroesse(masse);
   const y = Math.round(untertitelOben - pxl(30, s) - h);
-  return { datei: ziel, x: rand - k.x, y: y - k.y };
+  return { art: "karte", datei: ziel, x: rand - k.x, y: y - k.y };
+}
+
+/**
+ * Filter, der eine Balken-Grafik einwischt und wieder auswischt: Eine Kante parallel zu den
+ * schrägen Balkenkanten läuft von links nach rechts, davor ein weißer Streifen (nur „mitStreifen“).
+ * Zeiten relativ zum Beginn der Grafik; `gesamt` = wie lange sie insgesamt zu sehen ist.
+ */
+export function wischFilter({ breite, hoehe, steigung, gesamt, verzoegerung = 0, dauer, streifen = 0 }) {
+  const ein = `clip((T-${verzoegerung})/${dauer},0,1)`;
+  const aus = `clip((${gesamt - verzoegerung}-T)/${dauer},0,1)`;
+  const weg = breite + steigung * hoehe + streifen;
+  const kante = `(${weg}*(1-pow(1-min(${ein},${aus}),3)))`;
+  const u = `(X+${steigung}*Y)`;
+  const offen = `lte(${u},${kante})`;
+  const farbe = (c) => (streifen ? `if(gt(${u},${kante}-${streifen})*${offen},255,${c}(X,Y))` : `${c}(X,Y)`);
+  return `geq=r='${farbe("r")}':g='${farbe("g")}':b='${farbe("b")}':a='if(${offen},alpha(X,Y),0)'`;
 }
 
 /**
@@ -211,14 +310,27 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
   }
   if (bauchbinde?.name) {
     const binde = await bauchbindeGrafik({ ...bauchbinde, layout, masse, ordner });
-    const d = 0.35; // Ein- und Ausblenden
-    const start = Math.min(layout.bauchbindeStart, Math.max(0, masse.dauer - 1));
-    const ende = Math.max(start + d, Math.min(start + layout.bauchbindeDauer, masse.dauer - d - 0.05));
-    const weg = Math.round(60 * skala(masse)); // so weit gleitet sie herein
-    args.push("-loop", "1", "-t", String(Math.max(masse.dauer, 1)), "-i", binde.datei);
-    filter.push(`[${eingang++}:v]format=rgba,fade=t=in:st=${start}:d=${d}:alpha=1,fade=t=out:st=${ende}:d=${d}:alpha=1[binde]`);
-    filter.push(`[${letzte}][binde]overlay=x='${binde.x}-${weg}*pow(max(0,1-(t-${start})/${d}),2)':y=${binde.y}:enable='between(t,${start},${ende + d})':eof_action=pass:format=auto[mitbinde]`);
-    letzte = "mitbinde";
+    if (binde.art === "balken") {
+      const start = Math.min(layout.bauchbindeStart, Math.max(0, masse.dauer - 1));
+      const gesamt = Math.max(0.5, Math.min(layout.bauchbindeDauer, masse.dauer - start));
+      const dauer = Math.min(0.9, gesamt / 2.5); // Einwischen; der schwarze Balken kommt etwas später
+      const wisch = { breite: binde.breite, hoehe: binde.hoehe, steigung: binde.steigung, gesamt };
+      const bild = (datei) => args.push("-loop", "1", "-framerate", "30", "-t", String(gesamt), "-i", datei);
+      bild(binde.dateien.orange);
+      filter.push(`[${eingang++}:v]format=rgba,${wischFilter({ ...wisch, dauer, streifen: Math.round(binde.breite * 0.12) })}[orange]`);
+      let balken = "orange";
+      if (binde.dateien.schwarz) {
+        bild(binde.dateien.schwarz);
+        filter.push(`[${eingang++}:v]format=rgba,${wischFilter({ ...wisch, verzoegerung: dauer * 0.3, dauer: dauer * 0.75 })}[schwarz]`);
+        filter.push(`[orange][schwarz]overlay=0:0:format=auto[balken]`);
+        balken = "balken";
+      }
+      filter.push(`[${balken}]setpts=PTS+${start}/TB[binde]`);
+      filter.push(`[${letzte}][binde]overlay=${binde.x}:${binde.y}:eof_action=pass:format=auto[mitbinde]`);
+      letzte = "mitbinde";
+    } else {
+      letzte = karteEinblenden({ binde, args, filter, letzte, eingang: eingang++, masse, layout });
+    }
   }
   filter.push(`[${letzte}]format=yuv420p[v]`);
 
@@ -232,6 +344,18 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
   args.push("-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", ausgabe);
 
   await ausfuehren("ffmpeg", args, { cwd: ordner });
+}
+
+/** Karten-Bauchbinde: gleitet herein und blendet aus. Gibt das neue Filter-Label zurück. */
+function karteEinblenden({ binde, args, filter, letzte, eingang, masse, layout }) {
+  const d = 0.35; // Ein- und Ausblenden
+  const start = Math.min(layout.bauchbindeStart, Math.max(0, masse.dauer - 1));
+  const ende = Math.max(start + d, Math.min(start + layout.bauchbindeDauer, masse.dauer - d - 0.05));
+  const weg = Math.round(60 * skala(masse)); // so weit gleitet sie herein
+  args.push("-loop", "1", "-t", String(Math.max(masse.dauer, 1)), "-i", binde.datei);
+  filter.push(`[${eingang}:v]format=rgba,fade=t=in:st=${start}:d=${d}:alpha=1,fade=t=out:st=${ende}:d=${d}:alpha=1[binde]`);
+  filter.push(`[${letzte}][binde]overlay=x='${binde.x}-${weg}*pow(max(0,1-(t-${start})/${d}),2)':y=${binde.y}:enable='between(t,${start},${ende + d})':eof_action=pass:format=auto[mitbinde]`);
+  return "mitbinde";
 }
 
 /**
