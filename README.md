@@ -1,14 +1,21 @@
 # Stadtrat Social-Media-Bot
 
-Telegram-Bot für den Raspberry Pi: Video reinschicken → Vorschau mit Logo, Untertiteln und Caption-Vorschlag zurück
-→ anpassen → mit **Ja** sofort oder zu einer bestimmten Zeit über [Postiz](https://postiz.com) posten.
-Alles läuft lokal. Nur wenn ein `ANTHROPIC_API_KEY` eingetragen ist, geht das Transkript für den Caption-Vorschlag an Claude.
+Telegram-Bot für den Raspberry Pi: Video, Fotos oder Text reinschicken → Vorschau mit Logo, Untertiteln und
+Caption-Vorschlag zurück → anpassen → mit **Ja** sofort oder zu einer bestimmten Zeit über [Postiz](https://postiz.com) posten.
+Alles läuft lokal. Nur wenn ein `ANTHROPIC_API_KEY` eingetragen ist, gehen Transkript, Fotos bzw. Text für den
+Caption-Vorschlag an Claude.
 
 ## Ablauf in Telegram
 
-1. Video schicken – am besten **als Datei** (📎 → Datei), sonst komprimiert Telegram es vorher.
-2. Der Bot lädt es, erkennt die Sprache (whisper.cpp), brennt Logo und Untertitel ein und schickt die Vorschau.
-3. Darunter die Caption mit Knöpfen:
+Was du schickst, bestimmt die Art des Beitrags:
+
+| Eingabe | Was der Bot macht |
+|---|---|
+| **Video** – am besten **als Datei** (📎 → Datei), sonst komprimiert Telegram es | Sprache erkennen (whisper.cpp), Logo und Untertitel einbrennen, Caption aus dem Gesagten vorschlagen |
+| **Foto** oder **Album** (bis 10 Fotos = Karussell) | Logo draufsetzen, auf max. 2048 px verkleinern. Text in der Bildunterschrift wird die Caption; ohne Text schlägt Claude eine vor (sieht sich dafür die Fotos an), ohne Claude gibt es nur die Hashtags |
+| **Text** | wird unverändert zum Textbeitrag; mit „Neu formulieren“ macht Claude daraus einen fertigen Beitrag |
+
+Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 
 | Knopf | Was passiert |
 |---|---|
@@ -16,11 +23,19 @@ Alles läuft lokal. Nur wenn ein `ANTHROPIC_API_KEY` eingetragen ist, geht das T
 | 🕐 Planen | Heute/Morgen-Vorschläge, nächster freier Postiz-Slot oder freie Eingabe wie `Fr 18 Uhr`, `24.10. 19:30`, `in 2 Stunden` |
 | ✏️ Caption ändern | schickt den aktuellen Text zum Kopieren, die nächste Nachricht ist die neue Caption |
 | 🔄 Neu formulieren | nur mit Claude: Wunsch eingeben (`kürzer`, `lockerer`, …) |
-| 📝 Untertitel | schickt die `.srt`; Korrekturen als `falsch => richtig` zurückschreiben oder die korrigierte Datei schicken – das Video wird neu gebaut |
+| 📝 Untertitel | nur Video: schickt die `.srt`; Korrekturen als `falsch => richtig` zurückschreiben oder die korrigierte Datei schicken – das Video wird neu gebaut |
+| 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
 | 📺 Kanäle | Postiz-Kanäle an-/abwählen |
 | 🗑️ Verwerfen | Vorschlag löschen |
 
 `abbrechen` beendet jede laufende Eingabe. Geplante Beiträge lassen sich danach im Postiz-Kalender ändern.
+
+Bei der Kanalwahl sind nur passende Kanäle vorausgewählt: Textbeiträge gehen nicht an Instagram, TikTok, YouTube
+und Pinterest (die brauchen ein Bild oder Video), Fotos nicht an YouTube. Wählt man so einen Kanal trotzdem an,
+fragt der Bot vor dem Posten nach.
+
+Fotos am besten normal schicken (nicht als Datei): Telegram dreht sie dann richtig, und die Größe reicht für Social Media.
+iPhone-Fotos im HEIC-Format kann ffmpeg auf dem Pi meist nicht lesen.
 
 ## Einrichten auf dem Raspberry Pi
 
@@ -111,12 +126,12 @@ journalctl -u social-bot -f
 
 | Datei | Inhalt |
 |---|---|
-| `src/bot.mjs` | Telegram-Steuerung, Menüs, Warteschlange |
-| `src/video.mjs` | ffprobe/ffmpeg: Video untersuchen, Ton herauslösen, Logo + Untertitel einbrennen |
+| `src/bot.mjs` | Telegram-Steuerung, Menüs, Warteschlange, Alben sammeln |
+| `src/video.mjs` | ffprobe/ffmpeg: Video untersuchen, Ton herauslösen, Logo + Untertitel einbrennen, Fotos mit Logo |
 | `src/whisper.mjs` | Spracherkennung mit whisper.cpp, Glossar |
 | `src/untertitel.mjs` | SRT lesen/schreiben, Korrekturen, Umbruch, ASS-Gestaltung |
-| `src/caption.mjs` | Caption-Vorschlag (Claude oder einfacher Auszug) |
-| `src/postiz.mjs` | Postiz Public API: Kanäle, Upload, Beitrag anlegen |
+| `src/caption.mjs` | Caption-Vorschlag aus Transkript, Fotos oder Stichpunkten (Claude oder einfacher Vorschlag) |
+| `src/postiz.mjs` | Postiz Public API: Kanäle, Upload, Beitrag anlegen; welche Netzwerke welche Beiträge nehmen |
 | `src/zeit.mjs` | Zeitangaben wie „morgen 18 Uhr“ verstehen |
 | `src/auftraege.mjs` | Stand je Video in `daten/auftraege.json`; fertige Aufträge werden nach 14 Tagen gelöscht |
 

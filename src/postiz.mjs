@@ -4,6 +4,20 @@
 import fs from "node:fs";
 import path from "node:path";
 
+/** Netzwerke, die ohne Bild oder Video nichts annehmen. */
+export const BRAUCHT_MEDIEN = ["instagram", "instagram-standalone", "tiktok", "tiktok-business", "youtube", "pinterest"];
+/** Netzwerke, die nur Videos nehmen. */
+export const NUR_VIDEO = ["youtube"];
+
+/** Kanäle, die zur Art des Beitrags passen. */
+export function passendeKanaele(kanaele, art) {
+  if (art === "text") return kanaele.filter((k) => !BRAUCHT_MEDIEN.includes(k.identifier));
+  if (art === "foto") return kanaele.filter((k) => !NUR_VIDEO.includes(k.identifier));
+  return kanaele;
+}
+
+const MEDIENTYP = { ".mp4": "video/mp4", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png" };
+
 /** Pflichtangaben je Netzwerk, damit Postiz den Beitrag annimmt. */
 export function standardEinstellungen(identifier, caption) {
   const titel = caption.split("\n")[0].replace(/#\S+/g, "").trim();
@@ -72,7 +86,8 @@ export class Postiz {
 
   async hochladen(datei) {
     const form = new FormData();
-    form.append("file", await fs.openAsBlob(datei, { type: "video/mp4" }), path.basename(datei));
+    const type = MEDIENTYP[path.extname(datei).toLowerCase()] ?? "application/octet-stream";
+    form.append("file", await fs.openAsBlob(datei, { type }), path.basename(datei));
     const media = await this.#anfrage("POST", "/upload", form);
     return { id: media.id, path: media.path };
   }
@@ -91,10 +106,10 @@ export class Postiz {
    * @param {"now"|"schedule"} o.typ
    * @param {Date} o.zeit
    * @param {string} o.caption
-   * @param {{id:string,path:string}} o.media
+   * @param {{id:string,path:string}[]} o.medien leer bei reinen Textbeiträgen
    * @param {{id:string,identifier:string}[]} o.kanaele
    */
-  async beitrag({ typ, zeit, caption, media, kanaele }) {
+  async beitrag({ typ, zeit, caption, medien, kanaele }) {
     const eigene = this.#eigeneEinstellungen();
     const body = {
       type: typ,
@@ -103,7 +118,7 @@ export class Postiz {
       tags: [],
       posts: kanaele.map((k) => ({
         integration: { id: k.id },
-        value: [{ content: alsHtml(caption), image: [media] }],
+        value: [{ content: alsHtml(caption), image: medien }],
         settings: {
           ...standardEinstellungen(k.identifier, caption),
           ...eigene[k.identifier],

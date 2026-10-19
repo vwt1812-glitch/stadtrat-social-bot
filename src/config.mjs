@@ -47,6 +47,7 @@ export function ladeConfig() {
       logoPosition: env("LOGO_POSITION", "oben-rechts"),
       logoBreite: Number(env("LOGO_BREITE", "0.3")),
       logoHintergrund: env("LOGO_HINTERGRUND", "ja") !== "nein",
+      logoAufFotos: env("LOGO_AUF_FOTOS", "ja") !== "nein",
       schrift: env("SCHRIFT", "DejaVu Sans"),
       schriftOrdner: pfad(env("SCHRIFT_ORDNER", "")),
       farbe: env("UNTERTITEL_FARBE", "#FFFFFF"),

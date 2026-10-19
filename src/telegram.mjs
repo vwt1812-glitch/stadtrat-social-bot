@@ -51,6 +51,20 @@ export class Telegram {
     return this.aufruf(methode, form);
   }
 
+  /** Ein Foto oder mehrere als Album (max. 10). */
+  async fotos(chatId, dateien, caption) {
+    if (dateien.length === 1) return this.datei(chatId, "sendPhoto", "photo", dateien[0], { caption });
+    const form = new FormData();
+    form.append("chat_id", String(chatId));
+    const media = [];
+    for (const [i, d] of dateien.slice(0, 10).entries()) {
+      form.append(`f${i}`, await fs.openAsBlob(d), path.basename(d));
+      media.push({ type: "photo", media: `attach://f${i}`, ...(i === 0 ? { caption } : {}) });
+    }
+    form.append("media", JSON.stringify(media));
+    return this.aufruf("sendMediaGroup", form);
+  }
+
   async herunterladen(fileId, ziel) {
     const info = await this.aufruf("getFile", { file_id: fileId });
     // Lokaler Bot-API-Server liefert einen absoluten Pfad auf der Platte

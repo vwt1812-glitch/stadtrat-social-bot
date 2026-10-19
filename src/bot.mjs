@@ -1,15 +1,15 @@
-// Telegram-Bot: Video rein → Vorschau mit Logo, Untertiteln und Caption zurück
-// → per Knopfdruck sofort oder geplant über Postiz veröffentlichen.
+// Telegram-Bot: Video, Fotos oder Text rein → Vorschau mit Logo, Untertiteln und
+// Caption zurück → per Knopfdruck sofort oder geplant über Postiz veröffentlichen.
 
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ladeConfig } from "./config.mjs";
 import { Telegram, html } from "./telegram.mjs";
-import { Postiz } from "./postiz.mjs";
+import { Postiz, passendeKanaele, BRAUCHT_MEDIEN, NUR_VIDEO } from "./postiz.mjs";
 import { Auftraege } from "./auftraege.mjs";
-import { untersuche, tonFuerWhisper, rendern, vorschau } from "./video.mjs";
+import { untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerClaude } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
-import { captionVorschlag } from "./caption.mjs";
+import { captionVorschlag, einfacherVorschlag } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, parseKorrekturen, wendeKorrekturenAn, volltext } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 
@@ -30,13 +30,17 @@ async function alleKanaele() {
 async function gewaehlteKanaele(auftrag) {
   const alle = await alleKanaele();
   if (!auftrag.kanaele) {
-    const standard = config.postiz.kanaele.length ? alle.filter((k) => config.postiz.kanaele.includes(k.id)) : alle;
+    const vorgabe = config.postiz.kanaele.length ? alle.filter((k) => config.postiz.kanaele.includes(k.id)) : alle;
+    const standard = passendeKanaele(vorgabe, art(auftrag));
     auftraege.aendern(auftrag.id, { kanaele: standard.map((k) => k.id) });
   }
   return alle.filter((k) => auftrag.kanaele.includes(k.id));
 }
 
-// Videos nacheinander verarbeiten – der Pi soll nicht zwei Renderings parallel stemmen
+/** Ältere Aufträge stammen aus der Zeit, als es nur Videos gab. */
+const art = (auftrag) => auftrag.art ?? "video";
+
+// Videos und Fotos nacheinander verarbeiten – der Pi soll nicht zwei Renderings parallel stemmen
 let warteschlange = Promise.resolve();
 const einreihen = (fn) => (warteschlange = warteschlange.then(fn, fn));
 
@@ -44,9 +48,12 @@ const knopf = (text, auftrag, aktion) => ({ text, callback_data: `a:${auftrag.id
 const datei = (auftrag, name) => path.join(auftrag.ordner, name);
 
 const HILFE = `<b>So funktioniert's</b>
-1. Schick mir ein Video – am besten <b>als Datei</b> (📎 → Datei), dann bleibt die volle Qualität erhalten.
-2. Ich baue Logo und Untertitel ein und schlage eine Caption vor.
-3. Du kannst Caption, Untertitel, Kanäle und Zeit anpassen und dann mit <b>Ja</b> posten.
+Schick mir
+• ein <b>Video</b> – am besten <b>als Datei</b> (📎 → Datei), dann bleibt die volle Qualität erhalten. Ich baue Logo und Untertitel ein.
+• ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zur Caption.
+• einfach <b>Text</b> – daraus wird ein Textbeitrag (nicht für Instagram, TikTok, YouTube).
+
+Danach kannst du Caption, Kanäle und Zeit anpassen und mit <b>Ja</b> posten.
 
 /kanaele – verbundene Postiz-Kanäle anzeigen
 /hilfe – diese Hilfe`;
@@ -61,12 +68,21 @@ async function menueInhalt(auftrag) {
   } catch (e) {
     kanalText = `<i>Postiz nicht erreichbar (${html(e.message.slice(0, 120))})</i>`;
   }
-  const quelle = auftrag.captionQuelle === "transkript" ? "\n<i>(einfacher Vorschlag aus dem Transkript)</i>" : "";
-  const text = `<b>Caption-Vorschlag</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>\n📺 ${kanalText}`;
+  const quelle = {
+    transkript: "\n<i>(einfacher Vorschlag aus dem Transkript)</i>",
+    hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
+  }[auftrag.captionQuelle] ?? "";
+  const titel = art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
+  const text = `<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>\n📺 ${kanalText}`;
+  const extra = {
+    video: [knopf("📝 Untertitel", auftrag, "untertitel")],
+    foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
+    text: [],
+  }[art(auftrag)];
   const zeilen = [
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
-    [knopf("✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anthropicKey ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])],
-    [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📺 Kanäle", auftrag, "kanaele")],
+    [knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anthropicKey ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])],
+    [...extra, knopf("📺 Kanäle", auftrag, "kanaele")],
     [knopf("🗑️ Verwerfen", auftrag, "verwerfen")],
   ];
   return { text, reply_markup: { inline_keyboard: zeilen } };
@@ -109,6 +125,12 @@ async function kanalMenue(auftrag) {
 async function bestaetigung(auftrag, typ, zeit) {
   const kanaele = await gewaehlteKanaele(auftrag);
   if (!kanaele.length) return { fehler: "Bitte zuerst mindestens einen Kanal wählen." };
+  const unpassend = kanaele.filter((k) =>
+    (art(auftrag) === "text" && BRAUCHT_MEDIEN.includes(k.identifier)) || (art(auftrag) === "foto" && NUR_VIDEO.includes(k.identifier)));
+  if (unpassend.length) {
+    const was = art(auftrag) === "text" ? "ein Bild oder Video" : "ein Video";
+    return { fehler: `${unpassend.map((k) => k.name).join(", ")} braucht ${was} – bitte unter „Kanäle“ abwählen.` };
+  }
   if (typ === "schedule" && zeit.getTime() < Date.now() + 60e3) return { fehler: "Die Zeit liegt in der Vergangenheit." };
   auftraege.aendern(auftrag.id, { plan: { typ, zeit: zeit.toISOString() } });
   const wann = typ === "now" ? "<b>jetzt</b>" : `am <b>${zeitText(zeit)}</b>`;
@@ -128,7 +150,7 @@ async function neuesVideo(msg, video) {
   }
   const auftrag = auftraege.neu(chatId);
   const status = await tg.senden(chatId, "📥 Video erhalten – kommt gleich dran …", { reply_to_message_id: msg.message_id });
-  auftraege.aendern(auftrag.id, { statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4" });
+  auftraege.aendern(auftrag.id, { art: "video", statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4" });
   einreihen(() => verarbeiten(auftrag.id, video.file_id));
 }
 
@@ -156,7 +178,7 @@ async function verarbeiten(id, fileId) {
     await fs.writeFile(datei(auftrag, "untertitel.srt"), formatSrt(cues));
 
     await schritt(auftrag, "✍️ Schreibe Caption-Vorschlag …");
-    const vorschlag = await captionVorschlag(volltext(cues), config.caption);
+    const vorschlag = await captionVorschlag({ art: "video", transkript: volltext(cues) }, config.caption);
     if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ Claude nicht erreichbar (${html(vorschlag.fehler)}) – einfacher Vorschlag stattdessen.`);
     auftraege.aendern(id, { caption: vorschlag.text, captionQuelle: vorschlag.quelle });
 
@@ -184,7 +206,7 @@ async function renderUndVorschau(id) {
     }
     const fertig = datei(auftrag, "fertig.mp4");
     await rendern({ eingabe: auftrag.original, ausgabe: fertig, ass, masse: auftrag.masse, layout: config.layout, video: config.video });
-    auftraege.aendern(id, { media: null }); // neues Video → neu hochladen
+    auftraege.aendern(id, { medien: [fertig], hochgeladen: null }); // neues Video → neu hochladen
 
     let senden = fertig;
     if (!tg.lokal && (await fs.stat(fertig)).size > 49 * MB) {
@@ -209,6 +231,102 @@ async function renderUndVorschau(id) {
   }
 }
 
+// Alben kommen als einzelne Nachrichten mit gleicher media_group_id – kurz sammeln
+const alben = new Map();
+
+function fotoEingang(msg, foto) {
+  const chatId = msg.chat.id;
+  if (!tg.lokal && foto.file_size > 20 * MB) {
+    return tg.senden(chatId, `Das Foto ist ${Math.round(foto.file_size / MB)} MB groß – über api.telegram.org gehen nur 20 MB.`);
+  }
+  const teil = { msg, foto };
+  if (!msg.media_group_id) return neueFotos(chatId, [teil]);
+  let album = alben.get(msg.media_group_id);
+  if (!album) alben.set(msg.media_group_id, (album = { teile: [] }));
+  album.teile.push(teil);
+  clearTimeout(album.timer);
+  album.timer = setTimeout(() => {
+    alben.delete(msg.media_group_id);
+    neueFotos(chatId, album.teile).catch((e) => fehlerMelden(chatId, e));
+  }, 1500);
+}
+
+async function neueFotos(chatId, teile) {
+  teile.sort((a, b) => a.msg.message_id - b.msg.message_id);
+  if (teile.length > 10) await tg.senden(chatId, "Mehr als 10 Fotos gehen nicht in einen Beitrag – ich nehme die ersten 10.");
+  const fotos = teile.slice(0, 10).map(({ foto }) => ({ fileId: foto.file_id, name: foto.file_name ?? "foto.jpg" }));
+  const notizen = teile.map(({ msg }) => msg.caption).find(Boolean) ?? "";
+  const auftrag = auftraege.neu(chatId);
+  const status = await tg.senden(chatId, `🖼️ ${fotos.length === 1 ? "Foto" : `${fotos.length} Fotos`} erhalten – kommt gleich dran …`, { reply_to_message_id: teile[0].msg.message_id });
+  auftraege.aendern(auftrag.id, { art: "foto", fotos, notizen, mitLogo: config.layout.logoAufFotos, statusNachricht: status.message_id });
+  einreihen(() => verarbeiteFotos(auftrag.id));
+}
+
+async function verarbeiteFotos(id) {
+  let auftrag = auftraege.aendern(id, { status: "arbeitet" });
+  try {
+    await schritt(auftrag, "⬇️ Lade Fotos …");
+    const originale = [];
+    const fuerClaude = [];
+    for (const [i, foto] of auftrag.fotos.entries()) {
+      const original = datei(auftrag, `original-${i + 1}${path.extname(foto.name) || ".jpg"}`);
+      await tg.herunterladen(foto.fileId, original);
+      originale.push(original);
+      if (config.caption.anthropicKey) {
+        fuerClaude.push(datei(auftrag, `claude-${i + 1}.jpg`));
+        await fotoFuerClaude(original, fuerClaude.at(-1));
+      }
+    }
+    auftrag = auftraege.aendern(id, { originale, fuerClaude });
+
+    // Eigener Text in der Bildunterschrift hat Vorrang vor einem Vorschlag
+    let vorschlag = einfacherVorschlag({ notizen: auftrag.notizen }, config.caption.hashtags);
+    if (vorschlag.quelle !== "eigene" && config.caption.anthropicKey) {
+      await schritt(auftrag, "✍️ Schreibe Caption-Vorschlag …");
+      vorschlag = await captionVorschlag({ art: "foto", bilder: fuerClaude }, config.caption);
+      if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ Claude nicht erreichbar (${html(vorschlag.fehler)}).`);
+    }
+    auftraege.aendern(id, { caption: vorschlag.text, captionQuelle: vorschlag.quelle });
+    await fotosRendernUndVorschau(id);
+  } catch (e) {
+    console.error(e);
+    auftraege.aendern(id, { status: "fehler" });
+    await schritt(auftraege.get(id), `❌ Fehler bei der Verarbeitung:\n<pre>${html(e.message)}</pre>`);
+  }
+}
+
+async function fotosRendernUndVorschau(id) {
+  let auftrag = auftraege.aendern(id, { status: "arbeitet" });
+  if (!auftrag.statusNachricht) {
+    const status = await tg.senden(auftrag.chatId, "🖼️ …");
+    auftrag = auftraege.aendern(id, { statusNachricht: status.message_id });
+  }
+  try {
+    await schritt(auftrag, auftrag.mitLogo ? "🏷️ Setze das Logo drauf …" : "🖼️ Bereite Fotos vor …");
+    const medien = [];
+    for (const [i, original] of auftrag.originale.entries()) {
+      medien.push(datei(auftrag, `fertig-${i + 1}.jpg`));
+      await fotoRendern({ eingabe: original, ausgabe: medien.at(-1), layout: config.layout, mitLogo: auftrag.mitLogo });
+    }
+    auftrag = auftraege.aendern(id, { medien, hochgeladen: null });
+    await schritt(auftrag, "📤 Schicke Vorschau …");
+    await tg.fotos(auftrag.chatId, medien, "Vorschau");
+    await tg.aufruf("deleteMessage", { chat_id: auftrag.chatId, message_id: auftrag.statusNachricht }).catch(() => {});
+    auftrag = auftraege.aendern(id, { status: "vorschau", statusNachricht: null });
+    await neuesMenue(auftrag);
+  } catch (e) {
+    console.error(e);
+    auftraege.aendern(id, { status: auftrag.menueNachricht ? "vorschau" : "fehler", statusNachricht: null });
+    await schritt(auftrag, `❌ Fehler bei den Fotos:\n<pre>${html(e.message)}</pre>`);
+  }
+}
+
+async function textBeitrag(chatId, text) {
+  let auftrag = auftraege.neu(chatId);
+  auftrag = auftraege.aendern(auftrag.id, { art: "text", notizen: text, caption: text.trim(), captionQuelle: "eigene", medien: [], status: "vorschau" });
+  await neuesMenue(auftrag);
+}
+
 async function veroeffentlichen(auftrag) {
   if (auftrag.status !== "vorschau" || !auftrag.plan) return;
   auftrag = auftraege.aendern(auftrag.id, { status: "postet" });
@@ -216,12 +334,15 @@ async function veroeffentlichen(auftrag) {
   const zeit = typ === "now" ? new Date() : new Date(auftrag.plan.zeit);
   try {
     const kanaele = await gewaehlteKanaele(auftrag);
-    if (!auftrag.media) {
-      await zeigeMenue(auftrag, { text: "⏫ Lade Video zu Postiz hoch …", reply_markup: { inline_keyboard: [] } });
-      auftrag = auftraege.aendern(auftrag.id, { media: await postiz.hochladen(datei(auftrag, "fertig.mp4")) });
+    const medien = auftrag.medien ?? [datei(auftrag, "fertig.mp4")];
+    if (medien.length && !auftrag.hochgeladen) {
+      await zeigeMenue(auftrag, { text: `⏫ Lade ${medien.length === 1 ? "Datei" : `${medien.length} Dateien`} zu Postiz hoch …`, reply_markup: { inline_keyboard: [] } });
+      const hochgeladen = [];
+      for (const d of medien) hochgeladen.push(await postiz.hochladen(d));
+      auftrag = auftraege.aendern(auftrag.id, { hochgeladen });
     }
     await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
-    await postiz.beitrag({ typ, zeit, caption: auftrag.caption, media: auftrag.media, kanaele });
+    await postiz.beitrag({ typ, zeit, caption: auftrag.caption, medien: auftrag.hochgeladen ?? [], kanaele });
     auftraege.aendern(auftrag.id, { status: typ === "now" ? "gepostet" : "geplant" });
     const namen = kanaele.map((k) => html(k.name)).join(", ");
     const text = typ === "now"
@@ -276,7 +397,7 @@ async function knopfGedrueckt(cq) {
       return antwort();
     case "caption":
       auftraege.aendern(id, { wartetAuf: "caption" });
-      await tg.senden(auftrag.chatId, "Schick mir die neue Caption. Zum Bearbeiten hier der aktuelle Text:");
+      await tg.senden(auftrag.chatId, `Schick mir ${art(auftrag) === "text" ? "den neuen Text" : "die neue Caption"}. Zum Bearbeiten hier der aktuelle Text:`);
       await tg.aufruf("sendMessage", { chat_id: auftrag.chatId, text: auftrag.caption });
       return antwort();
     case "neu":
@@ -290,6 +411,11 @@ async function knopfGedrueckt(cq) {
         parse_mode: "HTML",
       });
       return antwort();
+    case "logo":
+      auftrag = auftraege.aendern(id, { mitLogo: !auftrag.mitLogo, statusNachricht: null });
+      await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
+      einreihen(() => fotosRendernUndVorschau(id));
+      return antwort(auftrag.mitLogo ? "Logo kommt drauf …" : "Logo kommt weg …");
     case "kanaele":
       await kanalMenue(auftrag);
       return antwort();
@@ -330,7 +456,9 @@ async function texteingabe(auftrag, text) {
       return neuesMenue(auftrag);
     case "hinweis": {
       await tg.senden(auftrag.chatId, "✍️ Formuliere neu …");
-      const v = await captionVorschlag(auftrag.transkript ?? "", config.caption, text.trim() === "-" ? "" : text.trim());
+      const hinweis = text.trim() === "-" ? "" : text.trim();
+      const material = { art: art(auftrag), transkript: auftrag.transkript, notizen: auftrag.notizen, bilder: auftrag.fuerClaude, bisher: auftrag.caption };
+      const v = await captionVorschlag(material, config.caption, hinweis || "neu formulieren");
       if (v.fehler) await tg.senden(auftrag.chatId, `⚠️ ${html(v.fehler)}`);
       auftrag = auftraege.aendern(auftrag.id, { caption: v.text, captionQuelle: v.quelle, wartetAuf: null });
       return neuesMenue(auftrag);
@@ -382,6 +510,8 @@ async function nachricht(msg) {
 
   const video = msg.video ?? (msg.document?.mime_type?.startsWith("video/") ? msg.document : null);
   if (video) return neuesVideo(msg, video);
+  const foto = msg.photo?.at(-1) ?? (msg.document?.mime_type?.startsWith("image/") ? msg.document : null);
+  if (foto) return fotoEingang(msg, foto);
 
   const wartend = auftraege.wartend(chatId);
   if (msg.document && /\.srt$/i.test(msg.document.file_name ?? "") && wartend?.wartetAuf === "untertitel") {
@@ -397,7 +527,13 @@ async function nachricht(msg) {
       : "In Postiz sind noch keine Kanäle verbunden.");
   }
   if (wartend && text) return texteingabe(wartend, text);
-  return tg.senden(chatId, "Schick mir ein Video – oder /hilfe.");
+  if (text && !text.startsWith("/")) return textBeitrag(chatId, text);
+  return tg.senden(chatId, "Schick mir ein Video, Fotos oder einfach Text – oder /hilfe.");
+}
+
+async function fehlerMelden(chatId, e) {
+  console.error(e);
+  if (chatId) await tg.senden(chatId, `❌ ${html(e.message)}`).catch(() => {});
 }
 
 // ---------- Start ----------
@@ -412,7 +548,7 @@ async function main() {
     if (a.status === "arbeitet" || a.status === "postet") {
       auftraege.aendern(a.id, { status: a.status === "postet" ? "vorschau" : "fehler" });
       await tg.senden(a.chatId, a.status === "fehler"
-        ? "⚠️ Der Bot wurde während der Verarbeitung neu gestartet – bitte das Video nochmal schicken."
+        ? "⚠️ Der Bot wurde während der Verarbeitung neu gestartet – bitte nochmal schicken."
         : "⚠️ Der Bot wurde beim Posten neu gestartet – bitte in Postiz prüfen, ob der Beitrag angelegt wurde.").catch(() => {});
     }
   }
@@ -436,11 +572,7 @@ async function main() {
         : u.callback_query && config.telegram.erlaubt.includes(u.callback_query.from.id)
           ? knopfGedrueckt(u.callback_query)
           : null;
-      verarbeite?.catch(async (e) => {
-        console.error(e);
-        const chatId = u.message?.chat.id ?? u.callback_query?.message?.chat.id;
-        if (chatId) await tg.senden(chatId, `❌ ${html(e.message)}`).catch(() => {});
-      });
+      verarbeite?.catch((e) => fehlerMelden(u.message?.chat.id ?? u.callback_query?.message?.chat.id, e));
     }
   }
 }

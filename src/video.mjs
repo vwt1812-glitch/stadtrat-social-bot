@@ -48,6 +48,25 @@ function logoPosition(position, rand) {
   return `${x}:${y}`;
 }
 
+/** Filterkette für das Logo; hängt an `letzte` an und gibt das neue Label zurück. */
+async function logoFilter(filter, letzte, masse, layout) {
+  try {
+    await fs.access(layout.logo);
+  } catch {
+    throw new Error(`Logo nicht gefunden: ${layout.logo}`);
+  }
+  const kurz = Math.min(masse.breite, masse.hoehe);
+  const rand = Math.round(kurz * 0.045);
+  const logoBreite = Math.round(masse.breite * layout.logoBreite / 2) * 2;
+  const innen = Math.round(logoBreite * 0.06);
+  const hintergrund = layout.logoHintergrund
+    ? `,pad=iw+${innen * 2}:ih+${innen * 2}:${innen}:${innen}:color=black@0.45`
+    : "";
+  filter.push(`[1:v]format=rgba,scale=${logoBreite}:-1${hintergrund}[logo]`);
+  filter.push(`[${letzte}][logo]overlay=${logoPosition(layout.logoPosition, rand)}:format=auto[mitlogo]`);
+  return "mitlogo";
+}
+
 /**
  * @param {object} o
  * @param {string} o.eingabe Originalvideo
@@ -58,11 +77,6 @@ function logoPosition(position, rand) {
  * @param {object} o.video siehe config.video
  */
 export async function rendern({ eingabe, ausgabe, ass, masse, layout, video }) {
-  const ordner = path.dirname(ausgabe);
-  const kurz = Math.min(masse.breite, masse.hoehe);
-  const rand = Math.round(kurz * 0.045);
-  const logoBreite = Math.round(masse.breite * layout.logoBreite / 2) * 2;
-
   const filter = [];
   let letzte = "0:v";
   if (ass) {
@@ -70,28 +84,11 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video }) {
     filter.push(`[${letzte}]ass=${path.basename(ass)}${fonts}[sub]`);
     letzte = "sub";
   }
-  let logoDa = false;
-  if (layout.logo) {
-    try {
-      await fs.access(layout.logo);
-      logoDa = true;
-    } catch {
-      throw new Error(`Logo nicht gefunden: ${layout.logo}`);
-    }
-  }
-  if (logoDa) {
-    const innen = Math.round(logoBreite * 0.06);
-    const hintergrund = layout.logoHintergrund
-      ? `,pad=iw+${innen * 2}:ih+${innen * 2}:${innen}:${innen}:color=black@0.45`
-      : "";
-    filter.push(`[1:v]format=rgba,scale=${logoBreite}:-1${hintergrund}[logo]`);
-    filter.push(`[${letzte}][logo]overlay=${logoPosition(layout.logoPosition, rand)}:format=auto[mitlogo]`);
-    letzte = "mitlogo";
-  }
+  if (layout.logo) letzte = await logoFilter(filter, letzte, masse, layout);
   filter.push(`[${letzte}]format=yuv420p[v]`);
 
   const args = ["-y", "-v", "error", "-i", eingabe];
-  if (logoDa) args.push("-i", layout.logo);
+  if (layout.logo) args.push("-i", layout.logo);
   args.push(
     "-filter_complex", filter.join(";"),
     "-map", "[v]", "-map", "0:a?",
@@ -101,7 +98,36 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video }) {
   else args.push("-b:v", "8M");
   args.push("-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", ausgabe);
 
-  await ausfuehren("ffmpeg", args, { cwd: ordner });
+  await ausfuehren("ffmpeg", args, { cwd: path.dirname(ausgabe) });
+}
+
+/**
+ * Foto als JPEG speichern, lange Seite höchstens 2048 px (Instagram nimmt max. 8 MB,
+ * Telegram zeigt Fotos bis 10 MB), auf Wunsch mit Logo.
+ */
+export async function fotoRendern({ eingabe, ausgabe, layout, mitLogo }) {
+  const original = await untersuche(eingabe);
+  const faktor = Math.min(1, 2048 / Math.max(original.breite, original.hoehe));
+  const masse = { breite: Math.round(original.breite * faktor / 2) * 2, hoehe: Math.round(original.hoehe * faktor / 2) * 2 };
+  const filter = [`[0:v]scale=${masse.breite}:${masse.hoehe}[klein]`];
+  let letzte = "klein";
+  const args = ["-y", "-v", "error", "-i", eingabe];
+  if (mitLogo && layout.logo) {
+    letzte = await logoFilter(filter, letzte, masse, layout);
+    args.push("-i", layout.logo);
+  }
+  filter.push(`[${letzte}]format=yuvj420p[bild]`);
+  args.push("-filter_complex", filter.join(";"), "-map", "[bild]", "-frames:v", "1", "-q:v", "3", ausgabe);
+  await ausfuehren("ffmpeg", args);
+}
+
+/** Verkleinerte Kopie, die Claude für den Caption-Vorschlag ansieht. */
+export async function fotoFuerClaude(eingabe, ausgabe) {
+  await ausfuehren("ffmpeg", [
+    "-y", "-v", "error", "-i", eingabe,
+    "-vf", "scale='min(1568,iw)':'min(1568,ih)':force_original_aspect_ratio=decrease",
+    "-frames:v", "1", "-q:v", "4", ausgabe,
+  ]);
 }
 
 /** Kleinere Fassung nur für die Telegram-Vorschau (Bot-API: max. 50 MB). */
