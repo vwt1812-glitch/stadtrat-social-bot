@@ -23,6 +23,11 @@ node --version
 echo "== Abhängigkeiten"
 npm ci
 
+echo "== Gesichtssuche (Python mit OpenCV in .venv)"
+sudo apt-get install -y python3-venv
+[ -x .venv/bin/python ] || python3 -m venv .venv
+.venv/bin/pip install -q --disable-pip-version-check "opencv-python-headless>=4.10,<5"
+
 echo "== whisper.cpp ($WHISPER_DIR, Modell $WHISPER_GROESSE)"
 if [ ! -x "$WHISPER_DIR/build/bin/whisper-cli" ]; then
   [ -d "$WHISPER_DIR" ] || git clone --depth 1 https://github.com/ggml-org/whisper.cpp "$WHISPER_DIR"

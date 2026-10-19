@@ -16,6 +16,7 @@ import {
   ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi, storyFoto, istStoryFormat, STORY_MASSE,
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
+import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, parseKorrekturen, wendeKorrekturenAn, volltext, parseBauchbinde } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
@@ -211,7 +212,10 @@ function details(auftrag, alle) {
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
   if (auftrag.story && art(auftrag) !== "text") zeilen.push(`📱 Zusätzlich als Story auf Instagram/Facebook${auftrag.storyDatei ? " (eigene 9:16-Fassung)" : ""}`);
   if (auftrag.bauchbinde && art(auftrag) === "video") zeilen.push(`🪪 Bauchbinde: ${bauchbindeText(auftrag.bauchbinde)}`);
-  if (auftrag.untertitelLage && art(auftrag) === "video") zeilen.push(`📍 Untertitel: ${LAGE_TEXT[auftrag.untertitelLage]}`);
+  if (auftrag.untertitelLage && art(auftrag) === "video") {
+    zeilen.push(`📍 Untertitel: ${LAGE_TEXT[auftrag.untertitelLage]}${auftrag.lageAutomatisch ? " – automatisch, unten wäre dein Gesicht verdeckt" : ""}`);
+  }
+  if (art(auftrag) === "video") for (const h of auftrag.gesichtHinweise ?? []) zeilen.push(`💡 ${html(h)}`);
   return zeilen;
 }
 
@@ -412,6 +416,18 @@ async function verarbeiten(id, fileId) {
     await tg.herunterladen(fileId, original);
     const masse = await untersuche(original);
     auftrag = auftraege.aendern(id, { original, masse });
+
+    // Hochkant: Gesicht suchen und die Untertitel dorthin legen, wo sie es nicht verdecken
+    if (masse.hoehe > masse.breite) {
+      await schritt(auftrag, "🙂 Suche dein Gesicht …");
+      const funde = await gesichtSuchen(original, config.gesicht);
+      if (funde) {
+        const wahl = lageWaehlen(funde, { masse, layout: config.layout });
+        auftrag = auftraege.aendern(id, {
+          untertitelLage: wahl.lage === "unten" ? null : wahl.lage, lageAutomatisch: wahl.lage !== "unten", gesichtHinweise: wahl.hinweise,
+        });
+      }
+    }
 
     let cues = [];
     if (masse.hatTon) {
@@ -884,7 +900,7 @@ async function knopfGedrueckt(cq) {
       }
       await antwort();
       const info = { oben: "Untertitel kommen nach oben.", mitte: "Untertitel kommen in die Mitte.", unten: "Untertitel kommen wieder nach unten." }[arg];
-      return neuRendern(auftraege.aendern(id, { untertitelLage: lage }), info);
+      return neuRendern(auftraege.aendern(id, { untertitelLage: lage, lageAutomatisch: false }), info);
     }
     case "story": {
       auftrag = auftraege.aendern(id, { story: !auftrag.story });

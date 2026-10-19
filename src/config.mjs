@@ -71,6 +71,8 @@ export function ladeConfig() {
       sprache: env("WHISPER_SPRACHE", "de"),
     },
     glossar: pfad(env("GLOSSAR", "glossar.txt")),
+    // Python mit OpenCV für die Gesichtssuche (pi/install.sh legt es an); fehlt es, bleibt die Suche aus
+    gesicht: { python: pfad(env("GESICHT_PYTHON", ".venv/bin/python")) },
     layout: {
       logo: logoPfad(),
       logoPosition: env("LOGO_POSITION", "oben-links"),

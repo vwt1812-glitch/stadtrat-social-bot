@@ -23,7 +23,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🕐 Planen | Heute/Morgen-Vorschläge, nächster freier Postiz-Slot oder freie Eingabe wie `Fr 18 Uhr`, `24.10. 19:30`, `in 2 Stunden` |
 | ✏️ Caption ändern | schickt den aktuellen Text zum Kopieren, die nächste Nachricht ist die neue Caption |
 | 🔄 Neu formulieren | nur mit Claude: Wunsch eingeben (`kürzer`, `lockerer`, …) |
-| 📍 Position | nur Video: Untertitel oben, in der Mitte oder unten (Standard) – das Video wird neu gebaut |
+| 📍 Position | nur Video: Untertitel oben, in der Mitte oder unten (Standard) – das Video wird neu gebaut. Verdecken sie unten dein Gesicht, legt der Bot sie schon selbst woanders hin |
 | 🪪 Bauchbinde | nur Video: Name und Funktion am Anfang einblenden – Standard aus `BAUCHBINDE_NAME`/`_FUNKTION` oder ein anderer Name, z. B. für Gäste |
 | 📝 Untertitel | nur Video: schickt die `.srt`; Korrekturen als `falsch => richtig` zurückschreiben oder die korrigierte Datei schicken – das Video wird neu gebaut |
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
@@ -194,6 +194,11 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   daher bei 14 % der Höhe, die Bauchbinde endet bei 76 %, Untertitel stehen mit `UNTERTITEL_POSITION=0.33` darüber
   und sind höchstens 24 Zeichen breit. Querformat hat eigene Untertitel unten (`UNTERTITEL_POSITION_QUER=0.08`).
   Verdecken die Untertitel etwas, im Menü unter **📍 Position** pro Video oben, Mitte oder unten wählen.
+- **Gesicht:** Bei Hochkant-Videos sucht der Bot in 12 Bildern dein Gesicht (OpenCV, lokal auf dem Pi, ein paar
+  Sekunden) und legt die Untertitel dorthin, wo sie es nicht verdecken – bevorzugt unten, sonst oben, sonst in
+  der Mitte. Im Menü steht dann „automatisch“; **📍 Position** überschreibt das. Füllt das Gesicht fast das ganze
+  Bild oder reicht der Kopf ins Logo, gibt es einen 💡-Tipp für die nächste Aufnahme. `pi/install.sh` richtet
+  dafür Python mit OpenCV in `.venv` ein; fehlt es, bleibt die Gesichtssuche einfach aus.
 - **Storys:** Instagram und Facebook blenden oben Fortschrittsbalken und Profil, unten das Antwortfeld ein (je
   gut 10 %). Hochkant-Videos (9:16) gehen unverändert als Story raus – ihr Layout lässt das schon frei. Für alle
   anderen baut der Bot bei **📱 Story** eine eigene Fassung in 1080×1920 und schickt sie als „Story-Vorschau“:
