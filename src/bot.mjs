@@ -7,12 +7,12 @@ import { ladeConfig } from "./config.mjs";
 import { Telegram, html } from "./telegram.mjs";
 import {
   Postiz, passendeKanaele, BRAUCHT_MEDIEN, NUR_VIDEO, kundenAus, findeKunde, kanaeleVonKunde,
-  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG,
+  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG, zeichenLimit, zeichenZahl,
 } from "./postiz.mjs";
 import { Auftraege } from "./auftraege.mjs";
 import { ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
-import { captionVorschlag, einfacherVorschlag } from "./caption.mjs";
+import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, parseKorrekturen, wendeKorrekturenAn, volltext } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 
@@ -42,6 +42,85 @@ async function gewaehlteKanaele(auftrag) {
   if (auftrag.kunde === undefined) auftraege.aendern(auftrag.id, { kunde: findeKunde(alle, config.postiz.kunde)?.id ?? null });
   if (!auftrag.kanaele) auftraege.aendern(auftrag.id, { kanaele: standardKanaele(alle, auftrag) });
   return alle.filter((k) => auftrag.kanaele.includes(k.id));
+}
+
+// ---------- Texte pro Kanal ----------
+
+/** Stil-Hinweise für die KI, wenn sie eine Fassung für ein Netzwerk schreibt. */
+const NETZ_STIL = {
+  x: "Kurz und pointiert, höchstens 2 Hashtags.",
+  bluesky: "Kurz und pointiert, höchstens 2 Hashtags.",
+  threads: "Locker und kurz, wenige Hashtags.",
+  mastodon: "Sachlich und kurz, Hashtags in CamelCase (z. B. #StadtratNürnberg).",
+  linkedin: "Sachlich-professionell, gern etwas ausführlicher, 3 Hashtags.",
+  "linkedin-page": "Sachlich-professionell, gern etwas ausführlicher, 3 Hashtags.",
+  instagram: "Persönlich, kurze Absätze, Hashtags am Ende.",
+  "instagram-standalone": "Persönlich, kurze Absätze, Hashtags am Ende.",
+  facebook: "Persönlich und erklärend, höchstens 2 Hashtags.",
+  tiktok: "Sehr kurz und locker, 3–5 Hashtags.",
+  "tiktok-business": "Sehr kurz und locker, 3–5 Hashtags.",
+};
+
+const captionFuer = (auftrag, kanal) => auftrag.captions?.[kanal.id] ?? auftrag.caption;
+
+/** Länge des Textes je gewähltem Kanal im Vergleich zum Limit. */
+function laengen(auftrag, kanaele) {
+  const eigene = postiz.eigeneEinstellungen();
+  return kanaele.map((kanal) => {
+    const text = captionFuer(auftrag, kanal);
+    const zahl = zeichenZahl(text, kanal.identifier);
+    const max = zeichenLimit(kanal, eigene);
+    return { kanal, text, zahl, max, eigen: auftrag.captions?.[kanal.id] !== undefined, zuLang: max !== null && zahl > max };
+  });
+}
+
+const zahlText = (l) => `${l.zahl}/${l.max ?? "∞"}`;
+
+async function captionsInhalt(auftrag) {
+  const alle = await alleKanaele();
+  const liste = laengen(auftrag, await gewaehlteKanaele(auftrag));
+  const zeilen = liste.map((l) => [
+    knopf(`${l.zuLang ? "⚠️" : l.eigen ? "✂️" : "✅"} ${l.kanal.name} · ${zahlText(l)}${l.eigen ? " · eigene" : ""}`, auftrag, `kc:${alle.indexOf(l.kanal)}`),
+  ]);
+  if (config.caption.anbieter && liste.length) zeilen.push([knopf("🤖 Alle per KI anpassen", auftrag, "kia")]);
+  if (liste.some((l) => l.zuLang)) zeilen.push([knopf("✂️ Zu lange automatisch kürzen", auftrag, "kka")]);
+  zeilen.push([knopf("✔️ Fertig", auftrag, "zurueck")]);
+  return {
+    text: "<b>Texte pro Kanal</b>\nOhne eigene Fassung gilt der Haupttext. ⚠️ = zu lang für das Netzwerk, ✂️ = eigene Fassung.\nAntippen zum Ansehen und Ändern.",
+    reply_markup: { inline_keyboard: zeilen },
+  };
+}
+
+async function kanalTextInhalt(auftrag, kanal) {
+  const [l] = laengen(auftrag, [kanal]);
+  const i = (await alleKanaele()).indexOf(kanal);
+  const zeilen = [[knopf("✏️ Eigenen Text schreiben", auftrag, `kt:${i}:schreiben`)]];
+  if (config.caption.anbieter) zeilen.push([knopf("🤖 KI-Fassung für dieses Netzwerk", auftrag, `kt:${i}:ki`)]);
+  if (l.zuLang) zeilen.push([knopf("✂️ Automatisch kürzen", auftrag, `kt:${i}:kurz`)]);
+  if (l.eigen) zeilen.push([knopf("↩️ Haupttext verwenden", auftrag, `kt:${i}:haupt`)]);
+  zeilen.push([knopf("↩️ Zurück", auftrag, "pk")]);
+  return {
+    text: `<b>${html(kanal.name)}</b> (${kanal.identifier}) · ${zahlText(l)} Zeichen${l.zuLang ? " ⚠️ zu lang" : ""}\n${l.eigen ? "Eigene Fassung" : "Haupttext"}:\n<blockquote expandable>${html(l.text)}</blockquote>`,
+    reply_markup: { inline_keyboard: zeilen },
+  };
+}
+
+/** KI-Fassung für ein Netzwerk; zur Sicherheit danach aufs Limit gekürzt. */
+async function kiFassung(auftrag, kanal, max) {
+  // Riesige Limits (Facebook) sind keine Vorgabe für die Länge
+  const grenze = max && max <= 5000 ? `, höchstens ${max} Zeichen inklusive Hashtags` : "";
+  const hinweis = `Eigene Fassung für ${kanal.identifier}${grenze}. ${NETZ_STIL[kanal.identifier] ?? ""}`;
+  const material = { art: art(auftrag), transkript: auftrag.transkript, notizen: auftrag.notizen, bilder: auftrag.fuerKi, bisher: auftrag.caption };
+  const v = await captionVorschlag(material, config.caption, hinweis);
+  if (v.fehler) throw new Error(`KI nicht erreichbar: ${v.fehler}`);
+  return max ? kuerzen(v.text, max, (t) => zeichenZahl(t, kanal.identifier)) : v.text;
+}
+
+/** Haupttext geändert → Kanal-Fassungen passen nicht mehr. */
+async function captionsZuruecksetzen(auftrag) {
+  if (!Object.keys(auftrag.captions ?? {}).length) return auftrag;
+  await tg.senden(auftrag.chatId, "ℹ️ Die eigenen Fassungen pro Kanal wurden zurückgesetzt, weil sich der Haupttext geändert hat.");
+  return auftraege.aendern(auftrag.id, { captions: {} });
 }
 
 const verzoegerungText = (ms) => REPOST_VERZOEGERUNG.find(([, wert]) => wert === ms)?.[0] ?? "sofort";
@@ -97,7 +176,17 @@ async function menueInhalt(auftrag) {
     hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
   }[auftrag.captionQuelle] ?? "";
   const titel = art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
-  const text = [`<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, ...details(auftrag, alle), `📺 ${kanalText}`].join("\n");
+  const hinweise = [];
+  try {
+    const liste = laengen(auftrag, kanaele);
+    const eigen = liste.filter((l) => l.eigen && !l.zuLang);
+    if (eigen.length) hinweise.push(`✂️ Eigene Fassung: ${eigen.map((l) => `${html(l.kanal.name)} (${zahlText(l)})`).join(", ")}`);
+    const zuLang = liste.filter((l) => l.zuLang);
+    if (zuLang.length) hinweise.push(`⚠️ Zu lang für ${zuLang.map((l) => `${html(l.kanal.name)} (${zahlText(l)})`).join(", ")} – unter „✂️ Pro Kanal“ anpassen`);
+  } catch (e) {
+    hinweise.push(`⚠️ ${html(e.message)}`);
+  }
+  const text = [`<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise].join("\n");
   const extra = {
     video: [knopf("📝 Untertitel", auftrag, "untertitel")],
     foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
@@ -106,7 +195,7 @@ async function menueInhalt(auftrag) {
   const zeilen = [
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
     [knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])],
-    [...extra, knopf("📺 Kanäle", auftrag, "kanaele")],
+    [...extra, knopf("📺 Kanäle", auftrag, "kanaele"), ...(kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
   ];
   const optionen = [];
   if (kundenAus(alle).length) optionen.push(knopf("👤 Kunde", auftrag, "kunde"));
@@ -193,12 +282,17 @@ async function bestaetigung(auftrag, typ, zeit) {
     return { fehler: `${unpassend.map((k) => k.name).join(", ")} braucht ${was} – bitte unter „Kanäle“ abwählen.` };
   }
   if (typ === "schedule" && zeit.getTime() < Date.now() + 60e3) return { fehler: "Die Zeit liegt in der Vergangenheit." };
+  const liste = laengen(auftrag, kanaele);
+  const zuLang = liste.filter((l) => l.zuLang);
+  if (zuLang.length) return { fehler: `Zu lang für ${zuLang.map((l) => `${l.kanal.name} (${zahlText(l)})`).join(", ")} – bitte unter „✂️ Pro Kanal“ anpassen.` };
+  const eigen = liste.filter((l) => l.eigen).map((l) => html(l.kanal.name));
   auftraege.aendern(auftrag.id, { plan: { typ, zeit: zeit.toISOString() } });
   const wann = typ === "now" ? "<b>jetzt</b>" : `am <b>${zeitText(zeit)}</b>`;
   return {
     text: [
       `Wirklich ${wann} auf ${kanaele.map((k) => `<b>${html(k.name)}</b>`).join(", ")} posten?`,
       ...details(auftrag, await alleKanaele()),
+      ...(eigen.length ? [`✂️ Eigene Fassung für ${eigen.join(", ")} (über „Zurück → Pro Kanal“ ansehen)`] : []),
       `<blockquote expandable>${html(auftrag.caption)}</blockquote>`,
     ].join("\n"),
     reply_markup: { inline_keyboard: [[knopf("✅ Ja, posten", auftrag, "ja"), knopf("↩️ Zurück", auftrag, "zurueck")]] },
@@ -408,7 +502,7 @@ async function veroeffentlichen(auftrag) {
     }
     await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
     await postiz.beitrag({
-      typ, zeit, caption: auftrag.caption, medien: auftrag.hochgeladen ?? [], kanaele,
+      typ, zeit, caption: auftrag.caption, captions: auftrag.captions, medien: auftrag.hochgeladen ?? [], kanaele,
       collabs: art(auftrag) === "text" ? [] : auftrag.collabs, repost: auftrag.repost,
     });
     auftraege.aendern(auftrag.id, { status: typ === "now" ? "gepostet" : "geplant" });
@@ -429,7 +523,7 @@ async function veroeffentlichen(auftrag) {
 
 async function knopfGedrueckt(cq) {
   const antwort = (text, alert = false) => tg.aufruf("answerCallbackQuery", { callback_query_id: cq.id, text, show_alert: alert }).catch(() => {});
-  const [, id, aktion, arg] = (cq.data ?? "").split(":");
+  const [, id, aktion, arg, arg2] = (cq.data ?? "").split(":");
   let auftrag = auftraege.get(id);
   if (!auftrag) return antwort("Dieser Vorschlag ist nicht mehr da.", true);
   if (auftrag.status !== "vorschau") return antwort(`Nicht mehr änderbar (Status: ${auftrag.status}).`, true);
@@ -490,6 +584,79 @@ async function knopfGedrueckt(cq) {
     case "kunde":
       await kundeMenue(auftrag);
       return antwort();
+    case "pk":
+      await zeigeMenue(auftrag, await captionsInhalt(auftrag));
+      return antwort();
+    case "kc": {
+      const kanal = (await alleKanaele())[Number(arg)];
+      if (!kanal) return antwort("Kanal nicht gefunden.", true);
+      await zeigeMenue(auftrag, await kanalTextInhalt(auftrag, kanal));
+      return antwort();
+    }
+    case "kt": {
+      const kanal = (await alleKanaele())[Number(arg)];
+      if (!kanal) return antwort("Kanal nicht gefunden.", true);
+      const [l] = laengen(auftrag, [kanal]);
+      const setze = (text) => {
+        const captions = { ...auftrag.captions };
+        if (text === null) delete captions[kanal.id];
+        else captions[kanal.id] = text;
+        auftrag = auftraege.aendern(id, { captions });
+      };
+      if (arg2 === "schreiben") {
+        auftraege.aendern(id, { wartetAuf: "kanaltext", wartetKanal: kanal.id });
+        await tg.senden(auftrag.chatId, `Schick mir den Text für <b>${html(kanal.name)}</b>${l.max ? ` (höchstens ${l.max} Zeichen)` : ""}. Zum Bearbeiten hier der aktuelle:`);
+        await tg.aufruf("sendMessage", { chat_id: auftrag.chatId, text: l.text });
+        return antwort();
+      }
+      if (arg2 === "ki") {
+        await antwort("KI schreibt …");
+        await zeigeMenue(auftrag, { text: `🤖 Schreibe eine Fassung für ${html(kanal.name)} …`, reply_markup: { inline_keyboard: [] } });
+        try {
+          setze(await kiFassung(auftrag, kanal, l.max));
+        } catch (e) {
+          await tg.senden(auftrag.chatId, `⚠️ ${html(e.message)}`);
+        }
+      } else if (arg2 === "kurz") {
+        setze(kuerzen(l.text, l.max, (t) => zeichenZahl(t, kanal.identifier)));
+      } else if (arg2 === "haupt") {
+        setze(null);
+      }
+      await zeigeMenue(auftrag, await kanalTextInhalt(auftrag, kanal));
+      return arg2 === "ki" ? undefined : antwort();
+    }
+    case "kia": {
+      await antwort("KI schreibt …");
+      const liste = laengen(auftrag, await gewaehlteKanaele(auftrag));
+      // Eine Fassung je Netzwerk; mehrere Konten desselben Netzwerks teilen sie sich
+      const netze = [...new Set(liste.map((l) => l.kanal.identifier))];
+      const captions = { ...auftrag.captions };
+      const fehler = [];
+      for (const netz of netze) {
+        const gruppe = liste.filter((l) => l.kanal.identifier === netz);
+        await zeigeMenue(auftrag, { text: `🤖 Schreibe Fassung für ${netz} (${netze.indexOf(netz) + 1}/${netze.length}) …`, reply_markup: { inline_keyboard: [] } });
+        const limits = gruppe.map((l) => l.max).filter((m) => m !== null);
+        try {
+          const text = await kiFassung(auftrag, gruppe[0].kanal, limits.length ? Math.min(...limits) : null);
+          for (const l of gruppe) captions[l.kanal.id] = text;
+        } catch (e) {
+          fehler.push(`${netz}: ${e.message}`);
+        }
+      }
+      auftrag = auftraege.aendern(id, { captions });
+      if (fehler.length) await tg.senden(auftrag.chatId, `⚠️ ${html(fehler.join("\n"))}`);
+      await zeigeMenue(auftrag, await captionsInhalt(auftrag));
+      return;
+    }
+    case "kka": {
+      const captions = { ...auftrag.captions };
+      for (const l of laengen(auftrag, await gewaehlteKanaele(auftrag)).filter((l) => l.zuLang)) {
+        captions[l.kanal.id] = kuerzen(l.text, l.max, (t) => zeichenZahl(t, l.kanal.identifier));
+      }
+      auftrag = auftraege.aendern(id, { captions });
+      await zeigeMenue(auftrag, await captionsInhalt(auftrag));
+      return antwort("Gekürzt – bitte kurz drüberschauen.");
+    }
     case "ku": {
       const kunde = arg === "alle" ? null : kundenAus(await alleKanaele())[Number(arg)];
       auftrag = auftraege.aendern(id, { kunde: kunde?.id ?? null });
@@ -556,7 +723,14 @@ async function texteingabe(auftrag, text) {
   switch (auftrag.wartetAuf) {
     case "caption":
       auftrag = auftraege.aendern(auftrag.id, { caption: text.trim(), captionQuelle: "eigene", wartetAuf: null });
+      auftrag = await captionsZuruecksetzen(auftrag);
       return neuesMenue(auftrag);
+    case "kanaltext": {
+      const kanal = (await alleKanaele()).find((k) => k.id === auftrag.wartetKanal);
+      if (!kanal) return tg.senden(auftrag.chatId, "Den Kanal gibt es nicht mehr.");
+      auftrag = auftraege.aendern(auftrag.id, { captions: { ...auftrag.captions, [kanal.id]: text.trim() }, wartetAuf: null, wartetKanal: null });
+      return neuesMenue(auftrag, await kanalTextInhalt(auftrag, kanal));
+    }
     case "hinweis": {
       await tg.senden(auftrag.chatId, "✍️ Formuliere neu …");
       const hinweis = text.trim() === "-" ? "" : text.trim();
@@ -564,6 +738,7 @@ async function texteingabe(auftrag, text) {
       const v = await captionVorschlag(material, config.caption, hinweis || "neu formulieren");
       if (v.fehler) await tg.senden(auftrag.chatId, `⚠️ ${html(v.fehler)}`);
       auftrag = auftraege.aendern(auftrag.id, { caption: v.text, captionQuelle: v.quelle, wartetAuf: null });
+      auftrag = await captionsZuruecksetzen(auftrag);
       return neuesMenue(auftrag);
     }
     case "collab": {

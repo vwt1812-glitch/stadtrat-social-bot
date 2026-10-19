@@ -27,9 +27,26 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
 | 👤 Kunde | Postiz-Kunde wählen, z. B. „Lukas Küffner“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
 | 📺 Kanäle | Kanäle des gewählten Kunden an-/abwählen |
+| ✂️ Pro Kanal | eigener Text je Kanal (siehe unten) |
 | 🤝 Collab | Instagram-Collab-Partner (bis zu 3), z. B. `@piraten_nuernberg` – erscheint, wenn ein Instagram-Kanal gewählt ist |
 | 🔁 Repost | andere X- bzw. LinkedIn-Konten teilen den Beitrag nach dem Erscheinen, sofort oder verzögert (Postiz-„Re-poster“) |
 | 🗑️ Verwerfen | Vorschlag löschen |
+
+### Texte pro Kanal
+
+Der Vorschlag ist der **Haupttext**; er gilt für alle Kanäle ohne eigene Fassung. Unter **✂️ Pro Kanal** steht jeder
+gewählte Kanal mit seiner Zeichenzahl, z. B. `⚠️ X Lukas · 372/280`. Dort kannst du
+
+- **🤖 Alle per KI anpassen** – eine eigene Fassung je Netzwerk, passend zu Länge und Ton (X kurz und pointiert,
+  LinkedIn sachlich, Instagram persönlich …). Mehrere Konten desselben Netzwerks bekommen denselben Text.
+- **✂️ Zu lange automatisch kürzen** – ohne KI: schneidet am Satzende, die Hashtag-Zeile bleibt.
+- einen Kanal antippen: Text ansehen, **eigenen Text schreiben**, KI-Fassung nur für dieses Netzwerk, kürzen oder
+  **zurück zum Haupttext**.
+
+Ist ein Text zu lang, lässt der Bot nicht posten. Ändert sich der Haupttext, werden die Fassungen pro Kanal
+zurückgesetzt. Limits: X 280, Bluesky 300, Mastodon/Threads 500, Instagram/TikTok 2200, LinkedIn 3000 usw. – mit
+`maxZeichen` in `kanaele.json` änderbar, etwa für X Premium (`25000`) oder eine Mastodon-Instanz mit höherem Limit.
+X zählt Emojis doppelt und Links als 23 Zeichen; der Bot rechnet das nach, Postiz prüft beim Anlegen noch einmal.
 
 Kunden ordnest du in Postiz den Kanälen zu; der Bot liest sie von dort, eine eigene Liste gibt es nicht.
 Reposts kann Postiz nur auf X und LinkedIn – bei Instagram, Facebook, TikTok usw. gibt es dafür keine Schnittstelle.
@@ -130,7 +147,7 @@ journalctl -u social-bot -f
 - **Glossar:** `glossar.txt` – Namen, die Whisper richtig schreiben soll, und automatische Ersetzungen.
 - **Netzwerk-Einstellungen:** `kanaele.example.json` nach `kanaele.json` kopieren. Schlüssel ist der Netzwerk-Typ
   (`instagram`, `tiktok`, `youtube`, …) oder eine Kanal-ID aus `/kanaele`. Die Werte gehen als `settings` an Postiz.
-  Für Pinterest ist dort die Board-ID Pflicht.
+  Für Pinterest ist dort die Board-ID Pflicht. `maxZeichen` setzt das Zeichenlimit für den Kanal (geht nicht an Postiz).
 - **Caption-KI:** `ANTHROPIC_API_KEY` oder `OPENAI_API_KEY` eintragen; bei beiden entscheidet `CAPTION_ANBIETER`.
   Mit `OPENAI_BASE_URL` geht auch ein OpenAI-kompatibler Dienst, etwa ein lokales Modell über Ollama.
 - **Caption-Stil:** `CAPTION_STIL` und `CAPTION_HASHTAGS` in `.env`; der Grundtext steht in `src/caption.mjs`.

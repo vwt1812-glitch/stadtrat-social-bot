@@ -16,6 +16,40 @@ export function passendeKanaele(kanaele, art) {
   return kanaele;
 }
 
+/** Zeichenlimits der Netzwerke (Text inkl. Hashtags). In kanaele.json per „maxZeichen“ änderbar. */
+export const ZEICHENLIMIT = {
+  x: 280,
+  bluesky: 300,
+  threads: 500,
+  mastodon: 500,
+  nostr: 1000,
+  pinterest: 500,
+  discord: 2000,
+  instagram: 2200,
+  "instagram-standalone": 2200,
+  tiktok: 2200,
+  "tiktok-business": 2200,
+  linkedin: 3000,
+  "linkedin-page": 3000,
+  telegram: 4096,
+  youtube: 5000,
+  facebook: 63206,
+};
+
+export function zeichenLimit(kanal, eigene = {}) {
+  return eigene[kanal.id]?.maxZeichen ?? eigene[kanal.identifier]?.maxZeichen ?? ZEICHENLIMIT[kanal.identifier] ?? null;
+}
+
+/**
+ * Zeichen so zählen, wie das Netzwerk es ungefähr tut. X zählt Emojis und
+ * asiatische Schriftzeichen doppelt und jeden Link als 23 Zeichen.
+ */
+export function zeichenZahl(text, identifier) {
+  if (identifier !== "x") return Array.from(text).length;
+  const ohneLinks = text.replace(/https?:\/\/\S+/g, () => "x".repeat(23));
+  return Array.from(ohneLinks).reduce((n, z) => n + (z.codePointAt(0) > 0x10ff ? 2 : 1), 0);
+}
+
 /** Kunden, wie sie an den Kanälen hängen: [{id, name}] nach Name sortiert. */
 export function kundenAus(kanaele) {
   const kunden = new Map();
@@ -77,6 +111,7 @@ export function einstellungenFuer(kanal, { caption, collabs = [], repost, eigene
     ...eigene[kanal.id],
     __type: kanal.identifier,
   };
+  delete settings.maxZeichen; // nur für den Bot, nicht für Postiz
   if (collabs.length && kanal.identifier.startsWith("instagram") && settings.post_type !== "story") {
     settings.collaborators = collabs.map((label) => ({ label }));
   }
@@ -168,7 +203,8 @@ export class Postiz {
     return { id: media.id, path: media.path };
   }
 
-  #eigeneEinstellungen() {
+  /** Inhalt von kanaele.json */
+  eigeneEinstellungen() {
     try {
       return JSON.parse(fs.readFileSync(this.einstellungenDatei, "utf8"));
     } catch (e) {
@@ -181,14 +217,15 @@ export class Postiz {
    * @param {object} o
    * @param {"now"|"schedule"} o.typ
    * @param {Date} o.zeit
-   * @param {string} o.caption
+   * @param {string} o.caption Haupttext
+   * @param {Record<string,string>} [o.captions] eigene Fassungen je Kanal-ID
    * @param {{id:string,path:string}[]} o.medien leer bei reinen Textbeiträgen
    * @param {{id:string,identifier:string}[]} o.kanaele
    * @param {string[]} [o.collabs]
    * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
    */
-  async beitrag({ typ, zeit, caption, medien, kanaele, collabs, repost }) {
-    const eigene = this.#eigeneEinstellungen();
+  async beitrag({ typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost }) {
+    const eigene = this.eigeneEinstellungen();
     const body = {
       type: typ,
       date: zeit.toISOString(),
@@ -196,8 +233,8 @@ export class Postiz {
       tags: [],
       posts: kanaele.map((k) => ({
         integration: { id: k.id },
-        value: [{ content: alsHtml(caption), image: medien }],
-        settings: einstellungenFuer(k, { caption, collabs, repost, eigene }),
+        value: [{ content: alsHtml(captions[k.id] ?? caption), image: medien }],
+        settings: einstellungenFuer(k, { caption: captions[k.id] ?? caption, collabs, repost, eigene }),
       })),
     };
     return this.#anfrage("POST", "/posts", body);

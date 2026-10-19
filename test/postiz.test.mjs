@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   standardEinstellungen, alsHtml, passendeKanaele, kundenAus, findeKunde, kanaeleVonKunde, parseCollabs, einstellungenFuer, repostKandidaten,
+  zeichenZahl, zeichenLimit, Postiz,
 } from "../src/postiz.mjs";
 
 test("Pflichtfelder je Netzwerk", () => {
@@ -68,4 +69,40 @@ test("Repost über Postiz-Re-poster", () => {
   assert.equal(Object.keys(ig).some((k) => k.startsWith("plug--")), false);
   const allein = einstellungenFuer(KANAELE[1], { caption: "Hallo", repost: { kanaele: ["x1"], verzoegerung: 0 } });
   assert.equal(Object.keys(allein).some((k) => k.startsWith("plug--")), false);
+});
+
+test("Zeichen zählen wie das Netzwerk", () => {
+  assert.equal(zeichenZahl("Grüße 🚲", "mastodon"), 7);
+  assert.equal(zeichenZahl("Grüße 🚲", "x"), 8);
+  assert.equal(zeichenZahl("Mehr: https://example.org/ein/sehr/langer/pfad?mit=parametern", "x"), 29);
+});
+
+test("Zeichenlimit mit eigener Vorgabe", () => {
+  assert.equal(zeichenLimit({ id: "x1", identifier: "x" }), 280);
+  assert.equal(zeichenLimit({ id: "x1", identifier: "x" }, { x: { maxZeichen: 25000 } }), 25000);
+  assert.equal(zeichenLimit({ id: "ma", identifier: "mastodon" }, { ma: { maxZeichen: 1000 } }), 1000);
+  assert.equal(zeichenLimit({ id: "w", identifier: "wordpress" }), null);
+  const s = einstellungenFuer({ id: "x1", identifier: "x" }, { caption: "Hi", eigene: { x: { maxZeichen: 25000 } } });
+  assert.equal("maxZeichen" in s, false);
+});
+
+test("eigene Fassung je Kanal in der Postiz-Anfrage", async () => {
+  const gesendet = [];
+  const altesFetch = globalThis.fetch;
+  globalThis.fetch = async (url, o) => {
+    gesendet.push(JSON.parse(o.body));
+    return new Response("[]", { status: 200 });
+  };
+  try {
+    const postiz = new Postiz({ url: "http://postiz/api", apiKey: "k", einstellungen: "/gibt/es/nicht.json" });
+    await postiz.beitrag({
+      typ: "now", zeit: new Date(0), caption: "Langer Haupttext", captions: { x1: "Kurz für X" }, medien: [],
+      kanaele: [{ id: "x1", identifier: "x" }, { id: "fb", identifier: "facebook" }],
+    });
+  } finally {
+    globalThis.fetch = altesFetch;
+  }
+  const [x, fb] = gesendet[0].posts;
+  assert.equal(x.value[0].content, "<p>Kurz für X</p>");
+  assert.equal(fb.value[0].content, "<p>Langer Haupttext</p>");
 });

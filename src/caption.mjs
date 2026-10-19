@@ -30,6 +30,44 @@ function auszug(text) {
   return (ergebnis || text.slice(0, 280)).trim();
 }
 
+/**
+ * Text auf ein Zeichenlimit kürzen, ohne KI: Hashtag-Zeile am Ende bleibt, wenn sie
+ * passt; geschnitten wird am Satzende, sonst am Wortende, mit „…“.
+ * @param {(t:string)=>number} [zaehlen] Zählweise des Netzwerks
+ */
+export function kuerzen(text, max, zaehlen = (t) => Array.from(t).length) {
+  if (zaehlen(text) <= max) return text;
+  const zeilen = text.trim().split("\n");
+  const letzte = zeilen.at(-1).trim();
+  const istHashtagZeile = zeilen.length > 1 && /^(#\S+\s*)+$/.test(letzte);
+  let hashtags = istHashtagZeile ? letzte : "";
+  let rumpf = (istHashtagZeile ? zeilen.slice(0, -1) : zeilen).join("\n").trim();
+  // Hashtags notfalls ausdünnen
+  while (hashtags && zaehlen(hashtags) > max / 3) hashtags = hashtags.split(/\s+/).slice(0, -1).join(" ");
+  const anhang = hashtags ? `\n\n${hashtags}` : "";
+  const platz = max - zaehlen(anhang);
+
+  if (zaehlen(rumpf) > platz) {
+    const saetze = rumpf.match(/[^.!?\n]+[.!?]+|[^.!?\n]+$|\n+/g) ?? [rumpf];
+    let ganz = "";
+    for (const satz of saetze) {
+      if (zaehlen(ganz + satz) > platz) break;
+      ganz += satz;
+    }
+    if (zaehlen(ganz.trim()) >= platz * 0.5) {
+      rumpf = ganz.trim();
+    } else {
+      let teil = "";
+      for (const wort of rumpf.split(/(\s+)/)) {
+        if (zaehlen(teil + wort + "…") > platz) break;
+        teil += wort;
+      }
+      rumpf = `${teil.trimEnd()}…`;
+    }
+  }
+  return `${rumpf}${anhang}`;
+}
+
 /** Vorschlag ohne Claude: eigener Text, sonst Auszug aus dem Transkript, sonst nur Hashtags. */
 export function einfacherVorschlag({ transkript = "", notizen = "" }, hashtags) {
   if (notizen.trim()) return { text: notizen.trim(), quelle: "eigene" };
