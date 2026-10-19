@@ -4,18 +4,21 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { untertitelGroesse } from "./untertitel.mjs";
 
-export function ausfuehren(befehl, args, { cwd } = {}) {
+export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
     const p = spawn(befehl, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
+    const out = [];
     let err = "";
-    p.stdout.on("data", (d) => (out += d));
+    p.stdout.on("data", (d) => out.push(d));
     p.stderr.on("data", (d) => (err = (err + d).slice(-8000)));
     p.on("error", (e) => reject(new Error(`${befehl} nicht gefunden oder nicht startbar: ${e.message}`)));
-    p.on("close", (code) =>
-      code === 0 ? resolve(out) : reject(new Error(`${befehl} ist fehlgeschlagen (Code ${code}):\n${err.trim().split("\n").slice(-6).join("\n")}`)),
-    );
+    p.on("close", (code) => {
+      if (code !== 0) return reject(new Error(`${befehl} ist fehlgeschlagen (Code ${code}):\n${err.trim().split("\n").slice(-6).join("\n")}`));
+      const daten = Buffer.concat(out);
+      resolve(binaer ? daten : daten.toString());
+    });
   });
 }
 
@@ -42,29 +45,141 @@ export async function tonFuerWhisper(video, wav) {
   await ausfuehren("ffmpeg", ["-y", "-v", "error", "-i", video, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", wav]);
 }
 
-function logoPosition(position, rand) {
-  const x = position.includes("links") ? `${rand}` : `W-w-${rand}`;
-  const y = position.includes("unten") ? `H-h-${rand}` : `${rand}`;
-  return `${x}:${y}`;
+// ---------- Grafiken: Logo-Karte und Bauchbinde ----------
+// Gestaltet für 1080 px kurze Seite, alles andere wird darauf umgerechnet.
+
+const skala = (masse) => Math.min(masse.breite, masse.hoehe) / 1080;
+const pxl = (n, s) => Math.max(1, Math.round(n * s));
+const gerade = (n) => Math.round(n / 2) * 2;
+const ffFarbe = (farbe) => `0x${farbe.replace("#", "")}`;
+
+/** Ränder, die die Bedienelemente von Reels/TikTok frei lassen. */
+function raender(masse) {
+  const rand = Math.round(Math.min(masse.breite, masse.hoehe) * 0.05);
+  const hochkant = masse.hoehe > masse.breite;
+  return { rand, oben: hochkant ? Math.round(masse.hoehe * 0.073) : rand };
 }
 
-/** Filterkette für das Logo; hängt an `letzte` an und gibt das neue Label zurück. */
-async function logoFilter(filter, letzte, masse, layout) {
+/**
+ * Filtergraph für eine abgerundete Fläche mit weichem Schatten auf transparentem Grund.
+ * Die Fläche liegt im Bild bei (x, y); `breite`/`hoehe` sind die Maße des ganzen Bildes.
+ */
+export function karteFilter({ w, h, r, farbe, deckkraft = 0.92, schatten, label }) {
+  const m = schatten * 2;
+  const breite = w + 2 * m;
+  const hoehe = h + 2 * m;
+  const a = Math.round(deckkraft * 255);
+  const cx = m + w / 2;
+  const cy = m + h / 2;
+  const alpha = `if(between(X,${m},${m + w - 1})*between(Y,${m},${m + h - 1}),` +
+    `if(gt(abs(X-${cx}),${w / 2 - r})*gt(abs(Y-${cy}),${h / 2 - r}),` +
+    `if(lte(hypot(abs(X-${cx})-${w / 2 - r},abs(Y-${cy})-${h / 2 - r}),${r}),${a},0),${a}),0)`;
+  const versatz = Math.round(schatten / 2);
+  const graph = `color=c=${ffFarbe(farbe)}:s=${breite}x${hoehe}:d=1,format=rgba,` +
+    `geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='${alpha}',split[${label}k1][${label}k2];` +
+    `[${label}k2]colorchannelmixer=rr=0:gg=0:bb=0:aa=0.45,boxblur=${schatten}:2[${label}sh];` +
+    `[${label}sh][${label}k1]overlay=0:-${versatz}[${label}]`;
+  return { graph, breite, hoehe, x: m, y: m - versatz };
+}
+
+/** Breite eines Textes in Pixeln, gerendert mit ffmpeg drawtext. */
+export async function textBreite(textdatei, schrift, groesse) {
+  const w = Math.round(groesse * 40);
+  const h = Math.round(groesse * 1.6);
+  const raw = await ausfuehren("ffmpeg", [
+    "-v", "error", "-f", "lavfi", "-i", `color=c=black:s=${w}x${h}:d=1`,
+    "-vf", `drawtext=fontfile=${schrift}:textfile=${path.basename(textdatei)}:fontsize=${groesse}:fontcolor=white:x=0:y=0`,
+    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "gray", "-",
+  ], { cwd: path.dirname(textdatei), binaer: true });
+  let max = 0;
+  for (let y = 0; y < h; y++) for (let x = max; x < w; x++) if (raw[y * w + x] > 40) max = x + 1;
+  return max;
+}
+
+/**
+ * Logo als fertige Grafik: auf dunkler Karte mit Schatten und farbigem Akzent (Stil „karte“)
+ * oder frei. Gibt Datei und Position im Video zurück.
+ */
+export async function logoGrafik({ layout, masse, ordner }) {
   try {
     await fs.access(layout.logo);
   } catch {
     throw new Error(`Logo nicht gefunden: ${layout.logo}`);
   }
-  const kurz = Math.min(masse.breite, masse.hoehe);
-  const rand = Math.round(kurz * 0.045);
-  const logoBreite = Math.round(masse.breite * layout.logoBreite / 2) * 2;
-  const innen = Math.round(logoBreite * 0.06);
-  const hintergrund = layout.logoHintergrund
-    ? `,pad=iw+${innen * 2}:ih+${innen * 2}:${innen}:${innen}:color=black@0.45`
-    : "";
-  filter.push(`[1:v]format=rgba,scale=${logoBreite}:-1${hintergrund}[logo]`);
-  filter.push(`[${letzte}][logo]overlay=${logoPosition(layout.logoPosition, rand)}:format=auto[mitlogo]`);
-  return "mitlogo";
+  const s = skala(masse);
+  const logo = await untersuche(layout.logo);
+  const lw = gerade(Math.min(masse.breite, masse.hoehe) * layout.logoBreite);
+  const lh = gerade(lw * logo.hoehe / logo.breite);
+  const ziel = path.join(ordner, "logo-grafik.png");
+  let grafik;
+
+  if (layout.logoStil === "frei") {
+    await ausfuehren("ffmpeg", ["-y", "-v", "error", "-i", layout.logo, "-vf", `scale=${lw}:${lh}`, "-frames:v", "1", ziel]);
+    grafik = { breite: lw, hoehe: lh, x: 0, y: 0, w: lw, h: lh };
+  } else {
+    const px = pxl(38, s);
+    const py = pxl(30, s);
+    const w = lw + 2 * px;
+    const h = lh + 2 * py;
+    const r = pxl(30, s);
+    const k = karteFilter({ w, h, r, farbe: layout.karteFarbe, schatten: pxl(16, s), label: "karte" });
+    let graph = `${k.graph};[0]scale=${lw}:${lh}[l];[karte][l]overlay=${k.x + px}:${k.y + py}`;
+    if (layout.akzentFarbe) {
+      const ah = pxl(7, s);
+      graph += `,drawbox=x=${k.x + r}:y=${k.y + h - ah}:w=${w - 2 * r}:h=${ah}:color=${ffFarbe(layout.akzentFarbe)}@1:t=fill`;
+    }
+    await ausfuehren("ffmpeg", ["-y", "-v", "error", "-i", layout.logo, "-filter_complex", graph, "-frames:v", "1", ziel]);
+    grafik = { breite: k.breite, hoehe: k.hoehe, x: k.x, y: k.y, w, h };
+  }
+
+  // Position der sichtbaren Fläche im Video, dann auf die Bildecke mit Schatten umrechnen
+  const { rand, oben } = raender(masse);
+  const sichtbarX = layout.logoPosition.includes("rechts") ? masse.breite - rand - grafik.w : rand;
+  const sichtbarY = layout.logoPosition.includes("unten") ? masse.hoehe - rand - grafik.h : oben;
+  return { datei: ziel, x: sichtbarX - grafik.x, y: sichtbarY - grafik.y };
+}
+
+/**
+ * Bauchbinde mit Name und Funktion: dunkle Karte, farbiger Balken links,
+ * links über den Untertiteln. Gibt Datei und Position im Video zurück.
+ */
+export async function bauchbindeGrafik({ name, funktion, layout, masse, ordner }) {
+  const s = skala(masse);
+  const fett = path.join(layout.schriftOrdner, "Inter-Bold.otf");
+  const normal = path.join(layout.schriftOrdner, "Inter-Medium.otf");
+  const nameDatei = path.join(ordner, "bauchbinde-name.txt");
+  const funktionDatei = path.join(ordner, "bauchbinde-funktion.txt");
+  await fs.writeFile(nameDatei, name);
+  await fs.writeFile(funktionDatei, funktion ?? "");
+  const gName = pxl(58, s);
+  const gFunktion = pxl(38, s);
+  const textBreiteMax = Math.max(
+    await textBreite(nameDatei, fett, gName),
+    funktion ? await textBreite(funktionDatei, normal, gFunktion) : 0,
+  );
+  const links = pxl(40, s);
+  const w = Math.min(textBreiteMax + links + pxl(44, s), masse.breite - 2 * raender(masse).rand);
+  const h = funktion ? pxl(168, s) : pxl(112, s);
+  const k = karteFilter({ w, h, r: pxl(22, s), farbe: layout.karteFarbe, schatten: pxl(16, s), label: "binde" });
+  const balken = pxl(9, s);
+  const rund = pxl(26, s);
+  const zeilen = [
+    `drawbox=x=${k.x}:y=${k.y + rund}:w=${balken}:h=${h - 2 * rund}:color=${ffFarbe(layout.akzentFarbe || "#F18616")}@1:t=fill`,
+    `drawtext=fontfile=${fett}:textfile=${path.basename(nameDatei)}:fontsize=${gName}:fontcolor=white:x=${k.x + links}:y=${k.y + pxl(28, s)}`,
+  ];
+  if (funktion) {
+    zeilen.push(`drawtext=fontfile=${normal}:textfile=${path.basename(funktionDatei)}:fontsize=${gFunktion}:fontcolor=${ffFarbe(layout.akzentFarbe || "#F18616")}:x=${k.x + links + pxl(2, s)}:y=${k.y + pxl(102, s)}`);
+  }
+  const ziel = path.join(ordner, "bauchbinde.png");
+  await ausfuehren("ffmpeg", [
+    "-y", "-v", "error", "-filter_complex", `${k.graph};[binde]${zeilen.join(",")}`, "-frames:v", "1", path.basename(ziel),
+  ], { cwd: ordner });
+
+  // Über dem Untertitelblock (zwei Zeilen), links bündig
+  const { rand } = raender(masse);
+  const untertitelOben = masse.hoehe * (1 - layout.position) - 2.6 * untertitelGroesse(masse);
+  const y = Math.round(untertitelOben - pxl(30, s) - h);
+  return { datei: ziel, x: rand - k.x, y: y - k.y };
 }
 
 /**
@@ -72,23 +187,41 @@ async function logoFilter(filter, letzte, masse, layout) {
  * @param {string} o.eingabe Originalvideo
  * @param {string} o.ausgabe fertiges MP4
  * @param {string|null} o.ass ASS-Datei (im selben Ordner wie die Ausgabe) oder null
- * @param {{breite:number,hoehe:number}} o.masse
+ * @param {{breite:number,hoehe:number,dauer:number}} o.masse
  * @param {object} o.layout siehe config.layout
  * @param {object} o.video siehe config.video
+ * @param {{name:string, funktion?:string}|null} [o.bauchbinde] einblenden, wenn gesetzt
  */
-export async function rendern({ eingabe, ausgabe, ass, masse, layout, video }) {
+export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bauchbinde = null }) {
+  const ordner = path.dirname(ausgabe);
+  const args = ["-y", "-v", "error", "-i", eingabe];
   const filter = [];
   let letzte = "0:v";
+  let eingang = 1;
   if (ass) {
     const fonts = layout.schriftOrdner ? `:fontsdir=${layout.schriftOrdner.replace(/[\\:']/g, "\\$&")}` : "";
     filter.push(`[${letzte}]ass=${path.basename(ass)}${fonts}[sub]`);
     letzte = "sub";
   }
-  if (layout.logo) letzte = await logoFilter(filter, letzte, masse, layout);
+  if (layout.logo) {
+    const logo = await logoGrafik({ layout, masse, ordner });
+    args.push("-i", logo.datei);
+    filter.push(`[${letzte}][${eingang++}:v]overlay=${logo.x}:${logo.y}:format=auto[mitlogo]`);
+    letzte = "mitlogo";
+  }
+  if (bauchbinde?.name) {
+    const binde = await bauchbindeGrafik({ ...bauchbinde, layout, masse, ordner });
+    const d = 0.35; // Ein- und Ausblenden
+    const start = Math.min(layout.bauchbindeStart, Math.max(0, masse.dauer - 1));
+    const ende = Math.max(start + d, Math.min(start + layout.bauchbindeDauer, masse.dauer - d - 0.05));
+    const weg = Math.round(60 * skala(masse)); // so weit gleitet sie herein
+    args.push("-loop", "1", "-t", String(Math.max(masse.dauer, 1)), "-i", binde.datei);
+    filter.push(`[${eingang++}:v]format=rgba,fade=t=in:st=${start}:d=${d}:alpha=1,fade=t=out:st=${ende}:d=${d}:alpha=1[binde]`);
+    filter.push(`[${letzte}][binde]overlay=x='${binde.x}-${weg}*pow(max(0,1-(t-${start})/${d}),2)':y=${binde.y}:enable='between(t,${start},${ende + d})':eof_action=pass:format=auto[mitbinde]`);
+    letzte = "mitbinde";
+  }
   filter.push(`[${letzte}]format=yuv420p[v]`);
 
-  const args = ["-y", "-v", "error", "-i", eingabe];
-  if (layout.logo) args.push("-i", layout.logo);
   args.push(
     "-filter_complex", filter.join(";"),
     "-map", "[v]", "-map", "0:a?",
@@ -98,7 +231,7 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video }) {
   else args.push("-b:v", "8M");
   args.push("-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", ausgabe);
 
-  await ausfuehren("ffmpeg", args, { cwd: path.dirname(ausgabe) });
+  await ausfuehren("ffmpeg", args, { cwd: ordner });
 }
 
 /**
@@ -108,13 +241,15 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video }) {
 export async function fotoRendern({ eingabe, ausgabe, layout, mitLogo }) {
   const original = await untersuche(eingabe);
   const faktor = Math.min(1, 2048 / Math.max(original.breite, original.hoehe));
-  const masse = { breite: Math.round(original.breite * faktor / 2) * 2, hoehe: Math.round(original.hoehe * faktor / 2) * 2 };
+  const masse = { breite: gerade(original.breite * faktor), hoehe: gerade(original.hoehe * faktor) };
   const filter = [`[0:v]scale=${masse.breite}:${masse.hoehe}[klein]`];
   let letzte = "klein";
   const args = ["-y", "-v", "error", "-i", eingabe];
   if (mitLogo && layout.logo) {
-    letzte = await logoFilter(filter, letzte, masse, layout);
-    args.push("-i", layout.logo);
+    const logo = await logoGrafik({ layout, masse, ordner: path.dirname(ausgabe) });
+    args.push("-i", logo.datei);
+    filter.push(`[${letzte}][1:v]overlay=${logo.x}:${logo.y}:format=auto[mitlogo]`);
+    letzte = "mitlogo";
   }
   filter.push(`[${letzte}]format=yuvj420p[bild]`);
   args.push("-filter_complex", filter.join(";"), "-map", "[bild]", "-frames:v", "1", "-q:v", "3", ausgabe);

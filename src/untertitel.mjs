@@ -57,6 +57,12 @@ export function parseKorrekturen(text) {
     .map(([alt, neu]) => [alt.trim(), neu.trim()]);
 }
 
+/** Bauchbinde: „Name | Funktion“ oder zwei Zeilen. */
+export function parseBauchbinde(text) {
+  const [name, ...rest] = text.split(/\s*[|\n]\s*/).map((t) => t.trim()).filter(Boolean);
+  return name ? { name: name.slice(0, 60), funktion: rest.join(" ").slice(0, 80) } : null;
+}
+
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function wendeKorrekturenAn(cues, korrekturen) {
@@ -134,10 +140,14 @@ function assText(text) {
  *          stil:"rand"|"box", position:number}} o
  *   position: Abstand der Untertitel vom unteren Rand, Anteil der Bildhöhe
  */
+/** Schriftgröße der Untertitel in Pixeln – auch für die Lage der Bauchbinde gebraucht. */
+export function untertitelGroesse({ breite, hoehe }) {
+  return Math.round(Math.min(breite, hoehe) * (hoehe > breite ? 0.062 : 0.058));
+}
+
 export function zuAss(cues, o) {
-  const kurz = Math.min(o.breite, o.hoehe);
   const hochkant = o.hoehe > o.breite;
-  const groesse = Math.round(kurz * (hochkant ? 0.062 : 0.058));
+  const groesse = untertitelGroesse(o);
   const maxZeichen = hochkant ? 24 : 38;
   const rahmen = Math.max(2, Math.round(groesse * 0.09));
   const box = o.stil === "box";

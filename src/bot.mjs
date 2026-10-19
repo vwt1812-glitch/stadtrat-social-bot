@@ -15,7 +15,7 @@ import { Auftraege } from "./auftraege.mjs";
 import { ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
-import { parseSrt, formatSrt, zuAss, parseKorrekturen, wendeKorrekturenAn, volltext } from "./untertitel.mjs";
+import { parseSrt, formatSrt, zuAss, parseKorrekturen, wendeKorrekturenAn, volltext, parseBauchbinde } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 
 const config = ladeConfig();
@@ -158,6 +158,25 @@ async function captionsZuruecksetzen(auftrag) {
   return auftraege.aendern(auftrag.id, { captions: {} });
 }
 
+// ---------- Bauchbinde ----------
+
+const standardBauchbinde = () => (config.bauchbinde.name ? { name: config.bauchbinde.name, funktion: config.bauchbinde.funktion } : null);
+const bauchbindeText = (b) => html([b.name, b.funktion].filter(Boolean).join(" – "));
+
+function bauchbindeMenue(auftrag) {
+  const zeilen = [];
+  const standard = standardBauchbinde();
+  if (standard) zeilen.push([knopf(`👤 ${[standard.name, standard.funktion].filter(Boolean).join(" – ")}`, auftrag, "bb:std")]);
+  zeilen.push([knopf("✏️ Anderer Name / Funktion", auftrag, "bb:text")]);
+  if (auftrag.bauchbinde) zeilen.push([knopf("🚫 Ohne Bauchbinde", auftrag, "bb:aus")]);
+  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  const jetzt = auftrag.bauchbinde ? `Jetzt: <b>${bauchbindeText(auftrag.bauchbinde)}</b>` : "Jetzt: keine";
+  return {
+    text: `<b>Bauchbinde</b> – Name und Funktion, ${config.layout.bauchbindeStart} s nach Beginn für ${config.layout.bauchbindeDauer} s eingeblendet.\n${jetzt}`,
+    reply_markup: { inline_keyboard: zeilen },
+  };
+}
+
 const verzoegerungText = (ms) => REPOST_VERZOEGERUNG.find(([, wert]) => wert === ms)?.[0] ?? "sofort";
 
 /** Zusatzzeilen für Kunde, Collab und Repost. */
@@ -169,6 +188,7 @@ function details(auftrag, alle) {
   const reposter = alle.filter((k) => auftrag.repost?.kanaele.includes(k.id));
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
   if (auftrag.story && art(auftrag) !== "text") zeilen.push("📱 Zusätzlich als Story auf Instagram/Facebook");
+  if (auftrag.bauchbinde && art(auftrag) === "video") zeilen.push(`🪪 Bauchbinde: ${bauchbindeText(auftrag.bauchbinde)}`);
   return zeilen;
 }
 
@@ -225,7 +245,7 @@ async function menueInhalt(auftrag) {
   }
   const text = [`<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise].join("\n");
   const extra = {
-    video: [knopf("📝 Untertitel", auftrag, "untertitel")],
+    video: [knopf("📝 Untertitel", auftrag, "untertitel"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
     foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
@@ -349,7 +369,10 @@ async function neuesVideo(msg, video) {
   }
   const auftrag = auftraege.neu(chatId);
   const status = await tg.senden(chatId, "📥 Video erhalten – kommt gleich dran …", { reply_to_message_id: msg.message_id });
-  auftraege.aendern(auftrag.id, { art: "video", statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4" });
+  auftraege.aendern(auftrag.id, {
+    art: "video", statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4",
+    bauchbinde: config.bauchbinde.standard ? standardBauchbinde() : null,
+  });
   einreihen(() => verarbeiten(auftrag.id, video.file_id));
 }
 
@@ -404,7 +427,10 @@ async function renderUndVorschau(id) {
       await fs.writeFile(ass, zuAss(cues, { ...auftrag.masse, ...config.layout }));
     }
     const fertig = datei(auftrag, "fertig.mp4");
-    await rendern({ eingabe: auftrag.original, ausgabe: fertig, ass, masse: auftrag.masse, layout: config.layout, video: config.video });
+    await rendern({
+      eingabe: auftrag.original, ausgabe: fertig, ass, masse: auftrag.masse, layout: config.layout, video: config.video,
+      bauchbinde: auftrag.bauchbinde,
+    });
     auftraege.aendern(id, { medien: [fertig], hochgeladen: null }); // neues Video → neu hochladen
 
     let senden = fertig;
@@ -737,6 +763,20 @@ async function knopfGedrueckt(cq) {
     case "repost":
       await repostMenue(auftrag);
       return antwort();
+    case "bb": {
+      if (!arg) {
+        await zeigeMenue(auftrag, bauchbindeMenue(auftrag));
+        return antwort();
+      }
+      if (arg === "text") {
+        auftraege.aendern(id, { wartetAuf: "bauchbinde" });
+        await tg.senden(auftrag.chatId, "Name und Funktion, getrennt mit <code>|</code> oder in zwei Zeilen, z. B.\n<code>Maria Muster | Vorsitzende Radentscheid Nürnberg</code>");
+        return antwort();
+      }
+      const neu = arg === "std" ? standardBauchbinde() : null;
+      await antwort();
+      return neuRendern(auftraege.aendern(id, { bauchbinde: neu }), neu ? "Bauchbinde kommt rein." : "Bauchbinde ist raus.");
+    }
     case "story":
       auftrag = auftraege.aendern(id, { story: !auftrag.story });
       await zeigeMenue(auftrag);
@@ -811,6 +851,11 @@ async function texteingabe(auftrag, text) {
       auftrag = await captionsZuruecksetzen(auftrag);
       return neuesMenue(auftrag);
     }
+    case "bauchbinde": {
+      const neu = parseBauchbinde(text);
+      if (!neu) return tg.senden(auftrag.chatId, "Bitte so: <code>Name | Funktion</code>");
+      return neuRendern(auftraege.aendern(auftrag.id, { bauchbinde: neu }), `Bauchbinde: ${bauchbindeText(neu)}.`);
+    }
     case "collab": {
       const collabs = text.trim() === "-" ? [] : parseCollabs(text);
       if (collabs.length > 3) return tg.senden(auftrag.chatId, "Instagram erlaubt höchstens 3 Collab-Partner – bitte nochmal.");
@@ -831,12 +876,13 @@ async function texteingabe(auftrag, text) {
       const srt = datei(auftrag, "untertitel.srt");
       const cues = wendeKorrekturenAn(parseSrt(await fs.readFile(srt, "utf8")), korrekturen);
       await fs.writeFile(srt, formatSrt(cues));
-      return untertitelNeu(auftrag, `${korrekturen.length} Korrektur(en) übernommen.`);
+      return neuRendern(auftrag, `${korrekturen.length} Korrektur(en) übernommen.`);
     }
   }
 }
 
-async function untertitelNeu(auftrag, info) {
+/** Video mit geänderten Untertiteln oder Bauchbinde neu bauen. */
+async function neuRendern(auftrag, info) {
   auftrag = auftraege.aendern(auftrag.id, { wartetAuf: null, statusNachricht: null });
   if (auftrag.menueNachricht) {
     await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
@@ -851,7 +897,7 @@ async function srtDatei(auftrag, dokument) {
   const cues = parseSrt(await fs.readFile(tmp, "utf8"));
   if (!cues.length) return tg.senden(auftrag.chatId, "In der Datei habe ich keine Untertitel gefunden.");
   await fs.writeFile(datei(auftrag, "untertitel.srt"), formatSrt(cues));
-  await untertitelNeu(auftrag, `Untertitel-Datei mit ${cues.length} Einträgen übernommen.`);
+  await neuRendern(auftrag, `Untertitel-Datei mit ${cues.length} Einträgen übernommen.`);
 }
 
 async function nachricht(msg) {

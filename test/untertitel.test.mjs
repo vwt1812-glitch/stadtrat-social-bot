@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSrt, formatSrt, parseKorrekturen, wendeKorrekturenAn, umbrechen, aufteilen, zuAss, assFarbe } from "../src/untertitel.mjs";
+import { parseSrt, formatSrt, parseKorrekturen, wendeKorrekturenAn, umbrechen, aufteilen, zuAss, assFarbe, parseBauchbinde } from "../src/untertitel.mjs";
 
 const SRT = `1
 00:00:00,000 --> 00:00:02,500
@@ -47,4 +47,11 @@ test("ASS-Datei", () => {
   const ass = zuAss(parseSrt(SRT), { breite: 1080, hoehe: 1920, schrift: "DejaVu Sans", farbe: "#FFFFFF", rand: "#000000", stil: "rand", position: 0.18 });
   assert.match(ass, /PlayResX: 1080\nPlayResY: 1920/);
   assert.match(ass, /Dialogue: 0,0:00:00\.00,0:00:02\.50,Untertitel,,0,0,0,,Hallo, ich bin\\NLukas Kuffner/);
+});
+
+test("Bauchbinde-Eingabe", () => {
+  assert.deepEqual(parseBauchbinde("Maria Muster | Vorsitzende Radentscheid"), { name: "Maria Muster", funktion: "Vorsitzende Radentscheid" });
+  assert.deepEqual(parseBauchbinde("Maria Muster\nVorsitzende"), { name: "Maria Muster", funktion: "Vorsitzende" });
+  assert.deepEqual(parseBauchbinde("Nur Name"), { name: "Nur Name", funktion: "" });
+  assert.equal(parseBauchbinde("  | "), null);
 });

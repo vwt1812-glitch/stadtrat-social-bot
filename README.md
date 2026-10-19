@@ -23,6 +23,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🕐 Planen | Heute/Morgen-Vorschläge, nächster freier Postiz-Slot oder freie Eingabe wie `Fr 18 Uhr`, `24.10. 19:30`, `in 2 Stunden` |
 | ✏️ Caption ändern | schickt den aktuellen Text zum Kopieren, die nächste Nachricht ist die neue Caption |
 | 🔄 Neu formulieren | nur mit Claude: Wunsch eingeben (`kürzer`, `lockerer`, …) |
+| 🪪 Bauchbinde | nur Video: Name und Funktion am Anfang einblenden – Standard aus `BAUCHBINDE_NAME`/`_FUNKTION` oder ein anderer Name, z. B. für Gäste |
 | 📝 Untertitel | nur Video: schickt die `.srt`; Korrekturen als `falsch => richtig` zurückschreiben oder die korrigierte Datei schicken – das Video wird neu gebaut |
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
 | 👤 Kunde | Postiz-Kunde wählen, z. B. „Lukas Küffner“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
@@ -177,8 +178,13 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
 
 ## Anpassen
 
-- **Layout:** Logo (`assets/logo.png`), Position, Größe, Schrift, Farben und Untertitel-Stil (`rand` oder `box`) in `.env`.
-  Untertitel werden für Hochkant- und Querformat automatisch passend groß gesetzt.
+- **Layout:** Das Logo sitzt auf einer dunklen, abgerundeten Karte in Logo-Schwarz mit weichem Schatten und
+  oranger Linie (`LOGO_STIL=karte`), oben links mit Abstand zu den Bedienelementen von Reels und TikTok. Die
+  Bauchbinde nimmt dieselbe Karte mit orangem Balken; sie gleitet nach `BAUCHBINDE_START` Sekunden herein und
+  blendet nach `BAUCHBINDE_DAUER` Sekunden aus. Logo, Farben, Position und Größe in `.env`. Die offiziellen Logos
+  liegen als SVG und PNG in `assets/logos/` (`quer-dunkel` für dunkle Flächen, `quer-hell` für helle), die Schrift
+  Inter (SIL Open Font License) in `assets/fonts/`. Untertitel werden für Hochkant und Querformat passend gesetzt,
+  Stil `rand` oder `box`.
 - **Glossar:** `glossar.txt` – Namen, die Whisper richtig schreiben soll, und automatische Ersetzungen.
 - **Netzwerk-Einstellungen:** `kanaele.example.json` nach `kanaele.json` kopieren. Schlüssel ist der Netzwerk-Typ
   (`instagram`, `tiktok`, `youtube`, …) oder eine Kanal-ID aus `/kanaele`. Die Werte gehen als `settings` an Postiz.
@@ -192,7 +198,7 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
 | Datei | Inhalt |
 |---|---|
 | `src/bot.mjs` | Telegram-Steuerung, Menüs, Warteschlange, Alben sammeln |
-| `src/video.mjs` | ffprobe/ffmpeg: Video untersuchen, Ton herauslösen, Logo + Untertitel einbrennen, Fotos mit Logo |
+| `src/video.mjs` | ffprobe/ffmpeg: Video untersuchen, Ton herauslösen, Logo-Karte, Bauchbinde und Untertitel einbrennen, Fotos mit Logo |
 | `src/whisper.mjs` | Spracherkennung mit whisper.cpp, Glossar |
 | `src/untertitel.mjs` | SRT lesen/schreiben, Korrekturen, Umbruch, ASS-Gestaltung |
 | `src/caption.mjs` | Caption-Vorschlag aus Transkript, Fotos oder Stichpunkten (Claude, OpenAI oder einfacher Vorschlag) |

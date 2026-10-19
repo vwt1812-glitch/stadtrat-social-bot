@@ -40,6 +40,13 @@ function captionConfig() {
   };
 }
 
+/** Logo-Datei; die frühere Vorgabe assets/logo.png gibt es nicht mehr. */
+function logoPfad() {
+  const wert = env("LOGO", "assets/logos/quer-dunkel.png");
+  if (/(^|\/)assets\/logo\.png$/.test(wert)) return pfad("assets/logos/quer-dunkel.png");
+  return pfad(wert);
+}
+
 export function ladeConfig() {
   return {
     telegram: {
@@ -65,17 +72,27 @@ export function ladeConfig() {
     },
     glossar: pfad(env("GLOSSAR", "glossar.txt")),
     layout: {
-      logo: pfad(env("LOGO", "assets/logo.png")),
-      logoPosition: env("LOGO_POSITION", "oben-rechts"),
-      logoBreite: Number(env("LOGO_BREITE", "0.3")),
-      logoHintergrund: env("LOGO_HINTERGRUND", "ja") !== "nein",
+      logo: logoPfad(),
+      logoPosition: env("LOGO_POSITION", "oben-links"),
+      logoBreite: Number(env("LOGO_BREITE", "0.48")),
+      // karte = auf dunkler, abgerundeter Karte mit Akzentlinie; frei = Logo ohne Fläche
+      logoStil: env("LOGO_STIL", env("LOGO_HINTERGRUND") === "nein" ? "frei" : "karte"),
+      karteFarbe: env("KARTE_FARBE", "#1D1D1B"),
+      akzentFarbe: env("AKZENT_FARBE", "#F18616"),
       logoAufFotos: env("LOGO_AUF_FOTOS", "ja") !== "nein",
-      schrift: env("SCHRIFT", "DejaVu Sans"),
-      schriftOrdner: pfad(env("SCHRIFT_ORDNER", "")),
+      schrift: env("SCHRIFT", "Inter"),
+      schriftOrdner: pfad(env("SCHRIFT_ORDNER", "assets/fonts")),
       farbe: env("UNTERTITEL_FARBE", "#FFFFFF"),
       rand: env("UNTERTITEL_RAND", "#000000"),
       stil: env("UNTERTITEL_STIL", "rand"),
       position: Number(env("UNTERTITEL_POSITION", "0.18")),
+      bauchbindeStart: Number(env("BAUCHBINDE_START", "0.5")),
+      bauchbindeDauer: Number(env("BAUCHBINDE_DAUER", "4")),
+    },
+    bauchbinde: {
+      name: env("BAUCHBINDE_NAME", ""),
+      funktion: env("BAUCHBINDE_FUNKTION", ""),
+      standard: env("BAUCHBINDE_STANDARD", "nein") === "ja",
     },
     video: {
       encoder: env("VIDEO_ENCODER", "libx264"),
