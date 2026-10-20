@@ -25,7 +25,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🔄 Neu formulieren | nur mit Claude: Wunsch eingeben (`kürzer`, `lockerer`, …) |
 | 📍 Position | nur Video: Untertitel oben, in der Mitte oder unten (Standard) – das Video wird neu gebaut. Verdecken sie unten dein Gesicht, legt der Bot sie schon selbst woanders hin |
 | 🪪 Bauchbinde | nur Video: Name und Funktion am Anfang einblenden – Standard aus `BAUCHBINDE_NAME`/`_FUNKTION` oder ein anderer Name, z. B. für Gäste |
-| 📝 Untertitel | nur Video: schickt die `.srt`; Korrekturen als `falsch => richtig` zurückschreiben oder die korrigierte Datei schicken – das Video wird neu gebaut |
+| 📝 Untertitel | nur Video: schickt alle Untertitel als nummerierte Liste. Kopieren, Fehler ändern, zurückschicken – geändert wird genau der Untertitel mit dieser Nummer, die Zeit bleibt (auch nur einzelne Zeilen wie `4 Ob das klappt?`; `4 -` löscht). `falsch => richtig` ohne Nummer ersetzt überall, alternativ eine .srt-Datei. Das Video wird danach neu gebaut |
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
 | 👤 Kunde | Postiz-Kunde wählen, z. B. „Lukas Küffner“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
 | 📺 Kanäle | Kanäle des gewählten Kunden an-/abwählen |

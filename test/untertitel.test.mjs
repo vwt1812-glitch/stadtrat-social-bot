@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseSrt, formatSrt, parseKorrekturen, wendeKorrekturenAn, umbrechen, aufteilen, zerlegen, zuAss, untertitelPosition, assFarbe, parseBauchbinde } from "../src/untertitel.mjs";
+import { parseSrt, formatSrt, parseKorrekturen, wendeKorrekturenAn, umbrechen, aufteilen, zerlegen, zuAss, untertitelPosition, assFarbe, parseBauchbinde, alsListe, wendeBearbeitungAn } from "../src/untertitel.mjs";
 
 const SRT = `1
 00:00:00,000 --> 00:00:02,500
@@ -77,4 +77,40 @@ test("Bauchbinde-Eingabe", () => {
   assert.deepEqual(parseBauchbinde("Maria Muster\nVorsitzende"), { name: "Maria Muster", funktion: "Vorsitzende" });
   assert.deepEqual(parseBauchbinde("Nur Name"), { name: "Nur Name", funktion: "" });
   assert.equal(parseBauchbinde("  | "), null);
+});
+
+const LISTE = [
+  { start: 0, end: 1000, text: "Das ist ein Test." },
+  { start: 1000, end: 2000, text: "Das klappt?" },
+  { start: 2000, end: 3000, text: "Das war's von Lukas Kuffner." },
+];
+
+test("Untertitel als nummerierte Liste, auf Nachrichten aufgeteilt", () => {
+  assert.deepEqual(alsListe(LISTE), ["1 Das ist ein Test.\n2 Das klappt?\n3 Das war's von Lukas Kuffner."]);
+  const lang = Array.from({ length: 200 }, (_, i) => ({ start: i, end: i + 1, text: `Satz Nummer ${i} mit etwas Text` }));
+  const teile = alsListe(lang);
+  assert.ok(teile.length > 1 && teile.every((t) => t.length <= 3800));
+  assert.equal(teile.join("\n").split("\n").length, 200);
+});
+
+test("Bearbeitete Liste ändert genau den einen Untertitel", () => {
+  // ganze Liste zurück, nur Zeile 2 geändert: „Das“ in 1 und 3 bleibt
+  const b = wendeBearbeitungAn(LISTE, "1 Das ist ein Test.\n2 Ob das klappt?\n3 Das war's von Lukas Kuffner.");
+  assert.deepEqual(b.cues.map((c) => c.text), ["Das ist ein Test.", "Ob das klappt?", "Das war's von Lukas Kuffner."]);
+  assert.equal(b.geaendert, 1);
+  assert.deepEqual([b.cues[1].start, b.cues[1].end], [1000, 2000]);
+});
+
+test("Nur geänderte Zeilen, Löschen, Ersetzen und unbekannte Nummern", () => {
+  const b = wendeBearbeitungAn(LISTE, "2: Ob das klappt?\n1 -\nKuffner => Küffner\n7 gibt es nicht");
+  assert.deepEqual(b.cues.map((c) => c.text), ["Ob das klappt?", "Das war's von Lukas Küffner."]);
+  assert.equal(b.geaendert, 1);
+  assert.equal(b.geloescht, 1);
+  assert.equal(b.ersetzt, 1);
+  assert.deepEqual(b.unbekannt, [7]);
+  // unverändert zurückgeschickt: nichts zu tun
+  const gleich = wendeBearbeitungAn(LISTE, alsListe(LISTE)[0]);
+  assert.equal(gleich.geaendert + gleich.geloescht + gleich.ersetzt, 0);
+  assert.equal(gleich.erkannt, true);
+  assert.equal(wendeBearbeitungAn(LISTE, "irgendwas").erkannt, false);
 });

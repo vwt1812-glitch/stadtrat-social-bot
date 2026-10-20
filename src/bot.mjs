@@ -18,7 +18,7 @@ import {
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
-import { parseSrt, formatSrt, zuAss, parseKorrekturen, wendeKorrekturenAn, volltext, parseBauchbinde } from "./untertitel.mjs";
+import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 
 const config = ladeConfig();
@@ -787,11 +787,30 @@ async function knopfGedrueckt(cq) {
       auftraege.aendern(id, { wartetAuf: "hinweis" });
       await tg.senden(auftrag.chatId, "Was soll anders werden? Z. B. <code>kürzer</code>, <code>lockerer</code>, <code>mehr zum Haushalt</code> – oder <code>-</code> für einfach neu.");
       return antwort();
-    case "untertitel":
+    case "untertitel": {
+      auftraege.aendern(id, { wartetAuf: "untertitel" });
+      const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
+      if (!cues.length) {
+        await tg.senden(auftrag.chatId, "Es gibt keine Untertitel. Du kannst eine .srt-Datei schicken, dann baue ich sie ein.");
+        return antwort();
+      }
+      await tg.senden(auftrag.chatId, [
+        "<b>Untertitel bearbeiten</b>",
+        "Die Liste unten kopieren (lange drücken → Kopieren), Fehler ändern und zurückschicken. Die Nummer bleibt vorne stehen – so wird genau dieser Untertitel geändert, die Zeit bleibt gleich.",
+        "• Es reichen auch nur die geänderten Zeilen, z. B. <code>4 Ob das klappt?</code>",
+        "• <code>4 -</code> löscht Untertitel 4",
+        "• <code>Kuffner => Küffner</code> (ohne Nummer) ersetzt überall",
+        "• oder eine .srt-Datei schicken",
+        "<code>abbrechen</code> beendet das Bearbeiten.",
+      ].join("\n"), { reply_markup: { inline_keyboard: [[knopf("📄 Als SRT-Datei", auftrag, "srt")]] } });
+      // Ohne Formatierung, damit beim Kopieren nichts verloren geht
+      for (const teil of alsListe(cues)) await tg.aufruf("sendMessage", { chat_id: auftrag.chatId, text: teil });
+      return antwort();
+    }
+    case "srt":
       auftraege.aendern(id, { wartetAuf: "untertitel" });
       await tg.datei(auftrag.chatId, "sendDocument", "document", datei(auftrag, "untertitel.srt"), {
-        caption: "Korrekturen als Text schicken, eine pro Zeile:\n<code>Kuffner => Küffner</code>\n\nOder die korrigierte .srt-Datei zurückschicken.",
-        parse_mode: "HTML",
+        caption: "Bearbeitet zurückschicken – ich baue sie dann ein.",
       });
       return antwort();
     case "logo":
@@ -1041,12 +1060,20 @@ async function texteingabe(auftrag, text) {
       return neuesMenue(auftrag, inhalt);
     }
     case "untertitel": {
-      const korrekturen = parseKorrekturen(text);
-      if (!korrekturen.length) return tg.senden(auftrag.chatId, "Bitte so schicken: <code>falsch => richtig</code> (eine Korrektur pro Zeile).");
       const srt = datei(auftrag, "untertitel.srt");
-      const cues = wendeKorrekturenAn(parseSrt(await fs.readFile(srt, "utf8")), korrekturen);
-      await fs.writeFile(srt, formatSrt(cues));
-      return neuRendern(auftrag, `${korrekturen.length} Korrektur(en) übernommen.`);
+      const b = wendeBearbeitungAn(parseSrt(await fs.readFile(srt, "utf8")), text);
+      if (!b.erkannt) {
+        return tg.senden(auftrag.chatId, "Bitte die Liste mit den Nummern vorne zurückschicken (z. B. <code>4 Ob das klappt?</code>) oder <code>falsch => richtig</code>. <code>abbrechen</code> beendet das Bearbeiten.");
+      }
+      const teile = [
+        b.geaendert && `${b.geaendert} Untertitel geändert`,
+        b.geloescht && `${b.geloescht} gelöscht`,
+        b.ersetzt && `${b.ersetzt} Ersetzung(en) übernommen`,
+      ].filter(Boolean);
+      const warnung = b.unbekannt.length ? ` Nummer ${b.unbekannt.join(", ")} gibt es nicht.` : "";
+      if (!teile.length) return tg.senden(auftrag.chatId, `Ich habe keine Änderung gefunden.${warnung} Schick die geänderten Zeilen oder <code>abbrechen</code>.`);
+      await fs.writeFile(srt, formatSrt(b.cues));
+      return neuRendern(auftrag, `${teile.join(", ")}.${warnung}`);
     }
   }
 }
@@ -1108,6 +1135,7 @@ async function nachricht(msg) {
   }
   if (/^\/status\b/.test(text)) return tg.senden(chatId, await status());
   if (wartend && text) return texteingabe(wartend, text);
+  if (/^(abbrechen|stop)$/i.test(text.trim())) return tg.senden(chatId, "Gerade läuft nichts, das ich abbrechen könnte.");
   if (text && !text.startsWith("/")) return textBeitrag(chatId, text);
   return tg.senden(chatId, "Schick mir ein Video, Fotos oder einfach Text – oder /hilfe.");
 }

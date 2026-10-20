@@ -57,6 +57,68 @@ export function parseKorrekturen(text) {
     .map(([alt, neu]) => [alt.trim(), neu.trim()]);
 }
 
+/**
+ * Untertitel als nummerierte Liste zum Kopieren und Bearbeiten in Telegram – aufgeteilt auf
+ * Nachrichten von höchstens `maxLaenge` Zeichen (Telegram erlaubt 4096).
+ */
+export function alsListe(cues, maxLaenge = 3800) {
+  const teile = [];
+  let aktuell = "";
+  for (const [i, c] of cues.entries()) {
+    const zeile = `${i + 1} ${c.text}`;
+    if (aktuell && aktuell.length + 1 + zeile.length > maxLaenge) {
+      teile.push(aktuell);
+      aktuell = zeile;
+    } else {
+      aktuell = aktuell ? `${aktuell}\n${zeile}` : zeile;
+    }
+  }
+  if (aktuell) teile.push(aktuell);
+  return teile;
+}
+
+const NUMMER = /^\s*(\d{1,4})\s*[.:)]?\s+(.*?)\s*$|^\s*(\d{1,4})\s*[.:)]?\s*-\s*$/;
+
+/**
+ * Bearbeitete Liste übernehmen. „Nummer Text“ ersetzt genau diesen Untertitel (die Zeit bleibt),
+ * „Nummer -“ löscht ihn. Unveränderte Zeilen schaden nicht, es reichen auch nur die geänderten.
+ * Zeilen ohne Nummer mit „falsch => richtig“ ersetzen wie bisher überall.
+ * @returns {{cues: object[], geaendert: number, geloescht: number, ersetzt: number, unbekannt: number[], erkannt: boolean}}
+ */
+export function wendeBearbeitungAn(cues, text) {
+  const neu = cues.map((c) => ({ ...c }));
+  const loeschen = new Set();
+  const unbekannt = [];
+  let geaendert = 0;
+  const rest = [];
+  for (const zeile of text.split("\n")) {
+    const m = zeile.match(NUMMER);
+    if (!m) {
+      rest.push(zeile);
+      continue;
+    }
+    const nr = Number(m[1] ?? m[3]);
+    const cue = neu[nr - 1];
+    if (!cue) {
+      unbekannt.push(nr);
+      continue;
+    }
+    const inhalt = m[1] ? m[2].replace(/\s+/g, " ") : "";
+    if (!inhalt || inhalt === "-") loeschen.add(nr - 1);
+    else if (inhalt !== cue.text) {
+      cue.text = inhalt;
+      geaendert++;
+    }
+  }
+  const korrekturen = parseKorrekturen(rest.join("\n"));
+  let ergebnis = neu.filter((_, i) => !loeschen.has(i));
+  const vorher = ergebnis.map((c) => c.text).join("\n");
+  if (korrekturen.length) ergebnis = wendeKorrekturenAn(ergebnis, korrekturen);
+  const ersetzt = korrekturen.length && ergebnis.map((c) => c.text).join("\n") !== vorher ? korrekturen.length : 0;
+  const erkannt = text.split("\n").some((z) => NUMMER.test(z)) || korrekturen.length > 0;
+  return { cues: ergebnis, geaendert, geloescht: loeschen.size, ersetzt, unbekannt, erkannt };
+}
+
 /** Bauchbinde: „Name | Funktion“ oder zwei Zeilen. */
 export function parseBauchbinde(text) {
   const [name, ...rest] = text.split(/\s*[|\n]\s*/).map((t) => t.trim()).filter(Boolean);
