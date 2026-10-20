@@ -137,8 +137,14 @@ export async function logoGrafik({ layout, masse, ordner, video = true }) {
 
   // Position der sichtbaren Fläche im Video, dann auf die Bildecke mit Schatten umrechnen
   const { rand, oben } = raender(masse, video);
-  const sichtbarX = layout.logoPosition.includes("rechts") ? masse.breite - rand - grafik.w : rand;
-  const sichtbarY = layout.logoPosition.includes("unten") ? masse.hoehe - rand - grafik.h : oben;
+  let sichtbarX = layout.logoPosition.includes("rechts") ? masse.breite - rand - grafik.w : rand;
+  let sichtbarY = layout.logoPosition.includes("unten") ? masse.hoehe - rand - grafik.h : oben;
+  // Story-Fassung eines Querformats: mittig über dem Bild, wenn darüber genug Platz ist
+  const ueberBild = layout.bild ? layout.bild.oben - pxl(48, s) - grafik.h : -1;
+  if (ueberBild >= oben) {
+    sichtbarX = Math.round((masse.breite - grafik.w) / 2);
+    sichtbarY = ueberBild;
+  }
   return { datei: ziel, x: sichtbarX - grafik.x, y: sichtbarY - grafik.y };
 }
 
@@ -219,6 +225,8 @@ export async function balkenBauchbinde({ name, funktion, layout, masse, ordner }
   // (die belegen hochkant die unteren 22 %); passt sie dort nicht hin: über den Untertiteln
   const hochkant = masse.hoehe > masse.breite;
   const x = hochkant ? Math.round(Math.min(masse.breite, masse.hoehe) * 0.1) : rand;
+  // Story-Fassung eines Querformats: unten links im Bild, beim Sprecher – die Untertitel stehen darunter
+  if (imBild(layout, hoehe)) return { art: "balken", dateien, x: rand, y: Math.round(layout.bild.unten - pxl(28, s) - hoehe), breite, hoehe, steigung: schraeg / ho };
   const position = untertitelPosition({ ...masse, ...layout });
   const untertitelUnten = masse.hoehe * (1 - position);
   let unten = hochkant ? masse.hoehe * 0.76 : masse.hoehe - 1.5 * rand;
@@ -263,8 +271,9 @@ export async function karteBauchbinde({ name, funktion, layout, masse, ordner })
     "-y", "-v", "error", "-filter_complex", `${k.graph};[binde]${zeilen.join(",")}`, "-frames:v", "1", path.basename(ziel),
   ], { cwd: ordner });
 
-  // Über dem Untertitelblock (zwei Zeilen), links bündig
+  // Über dem Untertitelblock (zwei Zeilen), links bündig – in der Story-Fassung unten im Bild
   const { rand } = raender(masse);
+  if (imBild(layout, h)) return { art: "karte", datei: ziel, x: rand - k.x, y: Math.round(layout.bild.unten - pxl(28, s) - h) - k.y };
   const untertitelOben = masse.hoehe * (1 - untertitelPosition({ ...masse, ...layout })) - 2.6 * untertitelGroesse(masse);
   const y = Math.round(untertitelOben - pxl(30, s) - h);
   return { art: "karte", datei: ziel, x: rand - k.x, y: y - k.y };
@@ -308,7 +317,7 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
     letzte = "flaeche";
     if (layout.logo && layout.logoStil === "frei") {
       const schleier = path.join(ordner, "story-schleier.png");
-      await storySchleier(masse, schleier);
+      await storySchleier(masse, schleier, layout.bild);
       args.push("-i", schleier);
       filter.push(`[flaeche][${eingang++}:v]overlay=0:0:format=auto[verlauf]`);
       letzte = "verlauf";
@@ -403,6 +412,32 @@ export async function fotoRendern({ eingabe, ausgabe, layout, mitLogo }) {
 // Oben (Fortschrittsbalken, Profil) und unten (Antwortfeld) blenden die Apps je gut 10 % ein;
 // das Hochkant-Layout (Logo ab 14 %, Bauchbinde bis 76 %) lässt das schon frei.
 
+/** Passt eine Bauchbinde der Höhe `h` unten ins Bild der Story-Fassung (höchstens ein Drittel davon)? */
+const imBild = (layout, h) => Boolean(layout.bild) && layout.bild.unten - layout.bild.oben >= 3 * h;
+
+/** Wo das scharfe Bild auf der Story-Fläche liegt – so, wie storyFlaeche es setzt. */
+export function storyBild(original, masse = STORY_MASSE) {
+  const faktor = Math.min(masse.breite / original.breite, masse.hoehe / original.hoehe);
+  const h = gerade(original.hoehe * faktor);
+  const oben = Math.round((masse.hoehe - h) / 2);
+  return { oben, unten: oben + h };
+}
+
+/**
+ * Layout für die Story-Fassung eines Videos, das nicht 9:16 ist: am Bild ausgerichtet statt an der
+ * ganzen Fläche – Logo darüber, Bauchbinde unten im Bild, Untertitel direkt darunter auf der
+ * unscharfen Fläche (so verdecken sie nichts). Untertitel nur dorthin, wo sie noch über Name und
+ * Caption von Reels/TikTok bleiben (untere 22 %); sonst gilt das normale Hochkant-Layout.
+ */
+export function storyLayout(layout, original, masse = STORY_MASSE) {
+  const bild = storyBild(original, masse);
+  const ergebnis = { ...layout, bild };
+  const unterkante = bild.unten + Math.round(masse.hoehe * 0.025) + 1.35 * untertitelGroesse(masse);
+  const position = (masse.hoehe - unterkante) / masse.hoehe;
+  if (position >= 0.22) ergebnis.positionFest = Math.round(position * 1000) / 1000;
+  return ergebnis;
+}
+
 /** Fotos in der Story: höchstens 80 % der Höhe, damit das Logo des Fotos unter der Kopfzeile bleibt. */
 export const STORY_FOTO_HOEHE = 0.8;
 
@@ -429,11 +464,13 @@ export function storyFlaeche({ breite, hoehe } = STORY_MASSE, { vorneHoehe = hoe
  * Darauf ist das Logo mit heller Schrift auf jedem Hintergrund lesbar – auch auf hellem Himmel oder
  * gemischtem Grund, wo weder helle noch dunkle Schrift allein sicher wäre.
  */
-export async function storySchleier(masse, ziel) {
+export async function storySchleier(masse, ziel, bild = null) {
   const { breite, hoehe } = masse;
+  // Mit bekanntem Bild endet der Verlauf an dessen Oberkante, damit er nichts davon abdunkelt
+  const ende = bild ? Math.min(0.40, bild.oben / hoehe) : 0.40;
   await ausfuehren("ffmpeg", [
     "-y", "-v", "error", "-f", "lavfi", "-i", `color=c=black:s=${breite}x${hoehe}:d=1`,
-    "-vf", `format=rgba,geq=r=0:g=0:b=0:a='128*clip((0.40-Y/${hoehe})/0.14,0,1)'`,
+    "-vf", `format=rgba,geq=r=0:g=0:b=0:a='128*clip((${ende.toFixed(4)}-Y/${hoehe})/0.14,0,1)'`,
     "-frames:v", "1", ziel,
   ]);
 }

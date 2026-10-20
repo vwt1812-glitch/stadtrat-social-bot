@@ -137,3 +137,33 @@ test("Story-Verlauf: oben halb deckend, ab 40 % durchsichtig", { skip: !ffmpegDa
   assert.equal(alpha(Math.round(1920 * 0.2)), 128);
   assert.equal(alpha(Math.round(1920 * 0.45)), 0);
 });
+
+test("Story-Fassung eines Querformats richtet sich am Bild aus", async () => {
+  const { storyBild, storyLayout } = await import("../src/video.mjs");
+  const bild = storyBild({ breite: 1920, hoehe: 1080 });
+  assert.deepEqual(bild, { oben: 656, unten: 1264 });
+  // Untertitel direkt unter dem Bild – über den unteren 22 % (Name und Caption der Apps)
+  const quer = storyLayout({ position: 0.33 }, { breite: 1920, hoehe: 1080 });
+  assert.ok(quer.positionFest > 0.22 && quer.positionFest < 0.33, String(quer.positionFest));
+  // 4:5 lässt unten zu wenig Platz: normales Hochkant-Layout
+  assert.equal(storyLayout({ position: 0.33 }, { breite: 1080, hoehe: 1350 }).positionFest, undefined);
+});
+
+test("Logo über dem Bild, Bauchbinde unten im Bild", { skip: !ffmpegDa }, async () => {
+  const { storyBild } = await import("../src/video.mjs");
+  const ordner = fs.mkdtempSync(path.join(os.tmpdir(), "story-layout-"));
+  const masse = { breite: 1080, hoehe: 1920, dauer: 4 };
+  const bild = storyBild({ breite: 1920, hoehe: 1080 });
+  const layout = { ...LAYOUT, bild };
+  const logo = await logoGrafik({ layout, masse, ordner });
+  const logoBild = await untersuche(logo.datei);
+  // sichtbare Karte endet 48 px über dem Bild und steht mittig
+  const k = { x: 32, y: 24 };
+  const kartenHoehe = logoBild.hoehe - 64;
+  const kartenBreite = logoBild.breite - 64;
+  assert.equal(logo.y + k.y + kartenHoehe, bild.oben - 48);
+  assert.ok(Math.abs(logo.x + k.x + kartenBreite / 2 - 540) <= 1);
+  const binde = await bauchbindeGrafik({ name: "Lukas Küffner", funktion: "Stadtrat in Nürnberg", layout, masse, ordner });
+  assert.equal(binde.y + binde.hoehe, bild.unten - 28);
+  assert.ok(binde.y > bild.oben);
+});

@@ -203,8 +203,11 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
 - **Storys:** Instagram und Facebook blenden oben Fortschrittsbalken und Profil, unten das Antwortfeld ein (je
   gut 10 %). Hochkant-Videos (9:16) gehen unverändert als Story raus – ihr Layout lässt das schon frei. Für alle
   anderen baut der Bot bei **📱 Story** eine eigene Fassung in 1080×1920 und schickt sie als „Story-Vorschau“:
-  Videos mittig auf einer unscharfen Kopie, oben ein weicher dunkler Verlauf mit dem Logo in heller Schrift
-  (`quer-dunkel`), Untertitel und Bauchbinde wie hochkant. Fotos kommen samt ihrem Logo wie im Beitrag, höchstens
+  Videos mittig auf einer unscharfen Kopie. Das Layout richtet sich dann am Bild aus statt an der ganzen Fläche:
+  Logo mittig darüber (beim freien Logo auf einem weichen dunklen Verlauf, in heller Schrift `quer-dunkel`),
+  Bauchbinde unten links im Bild beim Sprecher, Untertitel direkt unter dem Bild auf der unscharfen Fläche – so
+  verdecken sie nichts und bleiben über Name und Caption von Reels/TikTok. Ist dafür kein Platz (z. B. bei 4:5),
+  gilt das normale Hochkant-Layout; „📍 Position“ geht immer vor. Fotos kommen samt ihrem Logo wie im Beitrag, höchstens
   80 % hoch, damit das Logo unter der Kopfzeile bleibt. Die Story-Fassung wird beim Posten extra hochgeladen.
 - **Querformat für Instagram/TikTok:** Ein Querformat-Video erscheint in Reels und TikTok sonst klein mit Balken.
   Mit **📲 9:16 für Insta** bekommen die Netzwerke aus `HOCHKANT_NETZE` (Standard Instagram und TikTok) die

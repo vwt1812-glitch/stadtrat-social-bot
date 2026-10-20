@@ -165,7 +165,8 @@ export const UNTERTITEL_LAGEN = { oben: { hochkant: 0.62, quer: 0.8 }, mitte: { 
 export function untertitelPosition(o) {
   const hochkant = o.hoehe > o.breite;
   const lage = UNTERTITEL_LAGEN[o.lage]?.[hochkant ? "hochkant" : "quer"];
-  return lage ?? (hochkant ? o.position : (o.positionQuer ?? 0.08));
+  // positionFest: von der Story-Fassung vorgegeben (direkt unter dem Bild); 📍 Position geht vor
+  return lage ?? o.positionFest ?? (hochkant ? o.position : (o.positionQuer ?? 0.08));
 }
 
 export function zuAss(cues, o) {

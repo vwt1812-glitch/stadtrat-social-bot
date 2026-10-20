@@ -13,7 +13,7 @@ import { Mastodon, DIREKT, mastodonMedien } from "./mastodon.mjs";
 import { erwartetePosts, faelligeKontrollen, abfragezeitraum, auswerten } from "./kontrolle.mjs";
 import { Auftraege } from "./auftraege.mjs";
 import {
-  ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi, storyFoto, istStoryFormat, STORY_MASSE,
+  ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi, storyFoto, istStoryFormat, STORY_MASSE, storyLayout,
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
@@ -485,15 +485,16 @@ async function storyFassung(auftrag) {
     return ziel;
   }
   const masse = { ...STORY_MASSE, dauer: auftrag.masse.dauer };
+  const layout = storyLayout(layoutFuer(auftrag), auftrag.masse, masse);
   const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
   let ass = null;
   if (cues.length) {
     ass = datei(auftrag, "story.ass");
-    await fs.writeFile(ass, zuAss(cues, { ...masse, ...layoutFuer(auftrag) }));
+    await fs.writeFile(ass, zuAss(cues, { ...masse, ...layout }));
   }
   const ziel = datei(auftrag, "story.mp4");
   await rendern({
-    eingabe: auftrag.original, ausgabe: ziel, ass, masse, layout: layoutFuer(auftrag), video: config.video,
+    eingabe: auftrag.original, ausgabe: ziel, ass, masse, layout, video: config.video,
     bauchbinde: auftrag.bauchbinde, story: true,
   });
   return ziel;
