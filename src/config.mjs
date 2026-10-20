@@ -97,6 +97,11 @@ export function ladeConfig() {
       bauchbindeStart: Number(env("BAUCHBINDE_START", "0.5")),
       bauchbindeDauer: Number(env("BAUCHBINDE_DAUER", "4")),
     },
+    // Querformat-Videos für Instagram/TikTok in 9:16 (pro Video im Menü umschaltbar)
+    hochkant: {
+      netze: liste("HOCHKANT_NETZE").length ? liste("HOCHKANT_NETZE") : ["instagram", "instagram-standalone", "tiktok", "tiktok-business"],
+      standard: env("HOCHKANT_STANDARD", "nein") === "ja",
+    },
     bauchbinde: {
       name: env("BAUCHBINDE_NAME", ""),
       funktion: env("BAUCHBINDE_FUNKTION", ""),

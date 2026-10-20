@@ -115,6 +115,11 @@ test("Postiz-Anfragen pro Stunde mitzählen", () => {
   // eigene Story-Fassung (9:16) braucht einen Upload mehr – aber nur, wenn es Story-Kanäle gibt
   assert.equal(Postiz.bedarf({ medien: 1, hochgeladen: false, story: true, storyUpload: true, kanaele: [{ identifier: "instagram" }] }), 4);
   assert.equal(Postiz.bedarf({ medien: 1, hochgeladen: false, story: true, storyUpload: true, kanaele: [{ identifier: "x" }] }), 2);
+  // 9:16-Fassung für Instagram/TikTok: ein Upload mehr, aber nur wenn so ein Kanal dabei ist
+  assert.equal(Postiz.bedarf({ medien: 1, hochgeladen: false, storyUpload: true, hochkant: true, kanaele: [{ identifier: "instagram" }, { identifier: "x" }] }), 3);
+  assert.equal(Postiz.bedarf({ medien: 1, hochgeladen: false, storyUpload: true, hochkant: true, kanaele: [{ identifier: "x" }] }), 2);
+  // Story und Hochformat teilen sich die Fassung: nur ein zusätzlicher Upload
+  assert.equal(Postiz.bedarf({ medien: 1, hochgeladen: false, story: true, storyUpload: true, hochkant: true, kanaele: [{ identifier: "instagram" }] }), 4);
 });
 
 test("Zeichenlimit mit eigener Vorgabe", () => {
@@ -171,4 +176,26 @@ test("eigene Fassung je Kanal in der Postiz-Anfrage", async () => {
   const [x, fb] = gesendet[0].posts;
   assert.equal(x.value[0].content, "<p>Kurz für X</p>");
   assert.equal(fb.value[0].content, "<p>Langer Haupttext</p>");
+});
+
+test("9:16-Fassung nur für die Hochformat-Netzwerke", async () => {
+  const gesendet = [];
+  const altesFetch = globalThis.fetch;
+  globalThis.fetch = async (url, o) => {
+    gesendet.push(JSON.parse(o.body));
+    return new Response(JSON.stringify([{ postId: "p" }]), { status: 200 });
+  };
+  try {
+    const postiz = new Postiz({ url: "http://postiz", apiKey: "k", einstellungen: "/gibt/es/nicht.json" });
+    await postiz.beitrag({
+      typ: "now", zeit: new Date(0), caption: "Hallo",
+      medien: [{ id: "quer", path: "http://postiz/u/quer.mp4" }],
+      hochkantMedium: { id: "hoch", path: "http://postiz/u/hoch.mp4" },
+      kanaele: [{ id: "ig", identifier: "instagram" }, { id: "tt", identifier: "tiktok" }, { id: "x1", identifier: "x" }, { id: "yt", identifier: "youtube" }],
+    });
+  } finally {
+    globalThis.fetch = altesFetch;
+  }
+  const medium = Object.fromEntries(gesendet[0].posts.map((p) => [p.integration.id, p.value[0].image.map((i) => i.id).join()]));
+  assert.deepEqual(medium, { ig: "hoch", tt: "hoch", x1: "quer", yt: "quer" });
 });

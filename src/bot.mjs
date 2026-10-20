@@ -62,6 +62,7 @@ function limitFehler(auftrag, kanaele) {
   const bedarf = Postiz.bedarf({
     medien, hochgeladen: Boolean(auftrag.hochgeladen), story: auftrag.story, kanaele: postizKanaele,
     storyUpload: Boolean(auftrag.storyDatei && !auftrag.storyHochgeladen),
+    hochkant: hochkantAn(auftrag), hochkantNetze: config.hochkant.netze,
   });
   const frei = postiz.zaehler.wiederFrei(bedarf);
   if (!frei) return null;
@@ -211,6 +212,7 @@ function details(auftrag, alle) {
   const reposter = alle.filter((k) => auftrag.repost?.kanaele.includes(k.id));
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
   if (auftrag.story && art(auftrag) !== "text") zeilen.push(`📱 Zusätzlich als Story auf Instagram/Facebook${auftrag.storyDatei ? " (eigene 9:16-Fassung)" : ""}`);
+  if (hochkantAn(auftrag)) zeilen.push("📲 Instagram/TikTok bekommen eine eigene 9:16-Fassung, die anderen das Querformat");
   if (auftrag.bauchbinde && art(auftrag) === "video") zeilen.push(`🪪 Bauchbinde: ${bauchbindeText(auftrag.bauchbinde)}`);
   if (auftrag.untertitelLage && art(auftrag) === "video") {
     zeilen.push(`📍 Untertitel: ${LAGE_TEXT[auftrag.untertitelLage]}${auftrag.lageAutomatisch ? " – automatisch, unten wäre dein Gesicht verdeckt" : ""}`);
@@ -287,6 +289,9 @@ async function menueInhalt(auftrag) {
   if (art(auftrag) !== "text" && kanaele.some((k) => k.identifier.startsWith("instagram"))) optionen.push(knopf("🤝 Collab", auftrag, "collab"));
   if (repostKandidaten(alle, kanaele).length) optionen.push(knopf("🔁 Repost", auftrag, "repost"));
   if (art(auftrag) !== "text" && kanaele.some((k) => STORY[k.identifier])) optionen.push(knopf(auftrag.story ? "📱 Story ✓" : "📱 Story", auftrag, "story"));
+  if (hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))) {
+    optionen.push(knopf(auftrag.hochkant ? "📲 9:16 ✓" : "📲 9:16 für Insta", auftrag, "hochkant"));
+  }
   if (optionen.length) zeilen.push(optionen);
   zeilen.push([knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
@@ -400,6 +405,7 @@ async function neuesVideo(msg, video) {
   auftraege.aendern(auftrag.id, {
     art: "video", statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4",
     bauchbinde: config.bauchbinde.standard ? standardBauchbinde() : null,
+    hochkant: config.hochkant.standard,
   });
   einreihen(() => verarbeiten(auftrag.id, video.file_id));
 }
@@ -463,9 +469,16 @@ async function storyNoetig(auftrag) {
   return art(auftrag) === "foto";
 }
 
-/** Baut die Story-Fassung (9:16) im selben Layout wie den Beitrag; null, wenn keine nötig ist. */
+/** Querformat-Video, das sich für Instagram/TikTok in 9:16 umbauen lässt? */
+const hochkantMoeglich = (auftrag) => art(auftrag) === "video" && Boolean(auftrag.masse) && !istStoryFormat(auftrag.masse);
+const hochkantAn = (auftrag) => Boolean(auftrag.hochkant) && hochkantMoeglich(auftrag);
+
+/**
+ * Baut die eigene 9:16-Fassung im selben Layout wie den Beitrag – für die Story und, bei Videos,
+ * für Instagram/TikTok („📲 9:16“); null, wenn keine nötig ist.
+ */
 async function storyFassung(auftrag) {
-  if (!auftrag.story || !(await storyNoetig(auftrag))) return null;
+  if (!(auftrag.story || hochkantAn(auftrag)) || !(await storyNoetig(auftrag))) return null;
   if (art(auftrag) === "foto") {
     const ziel = datei(auftrag, "story.jpg");
     await storyFoto({ eingabe: auftrag.medien[0], ausgabe: ziel });
@@ -488,7 +501,7 @@ async function storyFassung(auftrag) {
 
 /** Story-Fassung neu bauen (oder verwerfen) und als eigene Vorschau schicken. */
 async function storyAktualisieren(auftrag) {
-  if (auftrag.statusNachricht) await schritt(auftrag, "📱 Baue die Story-Fassung (9:16) …");
+  if (auftrag.statusNachricht && (auftrag.story || hochkantAn(auftrag))) await schritt(auftrag, "📱 Baue die 9:16-Fassung …");
   let storyDatei = null;
   try {
     storyDatei = await storyFassung(auftrag);
@@ -508,8 +521,9 @@ async function storyAktualisieren(auftrag) {
     senden = datei(auftrag, "story-vorschau.mp4");
     await vorschau(storyDatei, senden);
   }
+  const wofuer = [hochkantAn(auftrag) && "Instagram/TikTok", auftrag.story && "Story"].filter(Boolean).join(" und ");
   await tg.datei(auftrag.chatId, "sendVideo", "video", senden, {
-    caption: "Story-Vorschau", supports_streaming: "true",
+    caption: `9:16-Fassung für ${wofuer}`, supports_streaming: "true",
     width: String(STORY_MASSE.breite), height: String(STORY_MASSE.hoehe),
   });
   return auftrag;
@@ -679,8 +693,10 @@ async function veroeffentlichen(auftrag) {
         auftrag = auftraege.aendern(auftrag.id, { hochgeladen });
       }
       const story = auftrag.story && art(auftrag) !== "text";
-      if (story && auftrag.storyDatei && !auftrag.storyHochgeladen && postizKanaele.some((k) => STORY[k.identifier])) {
-        await zeigeMenue(auftrag, { text: "⏫ Lade die Story-Fassung zu Postiz hoch …", reply_markup: { inline_keyboard: [] } });
+      const hochkant = hochkantAn(auftrag) && postizKanaele.some((k) => config.hochkant.netze.includes(k.identifier));
+      const fassungGebraucht = (story && postizKanaele.some((k) => STORY[k.identifier])) || hochkant;
+      if (fassungGebraucht && auftrag.storyDatei && !auftrag.storyHochgeladen) {
+        await zeigeMenue(auftrag, { text: "⏫ Lade die 9:16-Fassung zu Postiz hoch …", reply_markup: { inline_keyboard: [] } });
         auftrag = auftraege.aendern(auftrag.id, { storyHochgeladen: await postiz.hochladen(auftrag.storyDatei) });
       }
       await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
@@ -688,6 +704,7 @@ async function veroeffentlichen(auftrag) {
         typ, zeit, caption: auftrag.caption, captions: auftrag.captions, medien: auftrag.hochgeladen ?? [], kanaele: postizKanaele,
         collabs: art(auftrag) === "text" ? [] : auftrag.collabs, repost: auftrag.repost, story,
         storyMedium: story && auftrag.storyDatei ? auftrag.storyHochgeladen : null,
+        hochkantMedium: hochkant && auftrag.storyDatei ? auftrag.storyHochgeladen : null, hochkantNetze: config.hochkant.netze,
       });
       auftrag = auftraege.aendern(auftrag.id, { postiz: ergebnis });
     }
@@ -901,6 +918,22 @@ async function knopfGedrueckt(cq) {
       await antwort();
       const info = { oben: "Untertitel kommen nach oben.", mitte: "Untertitel kommen in die Mitte.", unten: "Untertitel kommen wieder nach unten." }[arg];
       return neuRendern(auftraege.aendern(id, { untertitelLage: lage, lageAutomatisch: false }), info);
+    }
+    case "hochkant": {
+      auftrag = auftraege.aendern(id, { hochkant: !auftrag.hochkant });
+      if (auftrag.hochkant && !auftrag.storyDatei) {
+        auftrag = auftraege.aendern(id, { status: "arbeitet" });
+        await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
+        einreihen(async () => {
+          await storyAktualisieren(auftraege.get(id)).catch((e) => console.error(e));
+          await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
+        });
+        return antwort("Baue die 9:16-Fassung für Instagram/TikTok …");
+      }
+      // Ohne Story wird die Fassung nicht mehr gebraucht
+      if (!auftrag.hochkant && !auftrag.story) auftrag = auftraege.aendern(id, { storyDatei: null, storyHochgeladen: null });
+      await zeigeMenue(auftrag);
+      return antwort(auftrag.hochkant ? "Instagram/TikTok bekommen die 9:16-Fassung" : "Alle Kanäle bekommen das Querformat");
     }
     case "story": {
       auftrag = auftraege.aendern(id, { story: !auftrag.story });

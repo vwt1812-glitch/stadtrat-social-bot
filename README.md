@@ -33,6 +33,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🤝 Collab | Instagram-Collab-Partner (bis zu 3), z. B. `@piraten_nuernberg` – erscheint, wenn ein Instagram-Kanal gewählt ist |
 | 🔁 Repost | andere X- bzw. LinkedIn-Konten teilen den Beitrag nach dem Erscheinen, sofort oder verzögert (Postiz-„Re-poster“) |
 | 📱 Story | Foto/Video zusätzlich als Story auf Instagram und Facebook (erstes Bild bzw. das Video); was nicht 9:16 ist, bekommt eine eigene Story-Fassung mit Vorschau |
+| 📲 9:16 für Insta | nur Querformat-Videos: Instagram (als Reel) und TikTok bekommen dieselbe 9:16-Fassung wie die Story, X, Facebook, LinkedIn, YouTube usw. das Querformat (Standard: `HOCHKANT_STANDARD`) |
 | 🗑️ Verwerfen | Vorschlag löschen |
 
 ### Texte pro Kanal
@@ -205,6 +206,10 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   Videos mittig auf einer unscharfen Kopie, oben ein weicher dunkler Verlauf mit dem Logo in heller Schrift
   (`quer-dunkel`), Untertitel und Bauchbinde wie hochkant. Fotos kommen samt ihrem Logo wie im Beitrag, höchstens
   80 % hoch, damit das Logo unter der Kopfzeile bleibt. Die Story-Fassung wird beim Posten extra hochgeladen.
+- **Querformat für Instagram/TikTok:** Ein Querformat-Video erscheint in Reels und TikTok sonst klein mit Balken.
+  Mit **📲 9:16 für Insta** bekommen die Netzwerke aus `HOCHKANT_NETZE` (Standard Instagram und TikTok) die
+  9:16-Fassung, alle anderen weiter das Querformat. Story und Reel teilen sich die Datei – ein Upload mehr, nicht
+  zwei. `HOCHKANT_STANDARD=ja` schaltet das für jedes Querformat-Video gleich ein.
 - **Glossar:** `glossar.txt` – Namen, die Whisper richtig schreiben soll, und automatische Ersetzungen.
 - **Netzwerk-Einstellungen:** `kanaele.example.json` nach `kanaele.json` kopieren. Schlüssel ist der Netzwerk-Typ
   (`instagram`, `tiktok`, `youtube`, …) oder eine Kanal-ID aus `/kanaele`. Die Werte gehen als `settings` an Postiz.

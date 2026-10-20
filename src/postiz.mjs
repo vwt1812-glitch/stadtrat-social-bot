@@ -113,6 +113,12 @@ export class AnfragenZaehler {
   }
 }
 
+/**
+ * Netzwerke, die Videos im Hochformat zeigen (Instagram als Reel, TikTok). Auf Wunsch bekommen sie
+ * statt eines Querformat-Videos die eigene 9:16-Fassung; per HOCHKANT_NETZE änderbar.
+ */
+export const HOCHKANT = ["instagram", "instagram-standalone", "tiktok", "tiktok-business"];
+
 /** Netzwerke mit Stories und die Einstellung dafür. */
 export const STORY = {
   instagram: { post_type: "story", collaborators: [] },
@@ -304,9 +310,14 @@ export class Postiz {
    * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
    * @param {boolean} [o.story] zusätzlich eine Story auf Instagram/Facebook (erstes Bild/Video)
    * @param {{id:string,path:string}} [o.storyMedium] eigene Story-Fassung (9:16), sonst das erste Medium
+   * @param {{id:string,path:string}} [o.hochkantMedium] 9:16-Fassung für die Hochformat-Netzwerke statt `medien`
+   * @param {string[]} [o.hochkantNetze] welche Netzwerke die 9:16-Fassung bekommen
    * @returns {Promise<{post: {postId:string}[], story?: {postId:string}[]}>} IDs für die Kontrolle
    */
-  async beitrag({ typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, storyMedium = null }) {
+  async beitrag({
+    typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, storyMedium = null,
+    hochkantMedium = null, hochkantNetze = HOCHKANT,
+  }) {
     const eigene = this.eigeneEinstellungen();
     const body = {
       type: typ,
@@ -315,7 +326,10 @@ export class Postiz {
       tags: [],
       posts: kanaele.map((k) => ({
         integration: { id: k.id },
-        value: [{ content: alsHtml(captions[k.id] ?? caption), image: medien }],
+        value: [{
+          content: alsHtml(captions[k.id] ?? caption),
+          image: hochkantMedium && hochkantNetze.includes(k.identifier) ? [hochkantMedium] : medien,
+        }],
         settings: einstellungenFuer(k, { caption: captions[k.id] ?? caption, collabs, repost, eigene }),
       })),
     };
@@ -334,9 +348,13 @@ export class Postiz {
     return ergebnis;
   }
 
-  /** So viele Anfragen braucht ein Beitrag (Uploads + Post + ggf. Story samt eigenem Upload). */
-  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false }) {
+  /**
+   * So viele Anfragen braucht ein Beitrag: Uploads + Post, ggf. Story-Post, und der Upload der
+   * eigenen 9:16-Fassung (`storyUpload`), wenn Story oder Hochformat-Netzwerke sie brauchen.
+   */
+  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, hochkant = false, hochkantNetze = HOCHKANT }) {
     const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
-    return (hochgeladen ? 0 : medien) + 1 + (mitStory ? 1 + (storyUpload ? 1 : 0) : 0);
+    const mitHochkant = hochkant && medien && kanaele.some((k) => hochkantNetze.includes(k.identifier));
+    return (hochgeladen ? 0 : medien) + 1 + (mitStory ? 1 : 0) + (storyUpload && (mitStory || mitHochkant) ? 1 : 0);
   }
 }
