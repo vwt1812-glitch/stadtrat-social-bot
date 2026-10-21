@@ -10,8 +10,8 @@
     "test": "TZ=Europe/Berlin node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "0.135.0",
-    "openai": "7.39.0",
+    "@anthropic-ai/sdk": "1.0.0",
+    "openai": "7.41.0",
     "twitter-text": "3.1.0"
   }
 }
