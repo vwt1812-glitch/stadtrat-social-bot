@@ -22,5 +22,6 @@ jobs:
         run: |
           node --version
           node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); if (major !== 22 || minor < 23 || (minor === 23 && patch < 4)) process.exit(1)"
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npm ci
       - run: npm test
