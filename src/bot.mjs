@@ -227,6 +227,9 @@ function details(auftrag, alle) {
   if (auftrag.nurStory) zeilen.push("📱 Ausschließlich als Story – kein Feed-Beitrag");
   else if (auftrag.story && art(auftrag) !== "text") zeilen.push(`📱 Zusätzlich als Story auf Instagram/Facebook${auftrag.storyDatei ? " (eigene 9:16-Fassung)" : ""}`);
   if (auftrag.storyText && art(auftrag) === "foto" && auftrag.story) zeilen.push(`✏️ Bildtext: ${html(auftrag.storyText)}`);
+  if (auftrag.story && art(auftrag) === "foto" && auftrag.storyLogoPosition && auftrag.storyLogoPosition !== "auto") {
+    zeilen.push(`🏷️ Story-Logo: ${html(auftrag.storyLogoPosition)}`);
+  }
   if (hochkantAn(auftrag)) zeilen.push("📲 Instagram/TikTok bekommen eine eigene 9:16-Fassung, die anderen das Querformat");
   if (auftrag.bauchbinde && art(auftrag) === "video") zeilen.push(`🪪 Bauchbinde: ${bauchbindeText(auftrag.bauchbinde)}`);
   if (auftrag.untertitelLage && art(auftrag) === "video") {
@@ -244,6 +247,28 @@ let warteschlange = Promise.resolve();
 const einreihen = (fn) => (warteschlange = warteschlange.then(fn, fn));
 
 const knopf = (text, auftrag, aktion) => ({ text, callback_data: `a:${auftrag.id}:${aktion}` });
+
+const STORY_LOGO_LAGEN = [
+  ["auto", "✨ Automatisch"], ["oben-links", "↖️ Oben links"], ["oben-mitte", "⬆️ Oben Mitte"],
+  ["oben-rechts", "↗️ Oben rechts"], ["unten-links", "↙️ Unten links"],
+  ["unten-mitte", "⬇️ Unten Mitte"], ["unten-rechts", "↘️ Unten rechts"],
+];
+
+function storyLayoutMenue(auftrag) {
+  const zeilen = STORY_LOGO_LAGEN.map(([wert, name]) => [
+    knopf(`${(auftrag.storyLogoPosition ?? "auto") === wert ? "🔘" : "⚪"} ${name}`, auftrag, `sl:${wert}`),
+  ]);
+  if (auftrag.storyText) {
+    zeilen.push([knopf("✏️ Bildtext-Position:", auftrag, "slmenu")]);
+    zeilen.push(["auto", "oben", "mitte", "unten"].map((wert) =>
+      knopf(`${(auftrag.storyTextPosition ?? "auto") === wert ? "🔘" : "⚪"} ${wert}`, auftrag, `stp:${wert}`)));
+  }
+  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  return {
+    text: "<b>Story-Layout</b>\nLogo bevorzugt auf freien unscharfen Flächen. Manuelle Positionen bleiben innerhalb der Instagram-/Facebook-Safe-Area und weichen bei Gesichtern gegebenenfalls aus. Nach einer Änderung kommt eine neue Vorschau.",
+    reply_markup: { inline_keyboard: zeilen },
+  };
+}
 const datei = (auftrag, name) => path.join(auftrag.ordner, name);
 
 const HILFE = `<b>So funktioniert's</b>
@@ -311,7 +336,10 @@ async function menueInhalt(auftrag) {
   if (art(auftrag) !== "text" && alle.some((k) => STORY[k.identifier] && (auftrag.kunde == null || k.customer?.id === auftrag.kunde))) {
     optionen.push(knopf(auftrag.nurStory ? "📱 Nur Story ✓" : "📱 Nur Story", auftrag, "nurst"));
   }
-  if (art(auftrag) === "foto" && auftrag.story) optionen.push(knopf(auftrag.storyText ? "✏️ Bildtext ✓" : "✏️ Text ins Bild", auftrag, "storytext"));
+  if (art(auftrag) === "foto" && auftrag.story) {
+    optionen.push(knopf(auftrag.storyText ? "✏️ Bildtext ✓" : "✏️ Text ins Bild", auftrag, "storytext"));
+    optionen.push(knopf("🖼️ Story-Layout", auftrag, "slmenu"));
+  }
   if (!auftrag.nurStory && hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))) {
     optionen.push(knopf(auftrag.hochkant ? "📲 9:16 ✓" : "📲 9:16 für Insta", auftrag, "hochkant"));
   }
@@ -1023,6 +1051,35 @@ async function knopfGedrueckt(cq) {
       }
       await zeigeMenue(auftrag);
       return antwort("Nur Story – kein normaler Beitrag");
+    }
+    case "slmenu":
+      await zeigeMenue(auftrag, storyLayoutMenue(auftrag));
+      return antwort();
+    case "sl":
+    case "stp": {
+      if (art(auftrag) !== "foto" || !auftrag.story) return antwort("Nur für Fotostorys verfügbar.", true);
+      if (aktion === "sl" && !STORY_LOGO_LAGEN.some(([wert]) => wert === arg)) return antwort("Ungültige Logoposition.", true);
+      if (aktion === "stp" && !["auto", "oben", "mitte", "unten"].includes(arg)) return antwort("Ungültige Textposition.", true);
+      const feld = aktion === "sl" ? "storyLogoPosition" : "storyTextPosition";
+      if ((auftrag[feld] ?? "auto") === arg) {
+        await zeigeMenue(auftrag, storyLayoutMenue(auftrag));
+        return antwort("Bleibt unverändert.");
+      }
+      auftrag = auftraege.aendern(id, { [feld]: arg, status: "arbeitet", storyHochgeladen: null });
+      await antwort("Erstelle die Story-Vorschau neu …");
+      await tg.aufruf("editMessageReplyMarkup", {
+        chat_id: auftrag.chatId, message_id: auftrag.menueNachricht,
+      }).catch(() => {});
+      einreihen(async () => {
+        try { await storyAktualisieren(auftraege.get(id)); }
+        catch (e) {
+          console.error(e);
+          auftraege.aendern(id, { storyDatei: null, storyHochgeladen: null });
+          await tg.senden(auftrag.chatId, `❌ Story-Layout fehlgeschlagen: <pre>${html(e.message)}</pre>`);
+        }
+        await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
+      });
+      return;
     }
     case "storytext": {
       if (art(auftrag) !== "foto" || !auftrag.story) return antwort("Bildtext ist nur für Foto-Storys verfügbar.", true);
