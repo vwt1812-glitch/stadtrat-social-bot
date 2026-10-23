@@ -73,8 +73,8 @@ export async function storyFotoText({ eingabe, ausgabe, text, layout }) {
     logo: layout.logoBereich, wunsch: layout.storyTextPosition ?? "auto",
   });
   const filter = [
-    `drawbox=x=54:y=${oben}:w=972:h=${hoehe}:color=0x1D1D1B@0.84:t=fill`,
-    `drawbox=x=54:y=${oben}:w=11:h=${hoehe}:color=0xF18616@1:t=fill`,
+    `drawbox=x=70:y=${oben}:w=940:h=${hoehe}:color=0x1D1D1B@0.84:t=fill`,
+    `drawbox=x=70:y=${oben}:w=11:h=${hoehe}:color=0xF18616@1:t=fill`,
   ];
   for (let i = 0; i < zeilen.length; i++) {
     const dateiname = `story-text-zeile-${i}.txt`;
