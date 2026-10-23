@@ -204,8 +204,8 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   Bild oder reicht der Kopf ins Logo, gibt es einen 💡-Tipp für die nächste Aufnahme. `pi/install.sh` richtet
   dafür Python mit OpenCV in `.venv` ein; fehlt es, bleibt die Gesichtssuche einfach aus.
 - **Storys:** Instagram und Facebook zeigen oben Fortschrittsbalken und Profil, unten Antworten/Interaktionen.
-  Der Bot nutzt dafür konservative Sicherheitsbereiche (oben 14 %, unten 16 %); für Reels/TikTok oben 14 %,
-  unten 23 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
+  Der Bot nutzt dafür konservative Sicherheitsbereiche (oben 14 %, unten 20 %); für Reels/TikTok oben 14 %,
+  unten 35 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
   Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung mit unscharfem Hintergrund.
   Fotos werden **direkt aus dem Original** bearbeitet: erst Hintergrund und scharfes Bild, dann das Logo,
   damit es nicht in den unscharfen Hintergrund eingebrannt ist. Das Logo landet bevorzugt auf einer ausreichend
