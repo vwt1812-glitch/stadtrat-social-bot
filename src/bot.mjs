@@ -488,7 +488,7 @@ async function storyNoetig(auftrag) {
 
 /** Querformat-Video, das sich für Instagram/TikTok in 9:16 umbauen lässt? */
 const hochkantMoeglich = (auftrag) => art(auftrag) === "video" && Boolean(auftrag.masse) && !istStoryFormat(auftrag.masse);
-const hochkantAn = (auftrag) => Boolean(auftrag.hochkant) && hochkantMoeglich(auftrag);
+const hochkantAn = (auftrag) => !auftrag.nurStory && Boolean(auftrag.hochkant) && hochkantMoeglich(auftrag);
 
 /**
  * Baut die eigene 9:16-Fassung im selben Layout wie den Beitrag – für die Story und, bei Videos,
@@ -499,7 +499,10 @@ async function storyFassung(auftrag) {
   if (art(auftrag) === "foto") {
     const ziel = datei(auftrag, "story.jpg");
     await storyFoto({ eingabe: auftrag.medien[0], ausgabe: ziel });
-    return ziel;
+    if (!auftrag.storyText?.trim()) return ziel;
+    const mitText = datei(auftrag, "story-text.jpg");
+    await storyFotoText({ eingabe: ziel, ausgabe: mitText, text: auftrag.storyText, layout: config.layout });
+    return mitText;
   }
   const masse = { ...STORY_MASSE, dauer: auftrag.masse.dauer };
   const layout = storyLayout(layoutFuer(auftrag), auftrag.masse, masse);
@@ -524,9 +527,10 @@ async function storyAktualisieren(auftrag) {
   try {
     storyDatei = await storyFassung(auftrag);
   } catch (e) {
-    // Der Beitrag selbst soll daran nicht scheitern – die Story nimmt dann das normale Medium
+    // Bildtext darf nicht stillschweigend verschwinden: dann NICHT ohne Text veröffentlichen.
     console.error(e);
-    await tg.senden(auftrag.chatId, `⚠️ Story-Fassung ging nicht, die Story nimmt das normale Medium:\n<pre>${html(e.message)}</pre>`);
+    if (auftrag.storyText?.trim()) throw e;
+    await tg.senden(auftrag.chatId, `⚠️ Story-Fassung ging nicht, die Story nimmt dann das normale Medium:\n<pre>${html(e.message)}</pre>`);
   }
   auftrag = auftraege.aendern(auftrag.id, { storyDatei, storyHochgeladen: null });
   if (!storyDatei) return auftrag;
@@ -704,10 +708,13 @@ async function veroeffentlichen(auftrag) {
     if (postizKanaele.length && !auftrag.postiz) {
       const limit = limitFehler(auftrag, kanaele);
       if (limit) throw new Error(limit);
-      if (medien.length && !auftrag.hochgeladen) {
-        await zeigeMenue(auftrag, { text: `⏫ Lade ${medien.length === 1 ? "Datei" : `${medien.length} Dateien`} zu Postiz hoch …`, reply_markup: { inline_keyboard: [] } });
+      // Bei reinen Storys weder Karussellbilder noch den normalen Feed-Beitrag hochladen:
+      // wenn es eine gerenderte 9:16-Fassung gibt, wird nur diese hochgeladen.
+      const normaleMedien = auftrag.nurStory ? (auftrag.storyDatei ? [] : medien.slice(0, 1)) : medien;
+      if (normaleMedien.length && !auftrag.hochgeladen) {
+        await zeigeMenue(auftrag, { text: `⏫ Lade ${normaleMedien.length === 1 ? "Datei" : `${normaleMedien.length} Dateien`} zu Postiz hoch …`, reply_markup: { inline_keyboard: [] } });
         const hochgeladen = [];
-        for (const d of medien) hochgeladen.push(await postiz.hochladen(d));
+        for (const d of normaleMedien) hochgeladen.push(await postiz.hochladen(d));
         auftrag = auftraege.aendern(auftrag.id, { hochgeladen });
       }
       const story = auftrag.story && art(auftrag) !== "text";
@@ -720,7 +727,8 @@ async function veroeffentlichen(auftrag) {
       await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
       const ergebnis = await postiz.beitrag({
         typ, zeit, caption: auftrag.caption, captions: auftrag.captions, medien: auftrag.hochgeladen ?? [], kanaele: postizKanaele,
-        collabs: art(auftrag) === "text" ? [] : auftrag.collabs, repost: auftrag.repost, story,
+        collabs: art(auftrag) === "text" || auftrag.nurStory ? [] : auftrag.collabs,
+        repost: auftrag.nurStory ? null : auftrag.repost, story, nurStory: Boolean(auftrag.nurStory),
         storyMedium: story && auftrag.storyDatei ? auftrag.storyHochgeladen : null,
         hochkantMedium: hochkant && auftrag.storyDatei ? auftrag.storyHochgeladen : null, hochkantNetze: config.hochkant.netze,
       });
@@ -744,10 +752,13 @@ async function veroeffentlichen(auftrag) {
     auftraege.aendern(auftrag.id, { status: typ === "now" ? "gepostet" : "geplant" });
     const namen = kanaele.filter((k) => k.id !== DIREKT || auftrag.mastodon).map((k) => html(k.name)).join(", ");
     const text = typ === "now"
-      ? `✅ <b>Wird jetzt gepostet</b> auf ${namen}.`
-      : `📅 <b>Geplant für ${zeitText(zeit)}</b> auf ${namen}.\nÄndern oder löschen kannst du ihn im Postiz-Kalender${auftrag.mastodon ? " (Mastodon: in den geplanten Beiträgen dort)" : ""}.`;
+      ? `✅ <b>Wird jetzt ${auftrag.nurStory ? "als Story" : "gepostet"}</b> auf ${namen}.`
+      : `📅 <b>${auftrag.nurStory ? "Story geplant" : "Geplant"} für ${zeitText(zeit)}</b> auf ${namen}.\nÄndern oder löschen kannst du den Eintrag im Postiz-Kalender${auftrag.mastodon ? " (Mastodon: in den geplanten Beiträgen dort)" : ""}.`;
     const kontrolle = postizKanaele.length ? "\nIch schaue nach dem Termin nach, ob Postiz wirklich veröffentlicht hat." : "";
-    await zeigeMenue(auftrag, { text: `${text}${kontrolle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, reply_markup: { inline_keyboard: [] } });
+    await zeigeMenue(auftrag, {
+      text: `${text}${kontrolle}${auftrag.nurStory ? "" : `\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`}`,
+      reply_markup: { inline_keyboard: [] },
+    });
     if (hinweise.length) await tg.senden(auftrag.chatId, html(hinweise.join("\n")));
   } catch (e) {
     console.error(e);
@@ -956,6 +967,50 @@ async function knopfGedrueckt(cq) {
       const info = { oben: "Untertitel kommen nach oben.", mitte: "Untertitel kommen in die Mitte.", unten: "Untertitel kommen wieder nach unten." }[arg];
       return neuRendern(auftraege.aendern(id, { untertitelLage: lage, lageAutomatisch: false }), info);
     }
+    case "nurst": {
+      const alle = await alleKanaele();
+      if (auftrag.nurStory) {
+        auftrag = auftraege.aendern(id, {
+          nurStory: false, story: Boolean(auftrag.vorherigeStory),
+          kanaele: auftrag.vorherigeKanaele ?? auftrag.kanaele,
+          vorherigeStory: null, vorherigeKanaele: null,
+        });
+        await zeigeMenue(auftrag);
+        return antwort("Wieder normaler Beitrag");
+      }
+      await gewaehlteKanaele(auftrag);
+      const storyKanaele = kanaeleVonKunde(alle, auftrag.kunde).filter((k) => STORY[k.identifier]);
+      if (!storyKanaele.length) return antwort("Für diesen Kunden ist kein Instagram-/Facebook-Kanal verbunden.", true);
+      const vorherige = [...auftrag.kanaele];
+      const auswahl = storyKanaele.filter((k) => vorherige.includes(k.id));
+      auftrag = auftraege.aendern(id, {
+        nurStory: true, story: true, vorherigeStory: Boolean(auftrag.story),
+        vorherigeKanaele: vorherige, kanaele: (auswahl.length ? auswahl : storyKanaele).map((k) => k.id),
+      });
+      if (!auftrag.storyDatei && await storyNoetig(auftrag)) {
+        auftrag = auftraege.aendern(id, { status: "arbeitet" });
+        await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
+        einreihen(async () => {
+          try {
+            await storyAktualisieren(auftraege.get(id));
+          } catch (e) {
+            console.error(e);
+            await tg.senden(auftrag.chatId, `❌ Story konnte nicht erstellt werden: <pre>${html(e.message)}</pre>`);
+          }
+          await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
+        });
+        return antwort("Erstelle die reine Story …");
+      }
+      await zeigeMenue(auftrag);
+      return antwort("Nur Story – kein normaler Beitrag");
+    }
+    case "storytext": {
+      if (art(auftrag) !== "foto" || !auftrag.story) return antwort("Bildtext ist nur für Foto-Storys verfügbar.", true);
+      auftraege.aendern(id, { wartetAuf: "storytext" });
+      await tg.senden(auftrag.chatId,
+        `Schick mir den Text, der direkt auf dem Story-Foto stehen soll (maximal 6 Zeilen).\n\n<b>Aktuell:</b> ${html(auftrag.storyText || "kein Text")}\n\nMit <code>-</code> entfernst du den Bildtext. Mit <code>abbrechen</code> kehrst du zurück.`);
+      return antwort();
+    }
     case "hochkant": {
       auftrag = auftraege.aendern(id, { hochkant: !auftrag.hochkant });
       if (auftrag.hochkant && !auftrag.storyDatei) {
@@ -973,6 +1028,7 @@ async function knopfGedrueckt(cq) {
       return antwort(auftrag.hochkant ? "Instagram/TikTok bekommen die 9:16-Fassung" : "Alle Kanäle bekommen das Querformat");
     }
     case "story": {
+      if (auftrag.nurStory) return antwort("Im Modus Nur Story bleibt Story aktiv.", true);
       auftrag = auftraege.aendern(id, { story: !auftrag.story });
       if (auftrag.story && !auftrag.storyDatei && (await storyNoetig(auftrag))) {
         // Nicht 9:16: eigene Story-Fassung bauen, danach kommt das Menü neu
@@ -1008,6 +1064,7 @@ async function knopfGedrueckt(cq) {
     case "k": {
       const kanal = (await alleKanaele())[Number(arg)];
       if (kanal) {
+        if (auftrag.nurStory && !STORY[kanal.identifier]) return antwort("Im Modus Nur Story nur Instagram/Facebook wählen.", true);
         await gewaehlteKanaele(auftrag);
         const liste = auftrag.kanaele.includes(kanal.id) ? auftrag.kanaele.filter((k) => k !== kanal.id) : [...auftrag.kanaele, kanal.id];
         auftrag = auftraege.aendern(id, { kanaele: liste });
@@ -1037,6 +1094,25 @@ async function texteingabe(auftrag, text) {
     return neuesMenue(auftrag);
   }
   switch (auftrag.wartetAuf) {
+    case "storytext": {
+      const neu = text.trim() === "-" ? "" : text.trim();
+      if (neu) {
+        try { storyTextZeilen(neu); }
+        catch (e) { return tg.senden(auftrag.chatId, `❌ ${html(e.message)} Bitte kürzeren Text schicken.`); }
+      }
+      auftrag = auftraege.aendern(auftrag.id, { storyText: neu, wartetAuf: null, status: "arbeitet" });
+      await tg.senden(auftrag.chatId, "✏️ Erstelle Story-Vorschau mit Bildtext …");
+      einreihen(async () => {
+        try { await storyAktualisieren(auftraege.get(auftrag.id)); }
+        catch (e) {
+          console.error(e);
+          auftraege.aendern(auftrag.id, { storyDatei: null, storyHochgeladen: null });
+          await tg.senden(auftrag.chatId, `❌ Bildtext fehlgeschlagen: <pre>${html(e.message)}</pre>`);
+        }
+        await neuesMenue(auftraege.aendern(auftrag.id, { status: "vorschau" }));
+      });
+      return;
+    }
     case "caption":
       auftrag = auftraege.aendern(auftrag.id, { caption: text.trim(), captionQuelle: "eigene", wartetAuf: null });
       auftrag = await captionsZuruecksetzen(auftrag);
