@@ -5,6 +5,15 @@ Caption-Vorschlag zurück → anpassen → mit **Ja** sofort oder zu einer besti
 Alles läuft lokal, Postiz ist selbst gehostet. Nur wenn ein KI-Schlüssel eingetragen ist (Claude oder OpenAI),
 gehen Transkript, Fotos bzw. Text für den Caption-Vorschlag an den jeweiligen Anbieter.
 
+## Lokal und ohne externen KI-API-Key
+
+Der Redaktionsassistent funktioniert **ohne `ANTHROPIC_API_KEY` oder `OPENAI_API_KEY`**:
+- `/idee Ein Gedanke`: bleibt lokal in `daten/ideen.json`; `/ideen` öffnet gespeicherte Ideen erneut.
+- Text (oder eine Telegram-Sprachnachricht) schicken → Textvorschau → **Sharepic**, **Storygrafik** oder **Idee speichern**. Sprache wird mit dem bereits installierten whisper.cpp erkannt. Sprachnachrichten sind auf vier Minuten begrenzt.
+- Ein digitales PDF mit einem Antrag schicken → **belegte Textstellen** auswählen, selbst korrigieren, als Grafik oder Post veröffentlichen. Für PDFs ist `pdftotext` aus `poppler-utils` nötig; Installations- und Update-Skript installieren das Paket. Scans ohne Textebene können nicht gelesen werden, es gibt keine OCR.
+- Keine unbelegten Behauptungen zu Antragsstatus oder politischen Entscheidungen. Die vorgeschlagenen Passagen sind **keine KI-Zusammenfassungen**, sondern dokumentgetreue (teilweise mit […] gekürzte) Auszüge. Vor Veröffentlichung immer Kontext und Fakten prüfen.
+- Für frei formulierte, intelligentere Texte kann die bisherige optionale Caption-KI weiter verwendet werden; sie ist für die neuen Funktionen nicht erforderlich.
+
 ## Ablauf in Telegram
 
 Was du schickst, bestimmt die Art des Beitrags:
@@ -13,7 +22,9 @@ Was du schickst, bestimmt die Art des Beitrags:
 |---|---|
 | **Video** – am besten **als Datei** (📎 → Datei), sonst komprimiert Telegram es | Sprache erkennen (whisper.cpp), Logo und Untertitel einbrennen, Caption aus dem Gesagten vorschlagen |
 | **Foto** oder **Album** (bis 10 Fotos = Karussell) | Logo draufsetzen, auf max. 2048 px verkleinern. Text in der Bildunterschrift wird die Caption; ohne Text schlägt Claude eine vor (sieht sich dafür die Fotos an), ohne Claude gibt es nur die Hashtags |
-| **Text** | wird unverändert zum Textbeitrag; mit „Neu formulieren“ macht Claude daraus einen fertigen Beitrag |
+| **Text** | wird unverändert zum Textbeitrag; mit „🖼️ Sharepic“ oder „📱 Storygrafik“ entsteht eine lokale Grafik – ohne KI-Schlüssel |
+| **Telegram-Sprachnachricht** | wird mit dem bestehenden lokalen whisper.cpp transkribiert → bearbeitbarer Textentwurf, Sharepic, Story oder Idee |
+| **Antrags-PDF** (mit auswählbarem Text) | erste 15 Seiten mit lokalem pdftotext auslesen → Originaltitel, Beschlussvorschlag und Begründung als überprüfbare Textauszüge; keine erfundenen Zusammenfassungen |
 
 Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 
@@ -22,6 +33,10 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | ✅ Jetzt posten | fragt nach („Wirklich jetzt auf … posten?“) und postet nach **Ja** |
 | 🕐 Planen | Heute/Morgen-Vorschläge, nächster freier Postiz-Slot oder freie Eingabe wie `Fr 18 Uhr`, `24.10. 19:30`, `in 2 Stunden` |
 | ✏️ Caption ändern | schickt den aktuellen Text zum Kopieren, die nächste Nachricht ist die neue Caption |
+| 🖼️ Sharepic / 📱 Storygrafik | bei Textentwürfen: eine fertige JPEG-Grafik in 4:5 oder 9:16 erzeugen, mit Logo und Inter; Text wird für das Motiv ggf. sichtbar gekürzt |
+| ✏️ Grafiktext | Text des Sharepics oder der Storygrafik bearbeiten und neue Vorschau bauen |
+| 💾 Idee speichern | den Text lokal dauerhaft ablegen; mit `/ideen` wieder aufrufen |
+| 📄 Andere Antragspassage | ausschließlich bei PDF-Entwürfen: im Dokument gefundenen Titel, Beschlussvorschlag oder Auszug auswählen |
 | 🔄 Neu formulieren | nur mit Claude: Wunsch eingeben (`kürzer`, `lockerer`, …) |
 | 📍 Position | nur Video: Untertitel oben, in der Mitte oder unten (Standard) – das Video wird neu gebaut. Verdecken sie unten dein Gesicht, legt der Bot sie schon selbst woanders hin |
 | 🪪 Bauchbinde | nur Video: Name und Funktion am Anfang einblenden – Standard aus `BAUCHBINDE_NAME`/`_FUNKTION` oder ein anderer Name, z. B. für Gäste |
