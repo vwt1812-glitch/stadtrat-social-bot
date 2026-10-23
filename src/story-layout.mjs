@@ -95,22 +95,48 @@ export function logoPlatzierung({
   return { x: mitTreffern[0].x, y: mitTreffern[0].y, typ: mitTreffern[0].typ };
 }
 
-/** Vertikale Position einer Textkarte: freie Blur-Fläche, sonst Bildmitte innerhalb Safe Area. */
-export function storyTextPlatzierung({ masse, hoehe, bild = null, logo = null, wunsch = "auto" }) {
+/** Gesichter sind bereits auf die Story-Fläche normiert. Ohne Gesichter gilt das alte Layout. */
+export function storyTextPlatzierung({ masse, hoehe, bild = null, logo = null, wunsch = "auto", gesichter = [] }) {
   const safe = sichereZone(masse, "story");
   const padding = 24;
+  const mittig = Math.round((safe.oben + safe.unten - hoehe) / 2);
   const moegliche = [];
   if (bild && wunsch === "auto") {
     moegliche.push(bild.unten + padding, bild.oben - padding - hoehe);
   }
   if (wunsch === "oben") moegliche.push(safe.oben + padding);
   if (wunsch === "unten") moegliche.push(safe.unten - hoehe - padding);
-  moegliche.push(Math.round((safe.oben + safe.unten - hoehe) / 2));
-  for (const y of moegliche) {
-    if (y < safe.oben || y + hoehe > safe.unten) continue;
-    if (logo && y < logo.y + logo.h + padding && y + hoehe > logo.y - padding) continue;
-    return Math.round(y);
+  moegliche.push(mittig);
+  if (!gesichter.length) {
+    // Unverändertes Verhalten bei fehlendem Gesicht.
+    for (const y of moegliche) {
+      if (y < safe.oben || y + hoehe > safe.unten) continue;
+      if (logo && y < logo.y + logo.h + padding && y + hoehe > logo.y - padding) continue;
+      return Math.round(y);
+    }
+    return Math.max(safe.oben, Math.min(safe.unten - hoehe, mittig));
   }
-  // Lieber auf eine freie Safe-Area-Position als unter Plattform-UI zeichnen.
-  return Math.max(safe.oben, Math.min(safe.unten - hoehe, Math.round((safe.oben + safe.unten - hoehe) / 2)));
+  // Bei erkannten Gesichtern sämtliche vertikalen Positionen prüfen.
+  // So kann die Textkarte auch im unscharfen Bereich unterhalb des Motivs liegen.
+  const kandidat = new Set(moegliche);
+  for (let y = safe.oben; y <= safe.unten - hoehe; y += 16) kandidat.add(y);
+  kandidat.add(safe.unten - hoehe);
+  const rechtecke = gesichter.map(g => ({
+    x: (g.x - 0.035) * masse.breite, y: (g.y - 0.035) * masse.hoehe,
+    w: (g.w + 0.07) * masse.breite, h: (g.h + 0.07) * masse.hoehe,
+  }));
+  const schneidung = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x))
+    * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const gueltige = [...kandidat].filter(y => y >= safe.oben && y + hoehe <= safe.unten)
+    .filter(y => !logo || y + hoehe <= logo.y - padding || y >= logo.y + logo.h + padding);
+  if (!gueltige.length) return Math.max(safe.oben, Math.min(safe.unten - hoehe, mittig));
+  const bewertet = gueltige.map(y => {
+    const karte = { x: 70, y, w: 940, h: hoehe };
+    const ueberdeckung = rechtecke.reduce((sum, gesicht) => sum + schneidung(karte, gesicht), 0);
+    // Bestehende Anordnung als Gleichstandsregel, Blur unten bevorzugt.
+    const rang = moegliche.findIndex(pos => Math.abs(pos - y) < 9);
+    return { y, ueberdeckung, rang: rang < 0 ? 10 : rang, abstand: Math.abs(y - mittig) };
+  });
+  bewertet.sort((a, b) => a.ueberdeckung - b.ueberdeckung || a.rang - b.rang || a.abstand - b.abstand);
+  return Math.round(bewertet[0].y);
 }
