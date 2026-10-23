@@ -107,7 +107,7 @@ export function grafikGeometrie({ format, titelHoehe, textHoehe, logoHoehe }) {
   };
 }
 
-export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei" }) {
+export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei", stufe = "voll" }) {
   if (!["post", "story"].includes(format)) throw new Error("Ungültiges Grafikformat.");
   const palette = FARBEN[stil] ?? FARBEN.dunkel;
   const story = format === "story";
@@ -149,32 +149,33 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
   const titelY = plan.titelY;
   const linieY = titelY + titel.zeilen.length * titel.zeilenhoehe + 8;
   const untertitelY = linieY + 94;
-  const filter = [
+  const filter = [];
+  if (stufe !== "kopf") filter.push(
     `drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill`,
     `drawbox=x=100:y=${linieY}:w=${body.length ? 700 : 430}:h=6:color=${farbe(palette.akzent)}:t=fill`,
-  ];
+  );
   const schreiben = async (name, content, font, fontSize, fc, x, y) => {
     const filename = `grafik-${name}.txt`;
     await fs.writeFile(path.join(ordner, filename), content, "utf8");
     filter.push(`drawtext=fontfile='${font}':textfile='${filename}':expansion=none:fontsize=${fontSize}:fontcolor=${farbe(fc)}:x=${x}:y=${y}`);
   };
   await schreiben("label", inhalt.etikett, normal, 28, palette.akzent, 90, plan.labelY);
-  for (let i = 0; i < titel.zeilen.length; i++) {
+  for (let i = 0; stufe !== "kopf" && i < titel.zeilen.length; i++) {
     await schreiben(`titel-${i}`, titel.zeilen[i], schrift, titel.groesse, palette.text, 112, titelY + i * titel.zeilenhoehe);
   }
-  for (let i = 0; i < body.length; i++) {
+  for (let i = 0; stufe !== "kopf" && i < body.length; i++) {
     await schreiben(`text-${i}`, body[i], normal, 39, palette.sub, 112, untertitelY + i * bodyZeile);
   }
   const args = ["-y", "-v", "error", "-f", "lavfi", "-i",
     `color=c=${farbe(palette.grund)}:s=${breite}x${hoehe}:d=1`];
-  if (logo) args.push("-i", logo.datei);
+  if (logo && stufe === "voll") args.push("-i", logo.datei);
   let graph = `[0:v]${filter.join(",")}[grund]`;
-  if (logo) {
+  if (logo && stufe === "voll") {
     const x = 100 - logo.sichtbar.x + logo.x;
     const y = plan.logoY - logo.sichtbar.y + logo.y;
     graph += `;[grund][1:v]overlay=${x}:${y}:format=auto[fertig]`;
   }
-  args.push("-filter_complex", graph, "-map", logo ? "[fertig]" : "[grund]",
+  args.push("-filter_complex", graph, "-map", logo && stufe === "voll" ? "[fertig]" : "[grund]",
     "-frames:v", "1", "-q:v", "3", ausgabe);
   await ausfuehren("ffmpeg", args, { cwd: ordner });
   return ausgabe;
@@ -201,17 +202,27 @@ export async function textAnimation({
   if (!["post", "story"].includes(format)) throw new Error("Ungültiges Animationsformat.");
   if (!Number.isFinite(dauer) || dauer < 2 || dauer > 12) throw new Error("Animationsdauer muss zwischen 2 und 12 Sekunden liegen.");
   const ordner = path.dirname(ausgabe);
-  const bild = path.join(ordner, `animation-vorlage-${format}.jpg`);
-  await textGrafik({ ausgabe: bild, inhalt, layout, format, stil, logoModus });
   const breite = 1080;
   const hoehe = format === "story" ? 1920 : 1350;
+  const dateien = [
+    path.join(ordner, `animation-kopf-${format}.jpg`),
+    path.join(ordner, `animation-titel-${format}.jpg`),
+    path.join(ordner, `animation-voll-${format}.jpg`),
+  ];
+  for (const [i, stufe] of ["kopf", "titel", "voll"].entries()) {
+    await textGrafik({ ausgabe: dateien[i], inhalt, layout, format, stil, logoModus, stufe });
+  }
   const bilder = Math.round(dauer * 25);
-  // Sehr dezenter Zoom, Titel und Logo bleiben gemeinsam im selben Layout.
-  await ausfuehren("ffmpeg", [
-    "-y", "-v", "error", "-loop", "1", "-framerate", "25", "-i", bild,
-    "-vf", `zoompan=z='min(1.025,1+0.025*on/${bilder})':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':d=1:s=${breite}x${hoehe}:fps=25,fade=t=in:st=0:d=0.45,format=yuv420p`,
-    "-frames:v", String(bilder), "-an", "-c:v", "libx264", "-preset", "veryfast",
-    "-crf", "24", "-movflags", "+faststart", ausgabe,
-  ], { cwd: ordner });
+  const zweiteBlende = Math.max(1.7, dauer * 0.53);
+  const args = ["-y", "-v", "error"];
+  for (const d of dateien) args.push("-loop", "1", "-framerate", "25", "-i", d);
+  args.push(
+    "-filter_complex",
+    `[0:v][1:v]xfade=transition=fade:duration=0.55:offset=0.5[erster];[erster][2:v]xfade=transition=fade:duration=0.65:offset=${zweiteBlende},format=yuv420p[video]`,
+    "-map", "[video]", "-frames:v", String(bilder), "-an",
+    "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
+    "-movflags", "+faststart", ausgabe,
+  );
+  await ausfuehren("ffmpeg", args, { cwd: ordner });
   return ausgabe;
 }
