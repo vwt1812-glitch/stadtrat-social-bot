@@ -752,11 +752,12 @@ async function veroeffentlichen(auftrag) {
     }
 
     auftraege.aendern(auftrag.id, { status: typ === "now" ? "gepostet" : "geplant" });
-    const namen = kanaele.filter((k) => k.id !== DIREKT || auftrag.mastodon).map((k) => html(k.name)).join(", ");
+    const namen = kanaele.filter((k) => k.id !== DIREKT || auftrag.mastodon)
+      .map((k) => `${html(k.name)} (${html(k.identifier === DIREKT ? "Mastodon" : k.identifier)})`).join(", ");
     const text = typ === "now"
       ? `✅ <b>Wird jetzt ${auftrag.nurStory ? "als Story" : "gepostet"}</b> auf ${namen}.`
       : `📅 <b>${auftrag.nurStory ? "Story geplant" : "Geplant"} für ${zeitText(zeit)}</b> auf ${namen}.\nÄndern oder löschen kannst du den Eintrag im Postiz-Kalender${auftrag.mastodon ? " (Mastodon: in den geplanten Beiträgen dort)" : ""}.`;
-    const kontrolle = postizKanaele.length ? "\nIch schaue nach dem Termin nach, ob Postiz wirklich veröffentlicht hat." : "";
+    const kontrolle = postizKanaele.length ? "\nPostiz hat den Auftrag angenommen. Etwa 15 Minuten nach dem Termin prüfe ich den Veröffentlichungsstatus und melde Erfolg oder Probleme." : "";
     await zeigeMenue(auftrag, {
       text: `${text}${kontrolle}${auftrag.nurStory ? "" : `\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`}`,
       reply_markup: { inline_keyboard: [] },

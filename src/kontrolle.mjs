@@ -1,19 +1,24 @@
 // Kontrolle nach dem Posten: Hat Postiz unsere Posts zum Termin wirklich veröffentlicht?
 // Postiz veröffentlicht über Temporal; hängt dort etwas (z. B. der Orchestrator nach einem Neustart),
-// bleiben Posts still auf „QUEUE“ stehen. Der Bot fragt deshalb nach (GET /posts) und meldet sich.
+// bleiben Posts still auf „QUEUE“ stehen. Der Bot fragt deshalb nach (GET /posts)
+// und bestätigt erfolgreiche Veröffentlichungen genau einmal je Post-ID.
 // Übernommen aus vwt1812-glitch/eu-piraten-abstimmungen (lib/kontrolle.mjs).
 // Zustand in daten/kontrolle.json: { erledigt: { postId: true }, gemeldet: { postId: "QUEUE" | "ERROR" } }
 
 export const KARENZ_MINUTEN = 15;
 const MAX_TAGE = 3;
 
-/** Alle Postiz-Post-IDs aus den Aufträgen: Map postId → { auftrag, chatId, zeitpunkt } */
+/** Alle Postiz-Post-IDs aus den Aufträgen: Map postId → { auftrag, chatId, zeitpunkt, art } */
 export function erwartetePosts(auftraege) {
   const ids = new Map();
   for (const a of auftraege) {
     if (!["geplant", "gepostet"].includes(a.status) || !a.postiz) continue;
-    for (const p of [...(a.postiz.post ?? []), ...(a.postiz.story ?? [])]) {
-      if (p?.postId) ids.set(p.postId, { auftrag: a.id, chatId: a.chatId, zeitpunkt: a.plan?.zeit ?? a.erstellt });
+    for (const [art, posts] of [["Beitrag", a.postiz.post ?? []], ["Story", a.postiz.story ?? []]]) {
+      for (const p of posts) {
+        if (p?.postId) ids.set(p.postId, {
+          auftrag: a.id, chatId: a.chatId, zeitpunkt: a.plan?.zeit ?? a.erstellt, art,
+        });
+      }
     }
   }
   return ids;
@@ -48,20 +53,22 @@ export function auswerten(posts, faellig, kontrolle, jetzt = new Date(), karenz 
   const nachId = new Map(posts.map((p) => [p.id, p]));
   const jeChat = new Map();
   const eintrag = (chatId) => {
-    if (!jeChat.has(chatId)) jeChat.set(chatId, { probleme: [], nachgeholt: [] });
+    if (!jeChat.has(chatId)) jeChat.set(chatId, { probleme: [], nachgeholt: [], erfolgreich: [] });
     return jeChat.get(chatId);
   };
 
   for (const [id, e] of faellig) {
     const p = nachId.get(id);
-    const name = p ? `${p.integration?.name ?? ""} (${p.integration?.providerIdentifier ?? "?"})` : "";
+    const name = p ? `${p.integration?.name ?? "Unbenannter Kanal"} (${p.integration?.providerIdentifier ?? "unbekannt"})` : "";
     if (!p) {
       // In Postiz gelöscht oder weit verschoben – nichts mehr zu kontrollieren.
       kontrolle.erledigt[id] = true;
       delete kontrolle.gemeldet[id];
     } else if (p.state === "PUBLISHED") {
       kontrolle.erledigt[id] = true;
-      if (kontrolle.gemeldet[id]) eintrag(e.chatId).nachgeholt.push(`• ${name}: ${kurz(p.content)}`);
+      const beschreibung = `• ${name} – ${e.art ?? "Beitrag"}${kurz(p.content) ? `: ${kurz(p.content)}` : ""}`;
+      if (kontrolle.gemeldet[id]) eintrag(e.chatId).nachgeholt.push(beschreibung);
+      else eintrag(e.chatId).erfolgreich.push(beschreibung);
       delete kontrolle.gemeldet[id];
     } else if (p.state === "ERROR" && kontrolle.gemeldet[id] !== "ERROR") {
       kontrolle.gemeldet[id] = "ERROR";
@@ -74,8 +81,9 @@ export function auswerten(posts, faellig, kontrolle, jetzt = new Date(), karenz 
   }
 
   const ergebnis = new Map();
-  for (const [chatId, { probleme, nachgeholt }] of jeChat) {
+  for (const [chatId, { probleme, nachgeholt, erfolgreich }] of jeChat) {
     const texte = [];
+    if (erfolgreich.length) texte.push(["✅ Von Postiz als veröffentlicht bestätigt:", ...erfolgreich].join("\n"));
     if (probleme.length) {
       const nurWartend = probleme.every((p) => !p.fehler);
       texte.push([
