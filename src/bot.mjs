@@ -571,10 +571,19 @@ async function storyFassung(auftrag) {
       logoPosition: auftrag.storyLogoPosition ?? "auto",
     });
     if (!auftrag.storyText?.trim()) return ziel;
+    // Auch bei einzelnen Fotos die bereits vorhandene lokale OpenCV-Suche nutzen.
+    // Fällt sie aus oder findet nichts, bleibt die bisherige Textposition erhalten.
+    const funde = await gesichtSuchen(auftrag.originale?.[0] ?? auftrag.medien[0], config.gesicht, 1);
+    const gesichter = (funde?.gesichter ?? []).map((g) => ({
+      x: (meta.bild.links + g.x * meta.bild.breite) / STORY_MASSE.breite,
+      y: (meta.bild.oben + g.y * meta.bild.hoehe) / STORY_MASSE.hoehe,
+      w: (g.w * meta.bild.breite) / STORY_MASSE.breite,
+      h: (g.h * meta.bild.hoehe) / STORY_MASSE.hoehe,
+    }));
     const mitText = datei(auftrag, "story-text.jpg");
     await storyFotoText({
       eingabe: ziel, ausgabe: mitText, text: auftrag.storyText,
-      layout: { ...config.layout, bild: meta.bild, logoBereich: meta.logoBereich, storyTextPosition: auftrag.storyTextPosition },
+      layout: { ...config.layout, bild: meta.bild, logoBereich: meta.logoBereich, gesichter, storyTextPosition: auftrag.storyTextPosition },
     });
     return mitText;
   }
