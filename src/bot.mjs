@@ -21,7 +21,7 @@ import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 import { storyFotoText, storyTextZeilen } from "./story-text.mjs";
-import { textGrafiken } from "./grafik-text.mjs";
+import { textGrafiken, textAnimation } from "./grafik-text.mjs";
 import { IdeenSpeicher, antragVorschlaege } from "./redaktion.mjs";
 
 const config = ladeConfig();
@@ -309,7 +309,8 @@ async function menueInhalt(auftrag) {
     transkript: "\n<i>(einfacher Vorschlag aus dem Transkript)</i>",
     hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
   }[auftrag.captionQuelle] ?? "";
-  const titel = auftrag.grafikModus ? (auftrag.nurStory ? "Storygrafik" : "Sharepic") :
+  const titel = auftrag.grafikAnimation ? (auftrag.nurStory ? "Story-Animation" : "Animierte Textgrafik") :
+    auftrag.grafikModus ? (auftrag.nurStory ? "Storygrafik" : "Sharepic") :
     auftrag.antragVarianten?.length ? "Antrag – Textentwurf" :
     auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
   const hinweise = [];
@@ -328,7 +329,7 @@ async function menueInhalt(auftrag) {
     ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise,
   ].join("\n");
   const extra = {
-    video: [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📍 Position", auftrag, "pos"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
+    video: auftrag.grafikAnimation ? [] : [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📍 Position", auftrag, "pos"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
     foto: auftrag.grafikModus ? [] : [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
@@ -336,8 +337,11 @@ async function menueInhalt(auftrag) {
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
     ...(!auftrag.grafikModus && art(auftrag) === "text" ? [
       [knopf("🖼️ Sharepic erstellen", auftrag, "grafik:post"), knopf("📱 Storygrafik", auftrag, "grafik:story")],
+      [knopf("🎞️ Animation", auftrag, "anim:post"), knopf("🎞️ Story-Animation", auftrag, "anim:story")],
     ] : []),
     ...(auftrag.grafikModus ? [
+      [knopf(auftrag.grafikAnimation ? "🖼️ Als Standbild" : "🎞️ Animieren", auftrag, `grafik:${auftrag.nurStory ? "story" : "post"}`),
+       knopf("🎞️ Animation wählen", auftrag, `anim:${auftrag.nurStory ? "story" : "post"}`)],
       [knopf(auftrag.nurStory ? "🖼️ Als Sharepic" : "📱 Als Story", auftrag, `grafik:${auftrag.nurStory ? "post" : "story"}`),
         knopf("✏️ Grafiktext", auftrag, "grafiktext")],
       [knopf("↩️ Zurück zum Text", auftrag, "grafik:text")],
@@ -774,7 +778,7 @@ async function textZuGrafik(auftrag, format = "post", quelle = null) {
   });
   const story = format === "story";
   auftrag = auftraege.aendern(auftrag.id, {
-    art: "foto", grafikModus: format, grafikQuelleText: text,
+    art: "foto", grafikModus: format, grafikAnimation: false, grafikQuelleText: text,
     grafikStoryDatei: vorlage.story, medien: [vorlage.post], originale: [vorlage.post],
     storyDatei: vorlage.story, storyHochgeladen: null,
     mitLogo: false, hochgeladen: null, captions: {},
@@ -919,11 +923,43 @@ async function knopfGedrueckt(cq) {
       await neuesMenue(auftrag);
       return antwort("Originaltext aus PDF gewählt. Bitte prüfen.");
     }
+    case "anim": {
+      if (!["post", "story"].includes(arg)) return antwort("Ungültiges Animationsformat.", true);
+      await antwort("Erstelle MP4-Animation lokal …");
+      auftrag = auftraege.aendern(id, { status: "arbeitet" });
+      einreihen(async () => {
+        try {
+          let a = auftraege.get(id);
+          const text = a.grafikQuelleText ?? a.notizen ?? a.caption;
+          const story = arg === "story";
+          const ausgabe = datei(a, `redaktion-animation-${arg}.mp4`);
+          await textAnimation({
+            ausgabe, inhalt: (await import("./redaktion.mjs")).grafikInhalt(text, { ausAntrag: Boolean(a.antragVarianten?.length) }),
+            layout: config.layout, format: arg,
+          });
+          a = auftraege.aendern(id, {
+            art: "video", grafikAnimation: true, grafikModus: arg,
+            grafikQuelleText: text, medien: [ausgabe], originale: [ausgabe],
+            masse: { breite: 1080, hoehe: story ? 1920 : 1350, dauer: 5, hatTon: false },
+            story, nurStory: story, storyDatei: null, grafikStoryDatei: null,
+            hochgeladen: null, storyHochgeladen: null, captions: {}, kanaele: null,
+            status: "vorschau",
+          });
+          await tg.datei(a.chatId, "sendVideo", "video", ausgabe, { caption: "🎞️ Animierte Textgrafik – Vorschau" });
+          await neuesMenue(a);
+        } catch (e) {
+          console.error(e);
+          await tg.senden(auftrag.chatId, `❌ Animation fehlgeschlagen: <pre>${html(e.message)}</pre>`);
+          await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
+        }
+      });
+      return;
+    }
     case "grafik": {
       if (!["post", "story", "text"].includes(arg)) return antwort("Ungültiges Format.", true);
       if (arg === "text") {
         auftrag = auftraege.aendern(id, {
-          art: "text", grafikModus: null, medien: [], originale: null,
+          art: "text", grafikModus: null, grafikAnimation: false, medien: [], originale: null,
           grafikStoryDatei: null, story: false, nurStory: false, storyDatei: null,
           storyHochgeladen: null, hochgeladen: null, kanaele: null, captions: {},
         });
