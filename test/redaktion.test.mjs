@@ -136,3 +136,31 @@ test("Animierte Story und Feed-Grafik lassen sich als MP4 rendern", { skip: !ffm
     assert.ok(fs.statSync(output).size > 2000);
   }
 });
+
+test("Animation zeigt nach und nach Überschrift und Logo, statt nur das gesamte Bild zu zoomen", { skip: !ffmpeg }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "stufen-animation-"));
+  const out = path.join(dir, "stufen.mp4");
+  const layout = {
+    logo: path.resolve("assets/logos/quer-dunkel.png"),
+    logoBreite: 0.40, karteFarbe: "#1D1D1B", akzentFarbe: "#F18616",
+    schriftOrdner: path.resolve("assets/fonts"),
+  };
+  await textAnimation({ ausgabe: out, inhalt: grafikInhalt("CSU macht dumme Dinge!"), layout, format: "story", dauer: 5 });
+  const probe = (sekunde, filter) => execFileSync("ffmpeg", [
+    "-v", "error", "-ss", String(sekunde), "-i", out, "-vf", filter,
+    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+  ]);
+  const nichtSchwarz = (buffer) => {
+    let count = 0;
+    for (let i = 0; i < buffer.length; i += 3) {
+      if (buffer[i] > 145 && buffer[i + 1] > 145 && buffer[i + 2] > 145) count++;
+    }
+    return count;
+  };
+  const titelCrop = "crop=880:270:100:650";
+  const logoCrop = "crop=530:150:100:1330";
+  assert.ok(nichtSchwarz(probe(0.15, titelCrop)) < 100);
+  assert.ok(nichtSchwarz(probe(1.6, titelCrop)) > 1000);
+  assert.ok(nichtSchwarz(probe(1.6, logoCrop)) < 100);
+  assert.ok(nichtSchwarz(probe(4.0, logoCrop)) > 1000);
+});
