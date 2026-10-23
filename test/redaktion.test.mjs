@@ -134,6 +134,21 @@ test("Animierte Story und Feed-Grafik lassen sich als MP4 rendern", { skip: !ffm
     assert.equal(meta.hoehe, h);
     assert.ok(meta.dauer >= 1.9 && meta.dauer <= 2.1);
     assert.ok(fs.statSync(output).size > 2000);
+    // Regression: Nach einer Sekunde ist die Überschrift da; erst später erscheint das Logo.
+    const frame = (zeit) => execFileSync("ffmpeg", [
+      "-v", "error", "-ss", String(zeit), "-i", output,
+      "-frames:v", "1", "-vf", "scale=180:240", "-pix_fmt", "rgb24", "-f", "rawvideo", "-",
+    ], { maxBuffer: 1024 * 1024 });
+    const erst = frame(0.1);
+    const mitte = frame(1.35);
+    const ende = frame(1.85);
+    const unterscheid = (a, b) => {
+      let n = 0;
+      for (let k = 0; k < a.length; k++) if (Math.abs(a[k] - b[k]) > 30) n++;
+      return n;
+    };
+    assert.ok(unterscheid(erst, mitte) > 1200, "Überschrift erscheint nicht sichtbar");
+    assert.ok(unterscheid(mitte, ende) > 200, "Logo erscheint nicht sichtbar");
   }
 });
 
