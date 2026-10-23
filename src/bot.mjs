@@ -78,8 +78,10 @@ function limitFehler(auftrag, kanaele) {
 function standardKanaele(alle, auftrag) {
   const vomKunden = kanaeleVonKunde(alle, auftrag.kunde);
   const vorgabe = vomKunden.filter((k) => config.postiz.kanaele.some((e) => passtZu(k, e)));
-  const passend = passendeKanaele(vorgabe.length ? vorgabe : vomKunden, art(auftrag));
-  return (auftrag.nurStory ? passend.filter((k) => STORY[k.identifier]) : passend).map((k) => k.id);
+  const basis = passendeKanaele(vorgabe.length ? vorgabe : vomKunden, art(auftrag));
+  if (!auftrag.nurStory) return basis.map((k) => k.id);
+  const storyVorgabe = basis.filter((k) => STORY[k.identifier]);
+  return (storyVorgabe.length ? storyVorgabe : vomKunden.filter((k) => STORY[k.identifier])).map((k) => k.id);
 }
 
 async function gewaehlteKanaele(auftrag) {
