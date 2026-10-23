@@ -155,7 +155,7 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
   const linienStufe = /^linie-(\d+)$/.exec(stufe);
   const titelAnzahl = stufe === "kopf" ? 0 : titelStufe ? Number(titelStufe[1]) : titel.zeilen.length;
   const linienAnteil = stufe === "kopf" || titelStufe ? 0
-    : linienStufe ? Math.max(0, Math.min(1, Number(linienStufe[1]) / 3)) : 1;
+    : linienStufe ? Math.max(0, Math.min(1, Number(linienStufe[1]) / 10)) : 1;
   const filter = [];
   if (titelAnzahl) {
     filter.push(`drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill`);
@@ -221,9 +221,9 @@ export async function textAnimation({
     maxBreite: 872, maxZeilen: format === "story" ? 6 : 5,
     maxHoehe: reserve ? reserve.unten - reserve.oben - 40 - (inhalt.beschreibung ? 334 : 0) : 0,
   });
-  // Kopf -> Titelzeilen -> drei Linienbreiten -> vollständiges Motiv inkl. Logo.
+  // Kopf -> einzelne Titelzeilen -> zehn kleine Linienfortschritte -> Logo.
   const stufen = ["kopf", ...title.zeilen.map((_, i) => `titel-${i + 1}`),
-    "linie-1", "linie-2", "linie-3", "voll"];
+    ...Array.from({ length: 10 }, (_, i) => `linie-${i + 1}`), "voll"];
   const dateien = [];
   for (let i = 0; i < stufen.length; i++) {
     const d = path.join(ordner, `animation-${format}-${i}.jpg`);
@@ -240,7 +240,7 @@ export async function textAnimation({
   for (let i = 1; i <= wechsel; i++) {
     const letzte = i === wechsel;
     const zeit = letzte ? dauer * 0.72 : 0.12 + (dauer * 0.53) * ((i - 1) / Math.max(1, wechsel - 1));
-    const fade = letzte ? Math.min(0.4, dauer * 0.16) : Math.min(0.20, dauer * 0.065);
+    const fade = letzte ? Math.min(0.65, dauer * 0.18) : Math.min(0.28, dauer * 0.075);
     const name = `schritt${i}`;
     fades.push(`[${vorher}][${i}:v]xfade=transition=fade:duration=${fade.toFixed(3)}:offset=${zeit.toFixed(3)}[${name}]`);
     vorher = name;
