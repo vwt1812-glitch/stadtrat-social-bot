@@ -19,17 +19,21 @@ export function storyTextZeilen(text, maxZeichen = 24) {
     if (!absatz.trim()) continue;
     let zeile = "";
     for (const wort of absatz.trim().split(/\s+/u)) {
-      for (const zeichen of [...wort]) {
-        // Lange Wörter werden nicht abgeschnitten.
-        if ([...zeile].length >= maxZeichen) {
-          zeilen.push(zeile);
-          zeile = "";
-        }
-        zeile += zeichen;
+      const teile = [...wort];
+      if (teile.length > maxZeichen) {
+        if (zeile) zeilen.push(zeile);
+        zeile = "";
+        while (teile.length > maxZeichen) zeilen.push(teile.splice(0, maxZeichen).join(""));
+        if (teile.length) zeile = teile.join("");
+        continue;
       }
-      if (zeile && [...zeile].length < maxZeichen) zeile += " ";
+      if (zeile && [...zeile, " ", ...teile].length > maxZeichen) {
+        zeilen.push(zeile);
+        zeile = "";
+      }
+      zeile = zeile ? `${zeile} ${wort}` : wort;
     }
-    if (zeile.trim()) zeilen.push(zeile.trim());
+    if (zeile) zeilen.push(zeile);
   }
   if (zeilen.length > MAX_ZEILEN) throw new Error(`Der Text braucht ${zeilen.length} Zeilen (maximal ${MAX_ZEILEN}). Bitte kürzen.`);
   return zeilen;
