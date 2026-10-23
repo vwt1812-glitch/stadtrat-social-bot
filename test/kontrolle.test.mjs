@@ -55,6 +55,24 @@ test("Kontrolle: nur hängende Posts → Hinweis auf den Orchestrator; Gelöscht
 
   // In Postiz auf später verschoben: noch nicht überfällig
   const k2 = {};
-  assert.equal(auswerten([post("a", "QUEUE", { publishDate: new Date(JETZT.getTime() + 3600e3).toISOString() }), post("b", "PUBLISHED")], faellig, k2, JETZT).size, 0);
+  const meldung = auswerten([post("a", "QUEUE", { publishDate: new Date(JETZT.getTime() + 3600e3).toISOString() }), post("b", "PUBLISHED")], faellig, k2, JETZT);
+  assert.match(meldung.get(42)[0], /Von Postiz als veröffentlicht bestätigt/);
   assert.equal(k2.erledigt.a, undefined);
+});
+
+test("Erfolgsmeldung genau einmal je veröffentlichtem Beitrag und Story", () => {
+  const kontrolle = { erledigt: {}, gemeldet: {} };
+  const faellig = faelligeKontrollen(erwartetePosts(auftraege), kontrolle, JETZT);
+  const meldungen = auswerten([
+    post("a", "PUBLISHED", { integration: { providerIdentifier: "instagram", name: "Lukas Küffner" } }),
+    post("b", "PUBLISHED", { integration: { providerIdentifier: "facebook", name: "Lukas Küffner" } }),
+    post("s", "PUBLISHED", { integration: { providerIdentifier: "instagram", name: "Lukas Küffner" }, content: "" }),
+  ], faellig, kontrolle, JETZT);
+  const text = meldungen.get(42)[0];
+  assert.match(text, /Von Postiz als veröffentlicht bestätigt/);
+  assert.match(text, /Lukas Küffner \(instagram\) – Beitrag/);
+  assert.match(text, /Lukas Küffner \(facebook\) – Beitrag/);
+  assert.match(text, /Lukas Küffner \(instagram\) – Story/);
+  assert.equal(auswerten([post("a", "PUBLISHED"), post("b", "PUBLISHED"), post("s", "PUBLISHED")],
+    faelligeKontrollen(erwartetePosts(auftraege), kontrolle, JETZT), kontrolle, JETZT).size, 0);
 });
