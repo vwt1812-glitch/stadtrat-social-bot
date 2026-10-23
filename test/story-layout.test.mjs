@@ -66,3 +66,17 @@ test("Bildtext nutzt untere Blur-Fläche und überschreibt kein darüber liegend
   assert.ok(oben > bild.unten);
   assert.ok(oben + 210 <= sichereZone(MASSE).unten);
 });
+
+test("Story-Text vermeidet Logo und Gesicht, darf stattdessen im Blur unten stehen", () => {
+  const bild = { links: 0, rechts: 1080, oben: 443, unten: 1091, breite: 1080, hoehe: 648 };
+  const logo = { x: 40, y: 275, w: 900, h: 130 };
+  const y = storyTextPlatzierung({
+    masse: MASSE, hoehe: 170, bild, logo,
+    gesichter: [{ x: 0.34, y: 0.46, w: 0.31, h: 0.18 }],
+  });
+  const safe = sichereZone(MASSE);
+  assert.ok(y >= bild.unten, "Der freie Blur-Bereich unter dem Foto soll nutzbar sein");
+  assert.ok(y + 170 <= safe.unten, "Der Text muss oberhalb der Plattform-Bedienelemente liegen");
+  assert.ok(y >= logo.y + logo.h + 16 || y + 170 <= logo.y - 16,
+    "Der Text darf das Logo nicht überdecken");
+});
