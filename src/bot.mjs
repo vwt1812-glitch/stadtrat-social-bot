@@ -1395,6 +1395,90 @@ async function srtDatei(auftrag, dokument) {
   await neuRendern(auftrag, `Untertitel-Datei mit ${cues.length} Einträgen übernommen.`);
 }
 
+/** Sprachnachricht lokal in einen bearbeitbaren Textentwurf umwandeln. */
+async function sprachnachricht(msg, audio) {
+  if (audio.file_size > 20 * MB && !tg.lokal) {
+    return tg.senden(msg.chat.id, "Diese Sprachnachricht ist für die normale Telegram-Bot-API zu groß. Bitte kürzer aufnehmen.");
+  }
+  if (audio.duration > 240) return tg.senden(msg.chat.id, "Bitte Sprachnachrichten bis vier Minuten schicken. Längere Reden weiterhin als Video.");
+  const a = auftraege.neu(msg.chat.id);
+  await tg.senden(msg.chat.id, "🎙️ Ich transkribiere die Sprachnachricht lokal mit Whisper – ohne Cloud-KI …");
+  einreihen(async () => {
+    try {
+      const original = datei(a, "sprache.ogg");
+      const wav = datei(a, "sprache.wav");
+      await tg.herunterladen(audio.file_id, original);
+      await tonFuerWhisper(original, wav);
+      const cues = await transkribiere(wav, config.whisper, config.glossar);
+      const wortlaut = volltext(cues).trim();
+      if (!wortlaut) throw new Error("Whisper hat keine verständliche Sprache erkannt.");
+      const zuLang = wortlaut.length > 2800;
+      const text = zuLang ? wortlaut.slice(0, 2750).trimEnd() + " […]" : wortlaut;
+      const auftrag = auftraege.aendern(a.id, {
+        art: "text", notizen: text, transkript: wortlaut, caption: text,
+        captionQuelle: "transkript", medien: [], status: "vorschau",
+      });
+      await tg.senden(a.chatId, `🎙️ <b>Transkript (bitte prüfen)</b>\n${html(text.slice(0, 3500))}` +
+        (zuLang ? "\n⚠️ Für den Entwurf gekürzt." : ""));
+      await neuesMenue(auftrag);
+    } catch (e) {
+      console.error(e);
+      auftraege.aendern(a.id, { status: "fehler" });
+      await tg.senden(a.chatId, `❌ Spracherkennung: ${html(e.message)}`);
+    }
+  });
+}
+
+/** Digitalen Antrag lesen; keine OCR und keine unbelegten Zusammenfassungen. */
+async function pdfAntrag(msg, dokument) {
+  if (dokument.file_size > 12 * MB) return tg.senden(msg.chat.id, "Bitte ein Antrags-PDF unter 12 MB schicken.");
+  const a = auftraege.neu(msg.chat.id);
+  await tg.senden(msg.chat.id, "📄 Ich lese den Antrag lokal und suche Textstellen für Beitragsentwürfe …");
+  einreihen(async () => {
+    try {
+      const pdf = datei(a, "antrag.pdf");
+      await tg.herunterladen(dokument.file_id, pdf);
+      const roh = await ausfuehren("pdftotext", ["-f", "1", "-l", "15", "-layout", pdf, "-"]);
+      const varianten = antragVorschlaege(roh);
+      const erste = varianten[0];
+      const auftrag = auftraege.aendern(a.id, {
+        art: "text", notizen: erste.text, caption: erste.text,
+        captionQuelle: "dokument", antragVarianten: varianten, antragIndex: 0,
+        medien: [], status: "vorschau",
+      });
+      await tg.senden(a.chatId,
+        `📄 <b>${varianten.length} Textstelle(n) im Antrag gefunden</b> (maximal erste 15 Seiten).\n` +
+        "Das sind reine Auszüge, keine KI-Zusammenfassung. Der Bot prüft nicht, ob die Aussagen zutreffen oder was beschlossen wurde. Bitte Kontext, Überschrift und Inhalt vor dem Posten prüfen.");
+      await neuesMenue(auftrag);
+    } catch (e) {
+      console.error(e);
+      auftraege.aendern(a.id, { status: "fehler" });
+      await tg.senden(a.chatId, `❌ Antrag: ${html(e.message)}`);
+    }
+  });
+}
+
+/** Gespeicherte Ideen nicht mit dem auf 14 Tage begrenzten Auftragsarchiv vermischen. */
+async function ideenMenue(chatId) {
+  const liste = ideen.liste(chatId);
+  if (!liste.length) return tg.senden(chatId, "Noch keine Ideen gespeichert. Mit /idee und einem Gedanken dahinter kannst du anfangen.");
+  return tg.senden(chatId,
+    "<b>Deine gespeicherten Ideen</b> – antippen, um daraus wieder einen Entwurf zu machen:",
+    { reply_markup: { inline_keyboard: liste.slice(0, 12).map((i) => [{
+      text: `💡 ${i.text.replace(/\s+/g, " ").slice(0, 54)}`,
+      callback_data: `idea:${i.id}`,
+    }]) } });
+}
+
+async function ideenKnopf(cq) {
+  const eintrag = ideen.holen(cq.message.chat.id, (cq.data ?? "").split(":")[1]);
+  await tg.aufruf("answerCallbackQuery", {
+    callback_query_id: cq.id, text: eintrag ? "Entwurf wird geöffnet" : "Idee nicht gefunden",
+  }).catch(() => {});
+  if (eintrag) await textBeitrag(cq.message.chat.id, eintrag.text,
+    { captionQuelle: "eigene", quelle: "gespeicherte Idee" });
+}
+
 async function nachricht(msg) {
   const chatId = msg.chat.id;
   const nutzer = msg.from?.id;
@@ -1413,14 +1497,27 @@ async function nachricht(msg) {
   if (video) return neuesVideo(msg, video);
   const foto = msg.photo?.at(-1) ?? (msg.document?.mime_type?.startsWith("image/") ? msg.document : null);
   if (foto) return fotoEingang(msg, foto);
-
   const wartend = auftraege.wartend(chatId);
+  // Die Antwort auf einen laufenden Dialog hat Vorrang vor neuen Medientypen.
+  if (!wartend && (msg.voice || msg.audio)) return sprachnachricht(msg, msg.voice || msg.audio);
+  if (!wartend && msg.document && (msg.document.mime_type === "application/pdf" || /\.pdf$/i.test(msg.document.file_name ?? ""))) {
+    return pdfAntrag(msg, msg.document);
+  }
   if (msg.document && /\.srt$/i.test(msg.document.file_name ?? "") && wartend?.wartetAuf === "untertitel") {
     return srtDatei(wartend, msg.document);
   }
 
   const text = msg.text ?? "";
   if (/^\/(start|hilfe|help)\b/.test(text)) return tg.senden(chatId, HILFE);
+  if (/^\/antrag\b/.test(text)) return tg.senden(chatId,
+    "Schick mir den Antrag direkt als PDF-Datei. Ich lese lokal bis zu 15 Seiten (digitaler Text, keine Scan-OCR) und zeige dir überprüfbare Textstellen für Post und Grafik.");
+  if (/^\/ideen\b/.test(text)) return ideenMenue(chatId);
+  if (/^\/idee(?:\s|$)/.test(text)) {
+    const inhalt = text.replace(/^\/idee\s*/, "").trim();
+    if (!inhalt) return tg.senden(chatId, "Schreib zum Beispiel <code>/idee Beitrag über den neuen Stadtratsantrag</code>.");
+    const gespeichert = ideen.speichern(chatId, inhalt);
+    return tg.senden(chatId, `💾 Idee ${gespeichert.id} gespeichert. Mit /ideen wieder aufrufen.`);
+  }
   if (/^\/kanaele\b/.test(text)) {
     kanalCache.zeit = 0;
     const kanaele = await alleKanaele();
@@ -1524,7 +1621,7 @@ async function main() {
       const verarbeite = u.message
         ? nachricht(u.message)
         : u.callback_query && erlaubt(u.callback_query.from.id, u.callback_query.message?.chat.id)
-          ? knopfGedrueckt(u.callback_query)
+          ? (u.callback_query.data?.startsWith("idea:") ? ideenKnopf(u.callback_query) : knopfGedrueckt(u.callback_query))
           : null;
       verarbeite?.catch((e) => fehlerMelden(u.message?.chat.id ?? u.callback_query?.message?.chat.id, e));
     }
