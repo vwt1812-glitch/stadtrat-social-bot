@@ -37,7 +37,7 @@ test("Story-Foto erhält eingebrannten Text in 1080×1920", { skip: !ffmpegDa },
   ]);
   await storyFotoText({
     eingabe, ausgabe, text: "Transparenz für Nürnberg!\n100 % Offenheit",
-    layout: { schriftOrdner: "assets/fonts" },
+    layout: { schriftOrdner: path.resolve("assets/fonts") },
   });
   const d = await untersuche(ausgabe);
   assert.deepEqual([d.breite, d.hoehe], [1080, 1920]);
