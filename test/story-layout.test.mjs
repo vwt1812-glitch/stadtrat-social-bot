@@ -10,8 +10,8 @@ test("Story und Reel haben unterschiedliche, konservative UI-Safe-Areas", () => 
   const story = sichereZone(MASSE, "story");
   const reel = sichereZone(MASSE, "reel");
   assert.equal(story.oben, 269);
-  assert.equal(story.unten, 1613);
-  assert.equal(reel.unten, 1478);
+  assert.equal(story.unten, 1536);
+  assert.equal(reel.unten, 1248);
   assert.ok(reel.rechts < story.rechts); // rechte Like/Kommentar-Leiste
 });
 
