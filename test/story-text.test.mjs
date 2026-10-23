@@ -53,12 +53,12 @@ test("Story-Bildtext meidet Gesichter, darf aber im Blur innerhalb der Safe Area
   const ohne = storyTextPlatzierung({ masse, hoehe: h, bild });
   const mit = storyTextPlatzierung({ masse, hoehe: h, bild, gesichter });
   const safe = sichereZone(masse, "story");
-  assert.equal(ohne, 540); // Wie bisher: wenn der Blur unten nicht in die Safe Area passt.
+  assert.equal(ohne, Math.round((safe.oben + safe.unten - h) / 2)); // Bisherige mittige Fallback-Position.
   assert.ok(mit >= safe.oben && mit + h <= safe.unten);
   assert.ok(mit + h < 0.415 * masse.hoehe || mit > 0.745 * masse.hoehe,
     "Text darf den geschützten Kopfbereich nicht überdecken");
   const schmal = { ...bild, oben: 530, unten: 1120, hoehe: 590 };
-  const blurUnten = storyTextPlatzierung({ masse, hoehe: h, bild: schmal, gesichter });
+  const blurUnten = storyTextPlatzierung({ masse, hoehe: h, bild: schmal, gesichter: [{ x: 0.3, y: 0.25, w: 0.25, h: 0.11 }] });
   assert.ok(blurUnten >= schmal.unten + 24, "Blur-Bereich unten soll erlaubt bleiben");
 });
 
