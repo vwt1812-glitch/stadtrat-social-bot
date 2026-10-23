@@ -17,6 +17,7 @@ import {
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
+import { gesichterUebertragen } from "./story-layout.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
@@ -571,10 +572,14 @@ async function storyFassung(auftrag) {
       logoPosition: auftrag.storyLogoPosition ?? "auto",
     });
     if (!auftrag.storyText?.trim()) return ziel;
+    // Die lokale OpenCV-Erkennung auf dem Originalfoto verwenden, bevor Blur und Logo hinzukommen.
+    const funde = await gesichtSuchen(auftrag.originale?.[0] ?? auftrag.medien[0], config.gesicht);
+    const gesichter = gesichterUebertragen(funde?.gesichter ?? [], meta.bild, STORY_MASSE);
     const mitText = datei(auftrag, "story-text.jpg");
     await storyFotoText({
       eingabe: ziel, ausgabe: mitText, text: auftrag.storyText,
-      layout: { ...config.layout, bild: meta.bild, logoBereich: meta.logoBereich, storyTextPosition: auftrag.storyTextPosition },
+      layout: { ...config.layout, bild: meta.bild, logoBereich: meta.logoBereich,
+        storyTextPosition: auftrag.storyTextPosition, gesichter },
     });
     return mitText;
   }
