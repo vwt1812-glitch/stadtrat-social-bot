@@ -895,6 +895,62 @@ async function knopfGedrueckt(cq) {
   };
 
   switch (aktion) {
+    case "idee": {
+      const gespeichert = ideen.speichern(auftrag.chatId, auftrag.grafikQuelleText || auftrag.notizen || auftrag.caption,
+        auftrag.antragVarianten?.length ? "antrag" : "entwurf");
+      return antwort(`Idee gespeichert (${gespeichert.id}).`);
+    }
+    case "antragmenu": {
+      if (!auftrag.antragVarianten?.length) return antwort("Kein Antrag bei diesem Entwurf.", true);
+      await zeigeMenue(auftrag, antragMenue(auftrag));
+      return antwort();
+    }
+    case "av": {
+      const index = Number(arg);
+      if (!Number.isInteger(index) || !auftrag.antragVarianten?.[index]) return antwort("Unbekannte Textstelle.", true);
+      const v = auftrag.antragVarianten[index];
+      // Auf eine neue, überprüfbare Dokumentpassage zurückgehen, nicht blind ein altes Sharepic behalten.
+      auftrag = auftraege.aendern(id, {
+        art: "text", grafikModus: null, grafikStoryDatei: null, grafikQuelleText: null,
+        medien: [], story: false, nurStory: false, storyDatei: null, storyHochgeladen: null,
+        hochgeladen: null, caption: v.text, notizen: v.text, captionQuelle: "dokument",
+        antragIndex: index, kanaele: null, captions: {},
+      });
+      await neuesMenue(auftrag);
+      return antwort("Originaltext aus PDF gewählt. Bitte prüfen.");
+    }
+    case "grafik": {
+      if (!["post", "story", "text"].includes(arg)) return antwort("Ungültiges Format.", true);
+      if (arg === "text") {
+        auftrag = auftraege.aendern(id, {
+          art: "text", grafikModus: null, medien: [], originale: null,
+          grafikStoryDatei: null, story: false, nurStory: false, storyDatei: null,
+          storyHochgeladen: null, hochgeladen: null, kanaele: null, captions: {},
+        });
+        await neuesMenue(auftrag);
+        return antwort("Wieder Textbeitrag.");
+      }
+      await antwort("Erstelle Grafik lokal …");
+      auftrag = auftraege.aendern(id, { status: "arbeitet" });
+      einreihen(async () => {
+        try {
+          const aktualisiert = await textZuGrafik(auftraege.get(id), arg);
+          await neuesMenue(aktualisiert);
+        } catch (e) {
+          console.error(e);
+          await tg.senden(auftrag.chatId, `❌ Grafik fehlgeschlagen: <pre>${html(e.message)}</pre>`);
+          await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
+        }
+      });
+      return;
+    }
+    case "grafiktext": {
+      if (!auftrag.grafikModus) return antwort("Nur für Textgrafiken.", true);
+      auftraege.aendern(id, { wartetAuf: "grafiktext" });
+      await tg.senden(auftrag.chatId,
+        "Schick mir den Text für die Grafik. Erste Zeile ist die Überschrift, weitere Zeilen sind der Erklärungstext. Bitte Aussagen aus Anträgen nur im belegten Wortlaut übernehmen.");
+      return antwort();
+    }
     case "jetzt":
       return bestaetigen("now", new Date());
     case "planen":
@@ -1228,6 +1284,21 @@ async function texteingabe(auftrag, text) {
     return neuesMenue(auftrag);
   }
   switch (auftrag.wartetAuf) {
+    case "grafiktext": {
+      auftrag = auftraege.aendern(auftrag.id, { wartetAuf: null, status: "arbeitet" });
+      await tg.senden(auftrag.chatId, "🖼️ Erstelle die Grafik mit deinem neuen Text …");
+      einreihen(async () => {
+        try {
+          const a = await textZuGrafik(auftraege.get(auftrag.id), auftrag.grafikModus ?? "post", text.trim());
+          await neuesMenue(a);
+        } catch (e) {
+          console.error(e);
+          await tg.senden(auftrag.chatId, `❌ Grafik: <pre>${html(e.message)}</pre>`);
+          await neuesMenue(auftraege.aendern(auftrag.id, { status: "vorschau" }));
+        }
+      });
+      return;
+    }
     case "storytext": {
       const neu = text.trim() === "-" ? "" : text.trim();
       if (neu) {
