@@ -21,10 +21,13 @@ import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 import { storyFotoText, storyTextZeilen } from "./story-text.mjs";
+import { textGrafiken } from "./grafik-text.mjs";
+import { IdeenSpeicher, antragVorschlaege } from "./redaktion.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
 const auftraege = new Auftraege(config.datenDir);
+const ideen = new IdeenSpeicher(config.datenDir);
 const postiz = new Postiz({ ...config.postiz, zaehler: new AnfragenZaehler(path.join(config.datenDir, "postiz-anfragen.json"), config.postiz.maxAnfragen) });
 const mastodon = config.mastodon ? new Mastodon(config.mastodon) : null;
 const MB = 1024 * 1024;
@@ -275,10 +278,15 @@ const HILFE = `<b>So funktioniert's</b>
 Schick mir
 • ein <b>Video</b> – am besten <b>als Datei</b> (📎 → Datei), dann bleibt die volle Qualität erhalten. Ich baue Logo und Untertitel ein.
 • ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zur Caption. Über <b>📱 Nur Story</b> und <b>✏️ Text ins Bild</b> kannst du eine reine Fotostory machen.
-• einfach <b>Text</b> – daraus wird ein Textbeitrag (nicht für Instagram, TikTok, YouTube).
+• einfach <b>Text</b> – daraus wird ein Textbeitrag. Mit „🖼️ Grafik“ oder „📱 Storygrafik“ entsteht lokal eine fertige Grafik.
+• eine <b>Sprachnachricht</b> – Whisper transkribiert sie lokal und du entscheidest über Textpost, Grafik oder Ideenspeicher.
+• einen <b>Antrag als PDF</b> – ich zeige dir Textauszüge für Posts und Sharepics, ohne unbelegte KI-Zusammenfassung.
 
 Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpassen und mit <b>Ja</b> posten.
 
+/idee Text – Gedanken für später speichern
+/ideen – deine gespeicherten Ideen wieder aufrufen
+/antrag – Hinweise für das Hochladen von Antrags-PDFs
 /kanaele – verbundene Postiz-Kanäle nach Kunden
 /status – prüft Postiz, Whisper, ffmpeg und KI
 /id – zeigt deine Telegram-ID (und die der Gruppe)
@@ -301,7 +309,9 @@ async function menueInhalt(auftrag) {
     transkript: "\n<i>(einfacher Vorschlag aus dem Transkript)</i>",
     hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
   }[auftrag.captionQuelle] ?? "";
-  const titel = auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
+  const titel = auftrag.grafikModus ? (auftrag.nurStory ? "Storygrafik" : "Sharepic") :
+    auftrag.antragVarianten?.length ? "Antrag – Textentwurf" :
+    auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
   const hinweise = [];
   try {
     const liste = auftrag.nurStory ? [] : laengen(auftrag, kanaele);
@@ -319,11 +329,21 @@ async function menueInhalt(auftrag) {
   ].join("\n");
   const extra = {
     video: [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📍 Position", auftrag, "pos"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
-    foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
+    foto: auftrag.grafikModus ? [] : [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
   const zeilen = [
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
+    ...(!auftrag.grafikModus && art(auftrag) === "text" ? [
+      [knopf("🖼️ Sharepic erstellen", auftrag, "grafik:post"), knopf("📱 Storygrafik", auftrag, "grafik:story")],
+    ] : []),
+    ...(auftrag.grafikModus ? [
+      [knopf(auftrag.nurStory ? "🖼️ Als Sharepic" : "📱 Als Story", auftrag, `grafik:${auftrag.nurStory ? "post" : "story"}`),
+        knopf("✏️ Grafiktext", auftrag, "grafiktext")],
+      [knopf("↩️ Zurück zum Text", auftrag, "grafik:text")],
+    ] : []),
+    ...(auftrag.antragVarianten?.length ? [[knopf("📄 Andere Antragspassage", auftrag, "antragmenu")]] : []),
+    [knopf("💾 Idee speichern", auftrag, "idee")],
     ...(!auftrag.nurStory ? [[knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])]] : []),
     ...(extra.length ? [extra] : []),
     [knopf("📺 Kanäle", auftrag, "kanaele"), ...(!auftrag.nurStory && kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
@@ -336,7 +356,7 @@ async function menueInhalt(auftrag) {
   if (art(auftrag) !== "text" && alle.some((k) => STORY[k.identifier] && (auftrag.kunde == null || k.customer?.id === auftrag.kunde))) {
     optionen.push(knopf(auftrag.nurStory ? "📱 Nur Story ✓" : "📱 Nur Story", auftrag, "nurst"));
   }
-  if (art(auftrag) === "foto" && auftrag.story) {
+  if (art(auftrag) === "foto" && auftrag.story && !auftrag.grafikModus) {
     optionen.push(knopf(auftrag.storyText ? "✏️ Bildtext ✓" : "✏️ Text ins Bild", auftrag, "storytext"));
     optionen.push(knopf("🖼️ Story-Layout", auftrag, "slmenu"));
   }
@@ -521,6 +541,7 @@ async function verarbeiten(id, fileId) {
  * Höhe – in der Story läge es unter Fortschrittsbalken und Profilname.
  */
 async function storyNoetig(auftrag) {
+  if (auftrag.grafikStoryDatei) return true;
   if (art(auftrag) === "video") return !istStoryFormat(auftrag.masse);
   return art(auftrag) === "foto";
 }
@@ -535,6 +556,7 @@ const hochkantAn = (auftrag) => !auftrag.nurStory && Boolean(auftrag.hochkant) &
  */
 async function storyFassung(auftrag) {
   if (!(auftrag.story || hochkantAn(auftrag)) || !(await storyNoetig(auftrag))) return null;
+  if (auftrag.grafikStoryDatei) return auftrag.grafikStoryDatei;
   if (art(auftrag) === "foto") {
     // Kein Feed-Bild verwenden: sonst sitzt das Logo bereits im Motiv und wird mitgeblurrt.
     const ziel = datei(auftrag, "story.jpg");
@@ -734,10 +756,45 @@ async function fotosRendernUndVorschau(id) {
   }
 }
 
-async function textBeitrag(chatId, text) {
+async function textBeitrag(chatId, text, zusaetze = {}) {
   let auftrag = auftraege.neu(chatId);
-  auftrag = auftraege.aendern(auftrag.id, { art: "text", notizen: text, caption: text.trim(), captionQuelle: "eigene", medien: [], status: "vorschau" });
+  auftrag = auftraege.aendern(auftrag.id, {
+    art: "text", notizen: text, caption: text.trim(), captionQuelle: "eigene",
+    medien: [], status: "vorschau", ...zusaetze,
+  });
   await neuesMenue(auftrag);
+}
+
+/** Bestehenden Textauftrag in eine echte Postiz-Bild- oder Storyveröffentlichung umwandeln. */
+async function textZuGrafik(auftrag, format = "post", quelle = null) {
+  const text = quelle ?? auftrag.grafikQuelleText ?? auftrag.notizen ?? auftrag.caption;
+  const vorlage = await textGrafiken({
+    ordner: auftrag.ordner, text, layout: config.layout,
+    ausAntrag: Boolean(auftrag.antragVarianten?.length),
+  });
+  const story = format === "story";
+  auftrag = auftraege.aendern(auftrag.id, {
+    art: "foto", grafikModus: format, grafikQuelleText: text,
+    grafikStoryDatei: vorlage.story, medien: [vorlage.post], originale: [vorlage.post],
+    storyDatei: vorlage.story, storyHochgeladen: null,
+    mitLogo: false, hochgeladen: null, captions: {},
+    story, nurStory: story, kanaele: null, status: "vorschau",
+  });
+  await tg.fotos(auftrag.chatId, [story ? vorlage.story : vorlage.post],
+    story ? "Storygrafik – Vorschau" : "Sharepic – Vorschau");
+  if (vorlage.gekuerzt) await tg.senden(auftrag.chatId,
+    "ℹ️ Der Text wurde für die Grafik gekürzt. Bitte die Vorschau prüfen und gegebenenfalls „✏️ Grafiktext“ nutzen.");
+  return auftrag;
+}
+
+function antragMenue(auftrag) {
+  const zeilen = auftrag.antragVarianten.map((v, i) =>
+    [knopf(`${i === (auftrag.antragIndex ?? 0) ? "🔘" : "⚪"} ${v.titel.slice(0, 48)}`, auftrag, `av:${i}`)]);
+  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  return {
+    text: "<b>Textstellen aus deinem Antrag</b>\nKeine KI-Zusammenfassung: Die Texte werden aus dem PDF übernommen, längere Stellen mit […] gekennzeichnet. Bitte den Wortlaut und den Kontext prüfen.",
+    reply_markup: { inline_keyboard: zeilen },
+  };
 }
 
 async function veroeffentlichen(auftrag) {
