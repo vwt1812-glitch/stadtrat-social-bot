@@ -21,10 +21,13 @@ import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 import { storyFotoText, storyTextZeilen } from "./story-text.mjs";
+import { textGrafiken } from "./grafik-text.mjs";
+import { IdeenSpeicher, antragVorschlaege } from "./redaktion.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
 const auftraege = new Auftraege(config.datenDir);
+const ideen = new IdeenSpeicher(config.datenDir);
 const postiz = new Postiz({ ...config.postiz, zaehler: new AnfragenZaehler(path.join(config.datenDir, "postiz-anfragen.json"), config.postiz.maxAnfragen) });
 const mastodon = config.mastodon ? new Mastodon(config.mastodon) : null;
 const MB = 1024 * 1024;
@@ -275,10 +278,15 @@ const HILFE = `<b>So funktioniert's</b>
 Schick mir
 • ein <b>Video</b> – am besten <b>als Datei</b> (📎 → Datei), dann bleibt die volle Qualität erhalten. Ich baue Logo und Untertitel ein.
 • ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zur Caption. Über <b>📱 Nur Story</b> und <b>✏️ Text ins Bild</b> kannst du eine reine Fotostory machen.
-• einfach <b>Text</b> – daraus wird ein Textbeitrag (nicht für Instagram, TikTok, YouTube).
+• einfach <b>Text</b> – daraus wird ein Textbeitrag. Mit „🖼️ Grafik“ oder „📱 Storygrafik“ entsteht lokal eine fertige Grafik.
+• eine <b>Sprachnachricht</b> – Whisper transkribiert sie lokal und du entscheidest über Textpost, Grafik oder Ideenspeicher.
+• einen <b>Antrag als PDF</b> – ich zeige dir Textauszüge für Posts und Sharepics, ohne unbelegte KI-Zusammenfassung.
 
 Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpassen und mit <b>Ja</b> posten.
 
+/idee Text – Gedanken für später speichern
+/ideen – deine gespeicherten Ideen wieder aufrufen
+/antrag – Hinweise für das Hochladen von Antrags-PDFs
 /kanaele – verbundene Postiz-Kanäle nach Kunden
 /status – prüft Postiz, Whisper, ffmpeg und KI
 /id – zeigt deine Telegram-ID (und die der Gruppe)
@@ -301,7 +309,9 @@ async function menueInhalt(auftrag) {
     transkript: "\n<i>(einfacher Vorschlag aus dem Transkript)</i>",
     hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
   }[auftrag.captionQuelle] ?? "";
-  const titel = auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
+  const titel = auftrag.grafikModus ? (auftrag.nurStory ? "Storygrafik" : "Sharepic") :
+    auftrag.antragVarianten?.length ? "Antrag – Textentwurf" :
+    auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
   const hinweise = [];
   try {
     const liste = auftrag.nurStory ? [] : laengen(auftrag, kanaele);
@@ -319,11 +329,21 @@ async function menueInhalt(auftrag) {
   ].join("\n");
   const extra = {
     video: [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📍 Position", auftrag, "pos"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
-    foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
+    foto: auftrag.grafikModus ? [] : [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
   const zeilen = [
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
+    ...(!auftrag.grafikModus && art(auftrag) === "text" ? [
+      [knopf("🖼️ Sharepic erstellen", auftrag, "grafik:post"), knopf("📱 Storygrafik", auftrag, "grafik:story")],
+    ] : []),
+    ...(auftrag.grafikModus ? [
+      [knopf(auftrag.nurStory ? "🖼️ Als Sharepic" : "📱 Als Story", auftrag, `grafik:${auftrag.nurStory ? "post" : "story"}`),
+        knopf("✏️ Grafiktext", auftrag, "grafiktext")],
+      [knopf("↩️ Zurück zum Text", auftrag, "grafik:text")],
+    ] : []),
+    ...(auftrag.antragVarianten?.length ? [[knopf("📄 Andere Antragspassage", auftrag, "antragmenu")]] : []),
+    [knopf("💾 Idee speichern", auftrag, "idee")],
     ...(!auftrag.nurStory ? [[knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])]] : []),
     ...(extra.length ? [extra] : []),
     [knopf("📺 Kanäle", auftrag, "kanaele"), ...(!auftrag.nurStory && kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
@@ -336,7 +356,7 @@ async function menueInhalt(auftrag) {
   if (art(auftrag) !== "text" && alle.some((k) => STORY[k.identifier] && (auftrag.kunde == null || k.customer?.id === auftrag.kunde))) {
     optionen.push(knopf(auftrag.nurStory ? "📱 Nur Story ✓" : "📱 Nur Story", auftrag, "nurst"));
   }
-  if (art(auftrag) === "foto" && auftrag.story) {
+  if (art(auftrag) === "foto" && auftrag.story && !auftrag.grafikModus) {
     optionen.push(knopf(auftrag.storyText ? "✏️ Bildtext ✓" : "✏️ Text ins Bild", auftrag, "storytext"));
     optionen.push(knopf("🖼️ Story-Layout", auftrag, "slmenu"));
   }
@@ -521,6 +541,7 @@ async function verarbeiten(id, fileId) {
  * Höhe – in der Story läge es unter Fortschrittsbalken und Profilname.
  */
 async function storyNoetig(auftrag) {
+  if (auftrag.grafikStoryDatei) return true;
   if (art(auftrag) === "video") return !istStoryFormat(auftrag.masse);
   return art(auftrag) === "foto";
 }
@@ -535,6 +556,7 @@ const hochkantAn = (auftrag) => !auftrag.nurStory && Boolean(auftrag.hochkant) &
  */
 async function storyFassung(auftrag) {
   if (!(auftrag.story || hochkantAn(auftrag)) || !(await storyNoetig(auftrag))) return null;
+  if (auftrag.grafikStoryDatei) return auftrag.grafikStoryDatei;
   if (art(auftrag) === "foto") {
     // Kein Feed-Bild verwenden: sonst sitzt das Logo bereits im Motiv und wird mitgeblurrt.
     const ziel = datei(auftrag, "story.jpg");
@@ -734,10 +756,45 @@ async function fotosRendernUndVorschau(id) {
   }
 }
 
-async function textBeitrag(chatId, text) {
+async function textBeitrag(chatId, text, zusaetze = {}) {
   let auftrag = auftraege.neu(chatId);
-  auftrag = auftraege.aendern(auftrag.id, { art: "text", notizen: text, caption: text.trim(), captionQuelle: "eigene", medien: [], status: "vorschau" });
+  auftrag = auftraege.aendern(auftrag.id, {
+    art: "text", notizen: text, caption: text.trim(), captionQuelle: "eigene",
+    medien: [], status: "vorschau", ...zusaetze,
+  });
   await neuesMenue(auftrag);
+}
+
+/** Bestehenden Textauftrag in eine echte Postiz-Bild- oder Storyveröffentlichung umwandeln. */
+async function textZuGrafik(auftrag, format = "post", quelle = null) {
+  const text = quelle ?? auftrag.grafikQuelleText ?? auftrag.notizen ?? auftrag.caption;
+  const vorlage = await textGrafiken({
+    ordner: auftrag.ordner, text, layout: config.layout,
+    ausAntrag: Boolean(auftrag.antragVarianten?.length),
+  });
+  const story = format === "story";
+  auftrag = auftraege.aendern(auftrag.id, {
+    art: "foto", grafikModus: format, grafikQuelleText: text,
+    grafikStoryDatei: vorlage.story, medien: [vorlage.post], originale: [vorlage.post],
+    storyDatei: vorlage.story, storyHochgeladen: null,
+    mitLogo: false, hochgeladen: null, captions: {},
+    story, nurStory: story, kanaele: null, status: "vorschau",
+  });
+  await tg.fotos(auftrag.chatId, [story ? vorlage.story : vorlage.post],
+    story ? "Storygrafik – Vorschau" : "Sharepic – Vorschau");
+  if (vorlage.gekuerzt) await tg.senden(auftrag.chatId,
+    "ℹ️ Der Text wurde für die Grafik gekürzt. Bitte die Vorschau prüfen und gegebenenfalls „✏️ Grafiktext“ nutzen.");
+  return auftrag;
+}
+
+function antragMenue(auftrag) {
+  const zeilen = auftrag.antragVarianten.map((v, i) =>
+    [knopf(`${i === (auftrag.antragIndex ?? 0) ? "🔘" : "⚪"} ${v.titel.slice(0, 48)}`, auftrag, `av:${i}`)]);
+  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  return {
+    text: "<b>Textstellen aus deinem Antrag</b>\nKeine KI-Zusammenfassung: Die Texte werden aus dem PDF übernommen, längere Stellen mit […] gekennzeichnet. Bitte den Wortlaut und den Kontext prüfen.",
+    reply_markup: { inline_keyboard: zeilen },
+  };
 }
 
 async function veroeffentlichen(auftrag) {
@@ -838,6 +895,62 @@ async function knopfGedrueckt(cq) {
   };
 
   switch (aktion) {
+    case "idee": {
+      const gespeichert = ideen.speichern(auftrag.chatId, auftrag.grafikQuelleText || auftrag.notizen || auftrag.caption,
+        auftrag.antragVarianten?.length ? "antrag" : "entwurf");
+      return antwort(`Idee gespeichert (${gespeichert.id}).`);
+    }
+    case "antragmenu": {
+      if (!auftrag.antragVarianten?.length) return antwort("Kein Antrag bei diesem Entwurf.", true);
+      await zeigeMenue(auftrag, antragMenue(auftrag));
+      return antwort();
+    }
+    case "av": {
+      const index = Number(arg);
+      if (!Number.isInteger(index) || !auftrag.antragVarianten?.[index]) return antwort("Unbekannte Textstelle.", true);
+      const v = auftrag.antragVarianten[index];
+      // Auf eine neue, überprüfbare Dokumentpassage zurückgehen, nicht blind ein altes Sharepic behalten.
+      auftrag = auftraege.aendern(id, {
+        art: "text", grafikModus: null, grafikStoryDatei: null, grafikQuelleText: null,
+        medien: [], story: false, nurStory: false, storyDatei: null, storyHochgeladen: null,
+        hochgeladen: null, caption: v.text, notizen: v.text, captionQuelle: "dokument",
+        antragIndex: index, kanaele: null, captions: {},
+      });
+      await neuesMenue(auftrag);
+      return antwort("Originaltext aus PDF gewählt. Bitte prüfen.");
+    }
+    case "grafik": {
+      if (!["post", "story", "text"].includes(arg)) return antwort("Ungültiges Format.", true);
+      if (arg === "text") {
+        auftrag = auftraege.aendern(id, {
+          art: "text", grafikModus: null, medien: [], originale: null,
+          grafikStoryDatei: null, story: false, nurStory: false, storyDatei: null,
+          storyHochgeladen: null, hochgeladen: null, kanaele: null, captions: {},
+        });
+        await neuesMenue(auftrag);
+        return antwort("Wieder Textbeitrag.");
+      }
+      await antwort("Erstelle Grafik lokal …");
+      auftrag = auftraege.aendern(id, { status: "arbeitet" });
+      einreihen(async () => {
+        try {
+          const aktualisiert = await textZuGrafik(auftraege.get(id), arg);
+          await neuesMenue(aktualisiert);
+        } catch (e) {
+          console.error(e);
+          await tg.senden(auftrag.chatId, `❌ Grafik fehlgeschlagen: <pre>${html(e.message)}</pre>`);
+          await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
+        }
+      });
+      return;
+    }
+    case "grafiktext": {
+      if (!auftrag.grafikModus) return antwort("Nur für Textgrafiken.", true);
+      auftraege.aendern(id, { wartetAuf: "grafiktext" });
+      await tg.senden(auftrag.chatId,
+        "Schick mir den Text für die Grafik. Erste Zeile ist die Überschrift, weitere Zeilen sind der Erklärungstext. Bitte Aussagen aus Anträgen nur im belegten Wortlaut übernehmen.");
+      return antwort();
+    }
     case "jetzt":
       return bestaetigen("now", new Date());
     case "planen":
@@ -1171,6 +1284,21 @@ async function texteingabe(auftrag, text) {
     return neuesMenue(auftrag);
   }
   switch (auftrag.wartetAuf) {
+    case "grafiktext": {
+      auftrag = auftraege.aendern(auftrag.id, { wartetAuf: null, status: "arbeitet" });
+      await tg.senden(auftrag.chatId, "🖼️ Erstelle die Grafik mit deinem neuen Text …");
+      einreihen(async () => {
+        try {
+          const a = await textZuGrafik(auftraege.get(auftrag.id), auftrag.grafikModus ?? "post", text.trim());
+          await neuesMenue(a);
+        } catch (e) {
+          console.error(e);
+          await tg.senden(auftrag.chatId, `❌ Grafik: <pre>${html(e.message)}</pre>`);
+          await neuesMenue(auftraege.aendern(auftrag.id, { status: "vorschau" }));
+        }
+      });
+      return;
+    }
     case "storytext": {
       const neu = text.trim() === "-" ? "" : text.trim();
       if (neu) {
@@ -1267,6 +1395,90 @@ async function srtDatei(auftrag, dokument) {
   await neuRendern(auftrag, `Untertitel-Datei mit ${cues.length} Einträgen übernommen.`);
 }
 
+/** Sprachnachricht lokal in einen bearbeitbaren Textentwurf umwandeln. */
+async function sprachnachricht(msg, audio) {
+  if (audio.file_size > 20 * MB && !tg.lokal) {
+    return tg.senden(msg.chat.id, "Diese Sprachnachricht ist für die normale Telegram-Bot-API zu groß. Bitte kürzer aufnehmen.");
+  }
+  if (audio.duration > 240) return tg.senden(msg.chat.id, "Bitte Sprachnachrichten bis vier Minuten schicken. Längere Reden weiterhin als Video.");
+  const a = auftraege.neu(msg.chat.id);
+  await tg.senden(msg.chat.id, "🎙️ Ich transkribiere die Sprachnachricht lokal mit Whisper – ohne Cloud-KI …");
+  einreihen(async () => {
+    try {
+      const original = datei(a, "sprache.ogg");
+      const wav = datei(a, "sprache.wav");
+      await tg.herunterladen(audio.file_id, original);
+      await tonFuerWhisper(original, wav);
+      const cues = await transkribiere(wav, config.whisper, config.glossar);
+      const wortlaut = volltext(cues).trim();
+      if (!wortlaut) throw new Error("Whisper hat keine verständliche Sprache erkannt.");
+      const zuLang = wortlaut.length > 2800;
+      const text = zuLang ? wortlaut.slice(0, 2750).trimEnd() + " […]" : wortlaut;
+      const auftrag = auftraege.aendern(a.id, {
+        art: "text", notizen: text, transkript: wortlaut, caption: text,
+        captionQuelle: "transkript", medien: [], status: "vorschau",
+      });
+      await tg.senden(a.chatId, `🎙️ <b>Transkript (bitte prüfen)</b>\n${html(text.slice(0, 3500))}` +
+        (zuLang ? "\n⚠️ Für den Entwurf gekürzt." : ""));
+      await neuesMenue(auftrag);
+    } catch (e) {
+      console.error(e);
+      auftraege.aendern(a.id, { status: "fehler" });
+      await tg.senden(a.chatId, `❌ Spracherkennung: ${html(e.message)}`);
+    }
+  });
+}
+
+/** Digitalen Antrag lesen; keine OCR und keine unbelegten Zusammenfassungen. */
+async function pdfAntrag(msg, dokument) {
+  if (dokument.file_size > 12 * MB) return tg.senden(msg.chat.id, "Bitte ein Antrags-PDF unter 12 MB schicken.");
+  const a = auftraege.neu(msg.chat.id);
+  await tg.senden(msg.chat.id, "📄 Ich lese den Antrag lokal und suche Textstellen für Beitragsentwürfe …");
+  einreihen(async () => {
+    try {
+      const pdf = datei(a, "antrag.pdf");
+      await tg.herunterladen(dokument.file_id, pdf);
+      const roh = await ausfuehren("pdftotext", ["-f", "1", "-l", "15", "-layout", pdf, "-"]);
+      const varianten = antragVorschlaege(roh);
+      const erste = varianten[0];
+      const auftrag = auftraege.aendern(a.id, {
+        art: "text", notizen: erste.text, caption: erste.text,
+        captionQuelle: "dokument", antragVarianten: varianten, antragIndex: 0,
+        medien: [], status: "vorschau",
+      });
+      await tg.senden(a.chatId,
+        `📄 <b>${varianten.length} Textstelle(n) im Antrag gefunden</b> (maximal erste 15 Seiten).\n` +
+        "Das sind reine Auszüge, keine KI-Zusammenfassung. Der Bot prüft nicht, ob die Aussagen zutreffen oder was beschlossen wurde. Bitte Kontext, Überschrift und Inhalt vor dem Posten prüfen.");
+      await neuesMenue(auftrag);
+    } catch (e) {
+      console.error(e);
+      auftraege.aendern(a.id, { status: "fehler" });
+      await tg.senden(a.chatId, `❌ Antrag: ${html(e.message)}`);
+    }
+  });
+}
+
+/** Gespeicherte Ideen nicht mit dem auf 14 Tage begrenzten Auftragsarchiv vermischen. */
+async function ideenMenue(chatId) {
+  const liste = ideen.liste(chatId);
+  if (!liste.length) return tg.senden(chatId, "Noch keine Ideen gespeichert. Mit /idee und einem Gedanken dahinter kannst du anfangen.");
+  return tg.senden(chatId,
+    "<b>Deine gespeicherten Ideen</b> – antippen, um daraus wieder einen Entwurf zu machen:",
+    { reply_markup: { inline_keyboard: liste.slice(0, 12).map((i) => [{
+      text: `💡 ${i.text.replace(/\s+/g, " ").slice(0, 54)}`,
+      callback_data: `idea:${i.id}`,
+    }]) } });
+}
+
+async function ideenKnopf(cq) {
+  const eintrag = ideen.holen(cq.message.chat.id, (cq.data ?? "").split(":")[1]);
+  await tg.aufruf("answerCallbackQuery", {
+    callback_query_id: cq.id, text: eintrag ? "Entwurf wird geöffnet" : "Idee nicht gefunden",
+  }).catch(() => {});
+  if (eintrag) await textBeitrag(cq.message.chat.id, eintrag.text,
+    { captionQuelle: "eigene", quelle: "gespeicherte Idee" });
+}
+
 async function nachricht(msg) {
   const chatId = msg.chat.id;
   const nutzer = msg.from?.id;
@@ -1285,14 +1497,27 @@ async function nachricht(msg) {
   if (video) return neuesVideo(msg, video);
   const foto = msg.photo?.at(-1) ?? (msg.document?.mime_type?.startsWith("image/") ? msg.document : null);
   if (foto) return fotoEingang(msg, foto);
-
   const wartend = auftraege.wartend(chatId);
+  // Die Antwort auf einen laufenden Dialog hat Vorrang vor neuen Medientypen.
+  if (!wartend && (msg.voice || msg.audio)) return sprachnachricht(msg, msg.voice || msg.audio);
+  if (!wartend && msg.document && (msg.document.mime_type === "application/pdf" || /\.pdf$/i.test(msg.document.file_name ?? ""))) {
+    return pdfAntrag(msg, msg.document);
+  }
   if (msg.document && /\.srt$/i.test(msg.document.file_name ?? "") && wartend?.wartetAuf === "untertitel") {
     return srtDatei(wartend, msg.document);
   }
 
   const text = msg.text ?? "";
   if (/^\/(start|hilfe|help)\b/.test(text)) return tg.senden(chatId, HILFE);
+  if (/^\/antrag\b/.test(text)) return tg.senden(chatId,
+    "Schick mir den Antrag direkt als PDF-Datei. Ich lese lokal bis zu 15 Seiten (digitaler Text, keine Scan-OCR) und zeige dir überprüfbare Textstellen für Post und Grafik.");
+  if (/^\/ideen\b/.test(text)) return ideenMenue(chatId);
+  if (/^\/idee(?:\s|$)/.test(text)) {
+    const inhalt = text.replace(/^\/idee\s*/, "").trim();
+    if (!inhalt) return tg.senden(chatId, "Schreib zum Beispiel <code>/idee Beitrag über den neuen Stadtratsantrag</code>.");
+    const gespeichert = ideen.speichern(chatId, inhalt);
+    return tg.senden(chatId, `💾 Idee ${gespeichert.id} gespeichert. Mit /ideen wieder aufrufen.`);
+  }
   if (/^\/kanaele\b/.test(text)) {
     kanalCache.zeit = 0;
     const kanaele = await alleKanaele();
@@ -1396,7 +1621,7 @@ async function main() {
       const verarbeite = u.message
         ? nachricht(u.message)
         : u.callback_query && erlaubt(u.callback_query.from.id, u.callback_query.message?.chat.id)
-          ? knopfGedrueckt(u.callback_query)
+          ? (u.callback_query.data?.startsWith("idea:") ? ideenKnopf(u.callback_query) : knopfGedrueckt(u.callback_query))
           : null;
       verarbeite?.catch((e) => fehlerMelden(u.message?.chat.id ?? u.callback_query?.message?.chat.id, e));
     }
