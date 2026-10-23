@@ -11,7 +11,7 @@ WHISPER_GROESSE="${WHISPER_GROESSE:-small}"
 
 echo "== Pakete (git, ffmpeg, Schriften, Compiler für whisper.cpp)"
 sudo apt-get update
-sudo apt-get install -y git curl ca-certificates ffmpeg fonts-dejavu cmake build-essential
+sudo apt-get install -y git curl ca-certificates ffmpeg poppler-utils fonts-dejavu cmake build-essential
 
 echo "== Node.js 22"
 if ! node --version 2>/dev/null | grep -qE '^v(2[2-9]|[3-9][0-9])'; then
