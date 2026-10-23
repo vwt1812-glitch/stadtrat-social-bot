@@ -1,8 +1,8 @@
 // Gemeinsame Geometrie für 9:16-Storys, Reels und TikTok.
 // Die Werte sind konservative Arbeitsbereiche, keine von Plattformen garantierten Pixelgrenzen.
 export const SAFE_AREAS = Object.freeze({
-  story: { top: 0.14, bottom: 0.16, left: 0.05, right: 0.05 },
-  reel: { top: 0.14, bottom: 0.23, left: 0.06, right: 0.16 },
+  story: { top: 0.14, bottom: 0.20, left: 0.06, right: 0.06 },
+  reel: { top: 0.14, bottom: 0.35, left: 0.06, right: 0.16 },
   normal: { top: 0.05, bottom: 0.05, left: 0.05, right: 0.05 },
 });
 
