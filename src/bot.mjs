@@ -205,7 +205,14 @@ function lageMenue(auftrag) {
 }
 
 /** Layout für diesen Auftrag: Einstellungen aus der .env plus gewählte Lage der Untertitel. */
-const layoutFuer = (auftrag) => ({ ...config.layout, lage: auftrag.untertitelLage ?? null });
+const layoutFuer = (auftrag) => ({
+  ...config.layout,
+  lage: auftrag.untertitelLage ?? null,
+  gesichter: auftrag.gesichter ?? [],
+  // Reguläre Beiträge behalten ihr Layout; für Hochkantvideos vermeiden wir zusätzlich Gesichter.
+  smartLogo: Boolean(auftrag.gesichter?.length && auftrag.masse?.hoehe > auftrag.masse?.breite),
+  layoutModus: "reel",
+});
 
 const verzoegerungText = (ms) => REPOST_VERZOEGERUNG.find(([, wert]) => wert === ms)?.[0] ?? "sofort";
 
@@ -442,16 +449,18 @@ async function verarbeiten(id, fileId) {
     const masse = await untersuche(original);
     auftrag = auftraege.aendern(id, { original, masse });
 
-    // Hochkant: Gesicht suchen und die Untertitel dorthin legen, wo sie es nicht verdecken
-    if (masse.hoehe > masse.breite) {
-      await schritt(auftrag, "🙂 Suche dein Gesicht …");
-      const funde = await gesichtSuchen(original, config.gesicht);
-      if (funde) {
-        const wahl = lageWaehlen(funde, { masse, layout: config.layout });
-        auftrag = auftraege.aendern(id, {
-          untertitelLage: wahl.lage === "unten" ? null : wahl.lage, lageAutomatisch: wahl.lage !== "unten", gesichtHinweise: wahl.hinweise,
-        });
-      }
+    // Gesichtsdaten auch bei Querformat sichern: die 9:16-Fassung kann damit das Logo
+    // am Gesicht vorbeisetzen. Für Untertitel bleibt die bisherige Hochkant-Logik.
+    await schritt(auftrag, "🙂 Prüfe die Gesichtsposition …");
+    const funde = await gesichtSuchen(original, config.gesicht);
+    const zuverlaessig = funde?.gesichter?.length >= Math.max(2, funde.bilder * 0.4);
+    auftrag = auftraege.aendern(id, { gesichter: zuverlaessig ? funde.gesichter : [] });
+    if (masse.hoehe > masse.breite && funde) {
+      const wahl = lageWaehlen(funde, { masse, layout: config.layout });
+      auftrag = auftraege.aendern(id, {
+        untertitelLage: wahl.lage === "unten" ? null : wahl.lage,
+        lageAutomatisch: wahl.lage !== "unten", gesichtHinweise: wahl.hinweise,
+      });
     }
 
     let cues = [];
@@ -499,11 +508,19 @@ const hochkantAn = (auftrag) => !auftrag.nurStory && Boolean(auftrag.hochkant) &
 async function storyFassung(auftrag) {
   if (!(auftrag.story || hochkantAn(auftrag)) || !(await storyNoetig(auftrag))) return null;
   if (art(auftrag) === "foto") {
+    // Kein Feed-Bild verwenden: sonst sitzt das Logo bereits im Motiv und wird mitgeblurrt.
     const ziel = datei(auftrag, "story.jpg");
-    await storyFoto({ eingabe: auftrag.medien[0], ausgabe: ziel });
+    const meta = await storyFoto({
+      eingabe: auftrag.originale?.[0] ?? auftrag.medien[0], ausgabe: ziel,
+      layout: config.layout, mitLogo: auftrag.mitLogo,
+      logoPosition: auftrag.storyLogoPosition ?? "auto",
+    });
     if (!auftrag.storyText?.trim()) return ziel;
     const mitText = datei(auftrag, "story-text.jpg");
-    await storyFotoText({ eingabe: ziel, ausgabe: mitText, text: auftrag.storyText, layout: config.layout });
+    await storyFotoText({
+      eingabe: ziel, ausgabe: mitText, text: auftrag.storyText,
+      layout: { ...config.layout, bild: meta.bild, logoBereich: meta.logoBereich, storyTextPosition: auftrag.storyTextPosition },
+    });
     return mitText;
   }
   const masse = { ...STORY_MASSE, dauer: auftrag.masse.dauer };
