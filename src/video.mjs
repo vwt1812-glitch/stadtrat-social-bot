@@ -5,6 +5,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { untertitelGroesse, untertitelPosition } from "./untertitel.mjs";
+import { bildRechteck, gesichterUebertragen, logoPlatzierung } from "./story-layout.mjs";
 
 export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -135,17 +136,27 @@ export async function logoGrafik({ layout, masse, ordner, video = true }) {
     grafik = { breite: k.breite, hoehe: k.hoehe, x: k.x, y: k.y, w, h };
   }
 
-  // Position der sichtbaren Fläche im Video, dann auf die Bildecke mit Schatten umrechnen
+  // Storys/Reels: Logo vollständig in einer zentral berechneten Safe Area platzieren.
+  // Der Rahmen der fertigen Logo-Karte zählt dabei mit, nicht nur die Schrift.
   const { rand, oben } = raender(masse, video);
   let sichtbarX = layout.logoPosition.includes("rechts") ? masse.breite - rand - grafik.w : rand;
   let sichtbarY = layout.logoPosition.includes("unten") ? masse.hoehe - rand - grafik.h : oben;
-  // Story-Fassung eines Querformats: mittig über dem Bild, wenn darüber genug Platz ist
-  const ueberBild = layout.bild ? layout.bild.oben - pxl(48, s) - grafik.h : -1;
-  if (ueberBild >= oben) {
-    sichtbarX = Math.round((masse.breite - grafik.w) / 2);
-    sichtbarY = ueberBild;
+  if (layout.smartLogo || layout.bild) {
+    const position = logoPlatzierung({
+      masse, breite: grafik.w, hoehe: grafik.h,
+      bild: layout.bild, gesichter: layout.gesichter ?? [],
+      modus: layout.layoutModus ?? "story",
+      wunsch: layout.storyLogoPosition ?? ((layout.smartLogo || layout.bild) ? "auto" : layout.logoPosition),
+    });
+    if (position) {
+      sichtbarX = position.x;
+      sichtbarY = position.y;
+    }
   }
-  return { datei: ziel, x: sichtbarX - grafik.x, y: sichtbarY - grafik.y };
+  return {
+    datei: ziel, x: sichtbarX - grafik.x, y: sichtbarY - grafik.y,
+    sichtbar: { x: sichtbarX, y: sichtbarY, w: grafik.w, h: grafik.h },
+  };
 }
 
 /**
@@ -417,10 +428,8 @@ const imBild = (layout, h) => Boolean(layout.bild) && layout.bild.unten - layout
 
 /** Wo das scharfe Bild auf der Story-Fläche liegt – so, wie storyFlaeche es setzt. */
 export function storyBild(original, masse = STORY_MASSE) {
-  const faktor = Math.min(masse.breite / original.breite, masse.hoehe / original.hoehe);
-  const h = gerade(original.hoehe * faktor);
-  const oben = Math.round((masse.hoehe - h) / 2);
-  return { oben, unten: oben + h };
+  const { oben, unten } = bildRechteck(original, masse);
+  return { oben, unten };
 }
 
 /**
@@ -430,8 +439,11 @@ export function storyBild(original, masse = STORY_MASSE) {
  * Caption von Reels/TikTok bleiben (untere 22 %); sonst gilt das normale Hochkant-Layout.
  */
 export function storyLayout(layout, original, masse = STORY_MASSE) {
-  const bild = storyBild(original, masse);
-  const ergebnis = { ...layout, bild };
+  const bild = bildRechteck(original, masse);
+  const ergebnis = {
+    ...layout, bild, smartLogo: true, layoutModus: "reel",
+    gesichter: gesichterUebertragen(layout.gesichter ?? [], bild, masse),
+  };
   const unterkante = bild.unten + Math.round(masse.hoehe * 0.025) + 1.35 * untertitelGroesse(masse);
   const position = (masse.hoehe - unterkante) / masse.hoehe;
   if (position >= 0.22) ergebnis.positionFest = Math.round(position * 1000) / 1000;
@@ -491,15 +503,32 @@ export async function logoFuerStory(layout) {
 }
 
 /**
- * Story-Fassung eines Fotos: das fertige Feed-Foto (samt Logo, wie im Beitrag) auf 1080×1920,
- * höchstens 80 % hoch – so liegt sein Logo immer unter der Kopfzeile der Story.
+ * Fotostory direkt aus dem ORIGINAL erzeugen. Erst Hintergrund und scharfes Motiv,
+ * danach das Logo: keine verschwommene Logo-Kopie im Hintergrund.
+ * Der vorhandene Feed-Render mit seiner eigenen Logoposition bleibt unverändert.
  */
-export async function storyFoto({ eingabe, ausgabe }) {
-  await ausfuehren("ffmpeg", [
-    "-y", "-v", "error", "-i", eingabe,
-    "-filter_complex", `[0:v]${storyFlaeche(STORY_MASSE, { vorneHoehe: STORY_MASSE.hoehe * STORY_FOTO_HOEHE })},format=yuvj420p[bild]`,
-    "-map", "[bild]", "-frames:v", "1", "-q:v", "3", ausgabe,
-  ]);
+export async function storyFoto({ eingabe, ausgabe, layout = null, mitLogo = false, logoPosition = "auto" }) {
+  const original = await untersuche(eingabe);
+  const bild = bildRechteck(original, STORY_MASSE, STORY_MASSE.hoehe * STORY_FOTO_HOEHE);
+  const ordner = path.dirname(ausgabe);
+  const args = ["-y", "-v", "error", "-i", eingabe];
+  const filter = [`[0:v]${storyFlaeche(STORY_MASSE, { vorneHoehe: STORY_MASSE.hoehe * STORY_FOTO_HOEHE })}[grund]`];
+  let letzte = "grund";
+  let logoBereich = null;
+  if (mitLogo && layout?.logo) {
+    const logo = await logoGrafik({
+      layout: { ...layout, bild, smartLogo: true, layoutModus: "story", storyLogoPosition: logoPosition },
+      masse: STORY_MASSE, ordner, video: false,
+    });
+    args.push("-i", logo.datei);
+    filter.push(`[grund][1:v]overlay=${logo.x}:${logo.y}:format=auto[mitlogo]`);
+    letzte = "mitlogo";
+    logoBereich = logo.sichtbar;
+  }
+  filter.push(`[${letzte}]format=yuvj420p[bild]`);
+  args.push("-filter_complex", filter.join(";"), "-map", "[bild]", "-frames:v", "1", "-q:v", "3", ausgabe);
+  await ausfuehren("ffmpeg", args);
+  return { bild, logoBereich };
 }
 
 /** Verkleinerte Kopie, die die KI für den Caption-Vorschlag ansieht. */

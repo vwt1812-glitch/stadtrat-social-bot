@@ -35,6 +35,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 📱 Story | Foto/Video zusätzlich als Story auf Instagram und Facebook (erstes Bild bzw. das Video); was nicht 9:16 ist, bekommt eine eigene Story-Fassung mit Vorschau |
 | 📱 Nur Story | **Ausschließlich eine Story** auf Instagram/Facebook, kein Feed-Post; vorhandene Kanalauswahl wird beim Verlassen des Modus wiederhergestellt |
 | ✏️ Text ins Bild | Bei Fotostorys optional einen kurzen Text schicken: wird in der 9:16-Fassung auf einer dunklen Karte eingebrannt; mit Vorschau, maximal sechs Zeilen, `-` zum Entfernen |
+| 🖼️ Story-Layout | Fotostory: Logo automatisch auf freie unscharfe Flächen setzen oder eine Position auswählen; auch Position des Bildtexts ändern. Sicherheitsabstände haben immer Vorrang |
 | 📲 9:16 für Insta | nur Querformat-Videos: Instagram (als Reel) und TikTok bekommen dieselbe 9:16-Fassung wie die Story, X, Facebook, LinkedIn, YouTube usw. das Querformat (Standard: `HOCHKANT_STANDARD`) |
 | 🗑️ Verwerfen | Vorschlag löschen |
 
@@ -202,15 +203,18 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   der Mitte. Im Menü steht dann „automatisch“; **📍 Position** überschreibt das. Füllt das Gesicht fast das ganze
   Bild oder reicht der Kopf ins Logo, gibt es einen 💡-Tipp für die nächste Aufnahme. `pi/install.sh` richtet
   dafür Python mit OpenCV in `.venv` ein; fehlt es, bleibt die Gesichtssuche einfach aus.
-- **Storys:** Instagram und Facebook blenden oben Fortschrittsbalken und Profil, unten das Antwortfeld ein (je
-  gut 10 %). Hochkant-Videos (9:16) gehen unverändert als Story raus – ihr Layout lässt das schon frei. Für alle
-  anderen baut der Bot bei **📱 Story** eine eigene Fassung in 1080×1920 und schickt sie als „Story-Vorschau“:
-  Videos mittig auf einer unscharfen Kopie. Das Layout richtet sich dann am Bild aus statt an der ganzen Fläche:
-  Logo mittig darüber (beim freien Logo auf einem weichen dunklen Verlauf, in heller Schrift `quer-dunkel`),
-  Bauchbinde unten links im Bild beim Sprecher, Untertitel direkt unter dem Bild auf der unscharfen Fläche – so
-  verdecken sie nichts und bleiben über Name und Caption von Reels/TikTok. Ist dafür kein Platz (z. B. bei 4:5),
-  gilt das normale Hochkant-Layout; „📍 Position“ geht immer vor. Fotos kommen samt ihrem Logo wie im Beitrag, höchstens
-  80 % hoch, damit das Logo unter der Kopfzeile bleibt. Die Story-Fassung wird beim Posten extra hochgeladen.
+- **Storys:** Instagram und Facebook zeigen oben Fortschrittsbalken und Profil, unten Antworten/Interaktionen.
+  Der Bot nutzt dafür konservative Sicherheitsbereiche (oben 14 %, unten 20 %); für Reels/TikTok oben 14 %,
+  unten 35 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
+  Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung mit unscharfem Hintergrund.
+  Fotos werden **direkt aus dem Original** bearbeitet: erst Hintergrund und scharfes Bild, dann das Logo,
+  damit es nicht in den unscharfen Hintergrund eingebrannt ist. Das Logo landet bevorzugt auf einer ausreichend
+  großen freien unscharfen Fläche; falls keine passt, in einer freien Ecke innerhalb der Sicherheitsbereiche.
+  **🖼️ Story-Layout** erlaubt bei Fotos die Positionen automatisch, oben/unten links, mittig oder rechts und
+  eine Position für Bildtext. Text wird bevorzugt auf freien Flächen platziert, ohne das Logo zu überdecken.
+  In Videos können erkannte Gesichter die Logoposition beeinflussen (auch nach Umrechnung eines Querformats
+  auf 9:16). Bei einem Querformatvideo stehen Untertitel nach Möglichkeit unter dem scharfen Bild,
+  Bauchbinden bleiben möglichst im Bild. Die eigene Story-Fassung wird beim Posten extra hochgeladen.
 - **Querformat für Instagram/TikTok:** Ein Querformat-Video erscheint in Reels und TikTok sonst klein mit Balken.
   Mit **📲 9:16 für Insta** bekommen die Netzwerke aus `HOCHKANT_NETZE` (Standard Instagram und TikTok) die
   9:16-Fassung, alle anderen weiter das Querformat. Story und Reel teilen sich die Datei – ein Upload mehr, nicht

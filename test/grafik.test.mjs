@@ -167,3 +167,26 @@ test("Logo über dem Bild, Bauchbinde unten im Bild", { skip: !ffmpegDa }, async
   assert.equal(binde.y + binde.hoehe, bild.unten - 28);
   assert.ok(binde.y > bild.oben);
 });
+
+
+test("Fotostory rendert Logo erst nach dem Blur und schützt die Story-Safe-Area", { skip: !ffmpegDa }, async () => {
+  const { sichereZone } = await import("../src/story-layout.mjs");
+  const ordner = fs.mkdtempSync(path.join(os.tmpdir(), "story-foto-logo-"));
+  const quelle = path.join(ordner, "original.jpg");
+  const ziel = path.join(ordner, "story.jpg");
+  execFileSync("ffmpeg", [
+    "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1600x900:d=1", "-frames:v", "1", quelle,
+  ]);
+  const { bild, logoBereich } = await storyFoto({ eingabe: quelle, ausgabe: ziel, layout: LAYOUT, mitLogo: true });
+  assert.deepEqual([bild.oben, bild.unten], [656, 1264]);
+  assert.ok(logoBereich.y + logoBereich.h <= bild.oben);
+  const safe = sichereZone(STORY_MASSE);
+  assert.ok(logoBereich.x >= safe.links && logoBereich.x + logoBereich.w <= safe.rechts);
+  assert.ok(logoBereich.y >= safe.oben && logoBereich.y + logoBereich.h <= safe.unten);
+  const fertig = await untersuche(ziel);
+  assert.deepEqual([fertig.breite, fertig.hoehe], [1080, 1920]);
+  const ohne = path.join(ordner, "ohne-logo.jpg");
+  const clean = await storyFoto({ eingabe: quelle, ausgabe: ohne, layout: LAYOUT, mitLogo: false });
+  assert.equal(clean.logoBereich, null);
+  assert.ok(fs.statSync(ziel).size !== fs.statSync(ohne).size);
+});
