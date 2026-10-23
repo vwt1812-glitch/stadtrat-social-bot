@@ -151,8 +151,8 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
   const untertitelY = linieY + 94;
   // Das bestehende dreistufige Layout bleibt erhalten. Zusätzliche Zwischenstufen
   // zeigen erst einzelne Titelzeilen, dann eine von links wachsende Akzentlinie.
-  const titelStufe = /^titel-(\\d+)$/.exec(stufe);
-  const linienStufe = /^linie-(\\d+)$/.exec(stufe);
+  const titelStufe = /^titel-(\d+)$/.exec(stufe);
+  const linienStufe = /^linie-(\d+)$/.exec(stufe);
   const titelAnzahl = stufe === "kopf" ? 0 : titelStufe ? Number(titelStufe[1]) : titel.zeilen.length;
   const linienAnteil = stufe === "kopf" || titelStufe ? 0
     : linienStufe ? Math.max(0, Math.min(1, Number(linienStufe[1]) / 3)) : 1;
