@@ -3,6 +3,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { ausfuehren, textBreite } from "./video.mjs";
+import { storyTextPlatzierung } from "./story-layout.mjs";
 
 const MAX_ZEICHEN = 180;
 const MAX_ZEILEN = 6;
@@ -67,7 +68,10 @@ export async function storyFotoText({ eingabe, ausgabe, text, layout }) {
   const zeilen = await passendZeilen(text, ordner, schrift);
   const zeilenHoehe = 82;
   const hoehe = zeilen.length * zeilenHoehe + 74;
-  const oben = Math.round(1080 - hoehe / 2);
+  const oben = storyTextPlatzierung({
+    masse: { breite: 1080, hoehe: 1920 }, hoehe, bild: layout.bild,
+    logo: layout.logoBereich, wunsch: layout.storyTextPosition ?? "auto",
+  });
   const filter = [
     `drawbox=x=54:y=${oben}:w=972:h=${hoehe}:color=0x1D1D1B@0.84:t=fill`,
     `drawbox=x=54:y=${oben}:w=11:h=${hoehe}:color=0xF18616@1:t=fill`,
