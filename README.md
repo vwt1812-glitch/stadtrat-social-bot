@@ -34,6 +34,8 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🕐 Planen | Heute/Morgen-Vorschläge, nächster freier Postiz-Slot oder freie Eingabe wie `Fr 18 Uhr`, `24.10. 19:30`, `in 2 Stunden` |
 | ✏️ Caption ändern | schickt den aktuellen Text zum Kopieren, die nächste Nachricht ist die neue Caption |
 | 🖼️ Sharepic / 📱 Storygrafik | bei Textentwürfen: eine fertige JPEG-Grafik in 4:5 oder 9:16 erzeugen, mit Logo und Inter; Text wird für das Motiv ggf. sichtbar gekürzt |
+| 🎞️ Animation / Story-Animation | Textgrafik in eine kurze 5-Sekunden-MP4 mit sanftem Fade-in und leichtem Zoom umwandeln; ohne Cloud-KI und Ton |
+| 🏷️ Textgrafik-Logo | Standardmäßig ohne Logo-Karte direkt auf dem Hintergrund; der Renderer unterstützt optional weiterhin den Kartenmodus |
 | ✏️ Grafiktext | Text des Sharepics oder der Storygrafik bearbeiten und neue Vorschau bauen |
 | 💾 Idee speichern | den Text lokal dauerhaft ablegen; mit `/ideen` wieder aufrufen |
 | 📄 Andere Antragspassage | ausschließlich bei PDF-Entwürfen: im Dokument gefundenen Titel, Beschlussvorschlag oder Auszug auswählen |

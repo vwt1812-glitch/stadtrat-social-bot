@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { antragVorschlaege, grafikInhalt, IdeenSpeicher } from "../src/redaktion.mjs";
-import { textZeilen, textGrafik, logoFuerGrafik, grafikGeometrie, ausgewogeneZeilen } from "../src/grafik-text.mjs";
+import { textZeilen, textGrafik, textAnimation, logoFuerGrafik, grafikGeometrie, ausgewogeneZeilen } from "../src/grafik-text.mjs";
 import { execFileSync } from "node:child_process";
 import { untersuche } from "../src/video.mjs";
 
@@ -115,4 +115,24 @@ test("Regression für das gemeldete Sharepic: große Aussage mittig, Logo mit we
     if (crop[i] > 180 && crop[i + 1] > 180 && crop[i + 2] > 180) hell++;
   }
   assert.ok(hell > 900, `Im Logo fehlen weiße Textpixel (gefunden: ${hell})`);
+});
+
+test("Animierte Story und Feed-Grafik lassen sich als MP4 rendern", { skip: !ffmpeg }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "redaktion-animation-"));
+  const layout = {
+    logo: path.resolve("assets/logos/quer-dunkel.png"), logoBreite: 0.40,
+    karteFarbe: "#1D1D1B", akzentFarbe: "#F18616",
+    schriftOrdner: path.resolve("assets/fonts"),
+  };
+  for (const [format, h] of [["post", 1350], ["story", 1920]]) {
+    const output = path.join(dir, format + ".mp4");
+    await textAnimation({
+      ausgabe: output, inhalt: grafikInhalt("CSU macht dumme Dinge!"), layout, format, dauer: 2,
+    });
+    const meta = await untersuche(output);
+    assert.equal(meta.breite, 1080);
+    assert.equal(meta.hoehe, h);
+    assert.ok(meta.dauer >= 1.9 && meta.dauer <= 2.1);
+    assert.ok(fs.statSync(output).size > 2000);
+  }
 });

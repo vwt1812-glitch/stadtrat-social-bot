@@ -107,7 +107,7 @@ export function grafikGeometrie({ format, titelHoehe, textHoehe, logoHoehe }) {
   };
 }
 
-export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel" }) {
+export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei" }) {
   if (!["post", "story"].includes(format)) throw new Error("Ungültiges Grafikformat.");
   const palette = FARBEN[stil] ?? FARBEN.dunkel;
   const story = format === "story";
@@ -125,7 +125,7 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
       layout: {
         ...layout, logo: logoPfad,
         logoBreite: Math.min(layout.logoBreite ?? 0.4, 0.4),
-        logoStil: "karte", logoPosition: "oben-links",
+        logoStil: logoModus === "karte" ? "karte" : "frei", logoPosition: "oben-links",
         karteFarbe: stil === "dunkel" ? "#1D1D1B" : "#F5F2ED",
       },
       masse: { breite, hoehe }, ordner, video: false,
@@ -187,4 +187,31 @@ export async function textGrafiken({ ordner, text, layout, ausAntrag = false, st
   await textGrafik({ ausgabe: post, inhalt, layout, format: "post", stil });
   await textGrafik({ ausgabe: story, inhalt, layout, format: "story", stil });
   return { post, story, gekuerzt: inhalt.gekuerzt };
+}
+
+/**
+ * Eine kurze, ruhige Animation einer fertig gestalteten Textgrafik.
+ * In der ersten Version blendet die komplette Grafik weich ein und bewegt sich
+ * minimal (Ken Burns). Kein Audio, keine generative KI.
+ */
+export async function textAnimation({
+  ausgabe, inhalt, layout, format = "post", stil = "dunkel",
+  logoModus = "frei", dauer = 5,
+}) {
+  if (!["post", "story"].includes(format)) throw new Error("Ungültiges Animationsformat.");
+  if (!Number.isFinite(dauer) || dauer < 2 || dauer > 12) throw new Error("Animationsdauer muss zwischen 2 und 12 Sekunden liegen.");
+  const ordner = path.dirname(ausgabe);
+  const bild = path.join(ordner, `animation-vorlage-${format}.jpg`);
+  await textGrafik({ ausgabe: bild, inhalt, layout, format, stil, logoModus });
+  const breite = 1080;
+  const hoehe = format === "story" ? 1920 : 1350;
+  const bilder = Math.round(dauer * 25);
+  // Sehr dezenter Zoom, Titel und Logo bleiben gemeinsam im selben Layout.
+  await ausfuehren("ffmpeg", [
+    "-y", "-v", "error", "-loop", "1", "-framerate", "25", "-i", bild,
+    "-vf", `zoompan=z='min(1.025,1+0.025*on/${bilder})':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':d=1:s=${breite}x${hoehe}:fps=25,fade=t=in:st=0:d=0.45,format=yuv420p`,
+    "-frames:v", String(bilder), "-an", "-c:v", "libx264", "-preset", "veryfast",
+    "-crf", "24", "-movflags", "+faststart", ausgabe,
+  ], { cwd: ordner });
+  return ausgabe;
 }
