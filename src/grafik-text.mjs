@@ -107,7 +107,7 @@ export function grafikGeometrie({ format, titelHoehe, textHoehe, logoHoehe }) {
   };
 }
 
-export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei" }) {
+export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei", animation = false, dauer = 5 }) {
   if (!["post", "story"].includes(format)) throw new Error("Ungültiges Grafikformat.");
   const palette = FARBEN[stil] ?? FARBEN.dunkel;
   const story = format === "story";
@@ -150,13 +150,27 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
   const linieY = titelY + titel.zeilen.length * titel.zeilenhoehe + 8;
   const untertitelY = linieY + 94;
   const filter = [
-    `drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill`,
-    `drawbox=x=100:y=${linieY}:w=${body.length ? 700 : 430}:h=6:color=${farbe(palette.akzent)}:t=fill`,
+    `drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill${animation ? ":enable='gte(t,0.35)'" : ""}`,
   ];
+  // Die Linie wächst bei Videos tatsächlich von links nach rechts, statt gemeinsam
+  // mit einem Standbild nahezu unsichtbar zu zoomen.
+  const linienBreite = body.length ? 700 : 430;
+  if (animation) {
+    for (let i = 1; i <= 20; i++) {
+      filter.push(`drawbox=x=100:y=${linieY}:w=${Math.ceil(i * linienBreite / 20)}:h=6:color=${farbe(palette.akzent)}:t=fill:enable='between(t,${(0.45 + (i - 1) * 0.032).toFixed(3)},${(0.45 + i * 0.032).toFixed(3)})'`);
+    }
+    filter.push(`drawbox=x=100:y=${linieY}:w=${linienBreite}:h=6:color=${farbe(palette.akzent)}:t=fill:enable='gte(t,1.09)'`);
+  } else {
+    filter.push(`drawbox=x=100:y=${linieY}:w=${linienBreite}:h=6:color=${farbe(palette.akzent)}:t=fill`);
+  }
   const schreiben = async (name, content, font, fontSize, fc, x, y) => {
     const filename = `grafik-${name}.txt`;
     await fs.writeFile(path.join(ordner, filename), content, "utf8");
-    filter.push(`drawtext=fontfile='${font}':textfile='${filename}':expansion=none:fontsize=${fontSize}:fontcolor=${farbe(fc)}:x=${x}:y=${y}`);
+    const einblenden = name.startsWith("titel-")
+      ? 0.75 + Number(name.split("-").at(-1)) * 0.20
+      : name.startsWith("text-") ? 1.6 + Number(name.split("-").at(-1)) * 0.12 : 0.08;
+    const alpha = animation ? `:alpha='min(1,max(0,(t-${einblenden.toFixed(2)})/0.55))'` : "";
+    filter.push(`drawtext=fontfile='${font}':textfile='${filename}':expansion=none:fontsize=${fontSize}:fontcolor=${farbe(fc)}:x=${x}:y=${y}${alpha}`);
   };
   await schreiben("label", inhalt.etikett, normal, 28, palette.akzent, 90, plan.labelY);
   for (let i = 0; i < titel.zeilen.length; i++) {
@@ -166,16 +180,29 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     await schreiben(`text-${i}`, body[i], normal, 39, palette.sub, 112, untertitelY + i * bodyZeile);
   }
   const args = ["-y", "-v", "error", "-f", "lavfi", "-i",
-    `color=c=${farbe(palette.grund)}:s=${breite}x${hoehe}:d=1`];
-  if (logo) args.push("-i", logo.datei);
+    `color=c=${farbe(palette.grund)}:s=${breite}x${hoehe}:r=25:d=${animation ? dauer : 1}`];
+  if (logo) {
+    if (animation) args.push("-loop", "1", "-framerate", "25");
+    args.push("-i", logo.datei);
+  }
   let graph = `[0:v]${filter.join(",")}[grund]`;
   if (logo) {
     const x = 100 - logo.sichtbar.x + logo.x;
     const y = plan.logoY - logo.sichtbar.y + logo.y;
-    graph += `;[grund][1:v]overlay=${x}:${y}:format=auto[fertig]`;
+    if (animation) {
+      graph += ";[1:v]format=rgba,fade=t=in:st=2.0:d=0.65:alpha=1[logo]";
+      graph += `;[grund][logo]overlay=${x}:${y}:format=auto:shortest=1[fertig]`;
+    } else graph += `;[grund][1:v]overlay=${x}:${y}:format=auto[fertig]`;
   }
-  args.push("-filter_complex", graph, "-map", logo ? "[fertig]" : "[grund]",
-    "-frames:v", "1", "-q:v", "3", ausgabe);
+  if (animation) {
+    graph += `;${logo ? "[fertig]" : "[grund]"}format=yuv420p[video]`;
+    args.push("-filter_complex", graph, "-map", "[video]", "-t", String(dauer),
+      "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
+      "-movflags", "+faststart", ausgabe);
+  } else {
+    args.push("-filter_complex", graph, "-map", logo ? "[fertig]" : "[grund]",
+      "-frames:v", "1", "-q:v", "3", ausgabe);
+  }
   await ausfuehren("ffmpeg", args, { cwd: ordner });
   return ausgabe;
 }
@@ -200,18 +227,5 @@ export async function textAnimation({
 }) {
   if (!["post", "story"].includes(format)) throw new Error("Ungültiges Animationsformat.");
   if (!Number.isFinite(dauer) || dauer < 2 || dauer > 12) throw new Error("Animationsdauer muss zwischen 2 und 12 Sekunden liegen.");
-  const ordner = path.dirname(ausgabe);
-  const bild = path.join(ordner, `animation-vorlage-${format}.jpg`);
-  await textGrafik({ ausgabe: bild, inhalt, layout, format, stil, logoModus });
-  const breite = 1080;
-  const hoehe = format === "story" ? 1920 : 1350;
-  const bilder = Math.round(dauer * 25);
-  // Sehr dezenter Zoom, Titel und Logo bleiben gemeinsam im selben Layout.
-  await ausfuehren("ffmpeg", [
-    "-y", "-v", "error", "-loop", "1", "-framerate", "25", "-i", bild,
-    "-vf", `zoompan=z='min(1.025,1+0.025*on/${bilder})':x='(iw-iw/zoom)/2':y='(ih-ih/zoom)/2':d=1:s=${breite}x${hoehe}:fps=25,fade=t=in:st=0:d=0.45,format=yuv420p`,
-    "-frames:v", String(bilder), "-an", "-c:v", "libx264", "-preset", "veryfast",
-    "-crf", "24", "-movflags", "+faststart", ausgabe,
-  ], { cwd: ordner });
-  return ausgabe;
+  return textGrafik({ ausgabe, inhalt, layout, format, stil, logoModus, animation: true, dauer });
 }
