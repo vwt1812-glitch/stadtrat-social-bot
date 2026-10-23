@@ -146,7 +146,7 @@ export async function logoGrafik({ layout, masse, ordner, video = true }) {
       masse, breite: grafik.w, hoehe: grafik.h,
       bild: layout.bild, gesichter: layout.gesichter ?? [],
       modus: layout.layoutModus ?? "story",
-      wunsch: layout.storyLogoPosition ?? (layout.smartLogo ? "auto" : layout.logoPosition),
+      wunsch: layout.storyLogoPosition ?? ((layout.smartLogo || layout.bild) ? "auto" : layout.logoPosition),
     });
     if (position) {
       sichtbarX = position.x;
