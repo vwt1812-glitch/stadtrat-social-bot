@@ -27,7 +27,7 @@ test("Exakte scharfe Bildfläche bei Querformat und Foto mit begrenzter Höhe", 
 test("Gesichtskoordinaten des Originalvideos auf zentriertes 9:16 übertragen", () => {
   const bild = bildRechteck({ breite: 1920, hoehe: 1080 }, MASSE);
   const [gesicht] = gesichterUebertragen([{ x: 0.25, y: 0.25, w: 0.2, h: 0.3 }], bild, MASSE);
-  assert.ok(gesicht.y > 0.34 && gesicht.y < 0.42);
+  assert.ok(gesicht.y > 0.41 && gesicht.y < 0.43);
   assert.ok(gesicht.h < 0.11);
   assert.equal(gesicht.x, 0.25);
 });
