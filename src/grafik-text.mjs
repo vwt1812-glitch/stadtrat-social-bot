@@ -240,7 +240,8 @@ export async function textAnimation({
   for (let i = 1; i <= wechsel; i++) {
     const letzte = i === wechsel;
     const zeit = letzte ? dauer * 0.72 : 0.12 + (dauer * 0.53) * ((i - 1) / Math.max(1, wechsel - 1));
-    const fade = letzte ? Math.min(0.4, dauer * 0.16) : Math.min(0.20, dauer * 0.065);
+    // Längere Überblendungen wirken fließender als das bisherige harte Stufenwechseln.
+    const fade = letzte ? Math.min(0.7, dauer * 0.20) : Math.min(0.42, dauer * 0.15);
     const name = `schritt${i}`;
     fades.push(`[${vorher}][${i}:v]xfade=transition=fade:duration=${fade.toFixed(3)}:offset=${zeit.toFixed(3)}[${name}]`);
     vorher = name;
