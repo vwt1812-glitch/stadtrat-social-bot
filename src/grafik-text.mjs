@@ -149,21 +149,30 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
   const titelY = plan.titelY;
   const linieY = titelY + titel.zeilen.length * titel.zeilenhoehe + 8;
   const untertitelY = linieY + 94;
+  // Das bestehende dreistufige Layout bleibt erhalten. Zusätzliche Zwischenstufen
+  // zeigen erst einzelne Titelzeilen, dann eine von links wachsende Akzentlinie.
+  const titelStufe = /^titel-(\d+)$/.exec(stufe);
+  const linienStufe = /^linie-(\d+)$/.exec(stufe);
+  const titelAnzahl = stufe === "kopf" ? 0 : titelStufe ? Number(titelStufe[1]) : titel.zeilen.length;
+  const linienAnteil = stufe === "kopf" || titelStufe ? 0
+    : linienStufe ? Math.max(0, Math.min(1, Number(linienStufe[1]) / 3)) : 1;
   const filter = [];
-  if (stufe !== "kopf") filter.push(
-    `drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill`,
-    `drawbox=x=100:y=${linieY}:w=${body.length ? 700 : 430}:h=6:color=${farbe(palette.akzent)}:t=fill`,
-  );
+  if (titelAnzahl) {
+    filter.push(`drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill`);
+  }
+  if (linienAnteil > 0) {
+    filter.push(`drawbox=x=100:y=${linieY}:w=${Math.ceil((body.length ? 700 : 430) * linienAnteil)}:h=6:color=${farbe(palette.akzent)}:t=fill`);
+  }
   const schreiben = async (name, content, font, fontSize, fc, x, y) => {
     const filename = `grafik-${name}.txt`;
     await fs.writeFile(path.join(ordner, filename), content, "utf8");
     filter.push(`drawtext=fontfile='${font}':textfile='${filename}':expansion=none:fontsize=${fontSize}:fontcolor=${farbe(fc)}:x=${x}:y=${y}`);
   };
   await schreiben("label", inhalt.etikett, normal, 28, palette.akzent, 90, plan.labelY);
-  for (let i = 0; stufe !== "kopf" && i < titel.zeilen.length; i++) {
+  for (let i = 0; i < titelAnzahl; i++) {
     await schreiben(`titel-${i}`, titel.zeilen[i], schrift, titel.groesse, palette.text, 112, titelY + i * titel.zeilenhoehe);
   }
-  for (let i = 0; stufe !== "kopf" && i < body.length; i++) {
+  for (let i = 0; i < (linienAnteil > 0 ? body.length : 0); i++) {
     await schreiben(`text-${i}`, body[i], normal, 39, palette.sub, 112, untertitelY + i * bodyZeile);
   }
   const args = ["-y", "-v", "error", "-f", "lavfi", "-i",
@@ -204,25 +213,43 @@ export async function textAnimation({
   const ordner = path.dirname(ausgabe);
   const breite = 1080;
   const hoehe = format === "story" ? 1920 : 1350;
-  const dateien = [
-    path.join(ordner, `animation-kopf-${format}.jpg`),
-    path.join(ordner, `animation-titel-${format}.jpg`),
-    path.join(ordner, `animation-voll-${format}.jpg`),
-  ];
-  for (const [i, stufe] of ["kopf", "titel", "voll"].entries()) {
-    await textGrafik({ ausgabe: dateien[i], inhalt, layout, format, stil, logoModus, stufe });
+  // Anzahl der Titelzeilen anhand derselben echten Schriftmessung wie im Standbild.
+  const schrift = path.join(layout.schriftOrdner, "Inter-Bold.otf");
+  const logoHoehe = 150; // nur obere Grenze, die endgültige Grafik prüft ihre exakte Geometrie
+  const reserve = grafikGeometrie({ format, titelHoehe: 0, textHoehe: inhalt.beschreibung ? 280 : 0, logoHoehe });
+  const title = await titelEinpassen(inhalt.titel, schrift, ordner, {
+    maxBreite: 872, maxZeilen: format === "story" ? 6 : 5,
+    maxHoehe: reserve ? reserve.unten - reserve.oben - 40 - (inhalt.beschreibung ? 334 : 0) : 0,
+  });
+  // Kopf -> Titelzeilen -> drei Linienbreiten -> vollständiges Motiv inkl. Logo.
+  const stufen = ["kopf", ...title.zeilen.map((_, i) => `titel-${i + 1}`),
+    "linie-1", "linie-2", "linie-3", "voll"];
+  const dateien = [];
+  for (let i = 0; i < stufen.length; i++) {
+    const d = path.join(ordner, `animation-${format}-${i}.jpg`);
+    await textGrafik({ ausgabe: d, inhalt, layout, format, stil, logoModus, stufe: stufen[i] });
+    dateien.push(d);
   }
   const bilder = Math.round(dauer * 25);
-  const zweiteBlende = Math.min(dauer - 0.7, Math.max(1.0, dauer * 0.53));
   const args = ["-y", "-v", "error"];
   for (const d of dateien) args.push("-loop", "1", "-framerate", "25", "-i", d);
-  args.push(
-    "-filter_complex",
-    `[0:v][1:v]xfade=transition=fade:duration=0.55:offset=0.5[erster];[erster][2:v]xfade=transition=fade:duration=0.65:offset=${zweiteBlende},format=yuv420p[video]`,
+  const fades = [];
+  let vorher = "0:v";
+  const wechsel = stufen.length - 1;
+  // Logo stets als letzte Stufe; für kurze Clips später, bei 5s ungefähr ab 3.6s.
+  for (let i = 1; i <= wechsel; i++) {
+    const letzte = i === wechsel;
+    const zeit = letzte ? dauer * 0.72 : 0.12 + (dauer * 0.53) * ((i - 1) / Math.max(1, wechsel - 1));
+    const fade = letzte ? Math.min(0.4, dauer * 0.16) : Math.min(0.20, dauer * 0.065);
+    const name = `schritt${i}`;
+    fades.push(`[${vorher}][${i}:v]xfade=transition=fade:duration=${fade.toFixed(3)}:offset=${zeit.toFixed(3)}[${name}]`);
+    vorher = name;
+  }
+  fades.push(`[${vorher}]format=yuv420p[video]`);
+  args.push("-filter_complex", fades.join(";"),
     "-map", "[video]", "-frames:v", String(bilder), "-an",
     "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
-    "-movflags", "+faststart", ausgabe,
-  );
+    "-movflags", "+faststart", ausgabe);
   await ausfuehren("ffmpeg", args, { cwd: ordner });
   return ausgabe;
 }
