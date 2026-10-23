@@ -213,7 +213,7 @@ export async function textAnimation({
     await textGrafik({ ausgabe: dateien[i], inhalt, layout, format, stil, logoModus, stufe });
   }
   const bilder = Math.round(dauer * 25);
-  const zweiteBlende = Math.max(1.7, dauer * 0.53);
+  const zweiteBlende = Math.min(dauer - 0.7, Math.max(1.0, dauer * 0.53));
   const args = ["-y", "-v", "error"];
   for (const d of dateien) args.push("-loop", "1", "-framerate", "25", "-i", d);
   args.push(
