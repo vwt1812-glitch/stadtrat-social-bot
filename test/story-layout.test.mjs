@@ -66,3 +66,28 @@ test("Bildtext nutzt untere Blur-Fläche und überschreibt kein darüber liegend
   assert.ok(oben > bild.unten);
   assert.ok(oben + 210 <= sichereZone(MASSE).unten);
 });
+
+test("Story-Bildtext weicht erkanntem Gesicht aus und darf Blur unten nutzen", () => {
+  const bild = { oben: 443, unten: 1091 };
+  const gesichter = [{ x: 0.34, y: 0.46, w: 0.31, h: 0.18 }];
+  const y = storyTextPlatzierung({
+    masse: MASSE, hoehe: 170, bild, gesichter,
+    logo: { x: 40, y: 275, w: 900, h: 130 },
+  });
+  const safe = sichereZone(MASSE);
+  assert.ok(y >= safe.oben && y + 170 <= safe.unten);
+  assert.ok(y >= bild.unten, "Der freie Blur-Bereich unter dem Foto sollte erlaubt sein");
+});
+test("Ohne Gesicht bleibt die bisherige Story-Textposition unverändert", () => {
+  const optionen = { masse: MASSE, hoehe: 200, bild: { oben: 650, unten: 1180 } };
+  assert.equal(storyTextPlatzierung(optionen),
+    storyTextPlatzierung({ ...optionen, gesichter: [] }));
+});
+test("Gesicht auf gesamter Breite erzwingt eine andere Safe-Area-Textposition", () => {
+  const y = storyTextPlatzierung({
+    masse: MASSE, hoehe: 160,
+    gesichter: [{ x: 0.03, y: 0.43, w: 0.94, h: 0.27 }],
+  });
+  assert.ok(y + 160 <= sichereZone(MASSE).unten);
+  assert.ok(y + 160 <= (0.43 - 0.035) * MASSE.hoehe || y >= (0.43 + 0.27 + 0.035) * MASSE.hoehe);
+});
