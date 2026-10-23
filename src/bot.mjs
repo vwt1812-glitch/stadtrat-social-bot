@@ -340,9 +340,10 @@ async function menueInhalt(auftrag) {
       [knopf("🎞️ Animation", auftrag, "anim:post"), knopf("🎞️ Story-Animation", auftrag, "anim:story")],
     ] : []),
     ...(auftrag.grafikModus ? [
-      [knopf(auftrag.grafikAnimation ? "🖼️ Als Standbild" : "🎞️ Animieren", auftrag, `grafik:${auftrag.nurStory ? "story" : "post"}`),
-       knopf("🎞️ Animation wählen", auftrag, `anim:${auftrag.nurStory ? "story" : "post"}`)],
-      [knopf(auftrag.nurStory ? "🖼️ Als Sharepic" : "📱 Als Story", auftrag, `grafik:${auftrag.nurStory ? "post" : "story"}`),
+      [knopf(auftrag.grafikAnimation ? "🖼️ Zum Standbild" : "🎞️ Animieren",
+        auftrag, `${auftrag.grafikAnimation ? "grafik" : "anim"}:${auftrag.nurStory ? "story" : "post"}`)],
+      [knopf(auftrag.nurStory ? "🖼️ Als Sharepic" : "📱 Als Story", auftrag,
+        `${auftrag.grafikAnimation ? "anim" : "grafik"}:${auftrag.nurStory ? "post" : "story"}`),
         knopf("✏️ Grafiktext", auftrag, "grafiktext")],
       [knopf("↩️ Zurück zum Text", auftrag, "grafik:text")],
     ] : []),
