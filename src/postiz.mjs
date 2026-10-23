@@ -308,14 +308,15 @@ export class Postiz {
    * @param {{id:string,identifier:string}[]} o.kanaele
    * @param {string[]} [o.collabs]
    * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
-   * @param {boolean} [o.story] zusätzlich eine Story auf Instagram/Facebook (erstes Bild/Video)
+   * @param {boolean} [o.story] Story auf Instagram/Facebook (erstes Bild/Video)
+   * @param {boolean} [o.nurStory] keinen normalen Feed-Beitrag anlegen
    * @param {{id:string,path:string}} [o.storyMedium] eigene Story-Fassung (9:16), sonst das erste Medium
    * @param {{id:string,path:string}} [o.hochkantMedium] 9:16-Fassung für die Hochformat-Netzwerke statt `medien`
    * @param {string[]} [o.hochkantNetze] welche Netzwerke die 9:16-Fassung bekommen
    * @returns {Promise<{post: {postId:string}[], story?: {postId:string}[]}>} IDs für die Kontrolle
    */
   async beitrag({
-    typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, storyMedium = null,
+    typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, nurStory = false, storyMedium = null,
     hochkantMedium = null, hochkantNetze = HOCHKANT,
   }) {
     const eigene = this.eigeneEinstellungen();
@@ -333,9 +334,12 @@ export class Postiz {
         settings: einstellungenFuer(k, { caption: captions[k.id] ?? caption, collabs, repost, eigene }),
       })),
     };
-    const ergebnis = { post: await this.#anfrage("POST", "/posts", body) };
     const storyKanaele = kanaele.filter((k) => STORY[k.identifier]);
-    if (story && medien.length && storyKanaele.length) {
+    if (nurStory && (!story || storyKanaele.length !== kanaele.length || !storyKanaele.length || (!storyMedium && !medien.length))) {
+      throw new Error("Nur Story braucht mindestens einen Instagram-/Facebook-Kanal und ein Foto oder Video.");
+    }
+    const ergebnis = { post: nurStory ? [] : await this.#anfrage("POST", "/posts", body) };
+    if (story && (medien.length || storyMedium) && storyKanaele.length) {
       ergebnis.story = await this.#anfrage("POST", "/posts", {
         ...body,
         posts: storyKanaele.map((k) => ({
@@ -352,7 +356,8 @@ export class Postiz {
    * So viele Anfragen braucht ein Beitrag: Uploads + Post, ggf. Story-Post, und der Upload der
    * eigenen 9:16-Fassung (`storyUpload`), wenn Story oder Hochformat-Netzwerke sie brauchen.
    */
-  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, hochkant = false, hochkantNetze = HOCHKANT }) {
+  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT }) {
+    if (nurStory) return 1 + (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1);
     const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
     const mitHochkant = hochkant && medien && kanaele.some((k) => hochkantNetze.includes(k.identifier));
     return (hochgeladen ? 0 : medien) + 1 + (mitStory ? 1 : 0) + (storyUpload && (mitStory || mitHochkant) ? 1 : 0);

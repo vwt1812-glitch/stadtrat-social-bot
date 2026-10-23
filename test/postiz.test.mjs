@@ -199,3 +199,54 @@ test("9:16-Fassung nur für die Hochformat-Netzwerke", async () => {
   const medium = Object.fromEntries(gesendet[0].posts.map((p) => [p.integration.id, p.value[0].image.map((i) => i.id).join()]));
   assert.deepEqual(medium, { ig: "hoch", tt: "hoch", x1: "quer", yt: "quer" });
 });
+
+
+test("Nur Story erzeugt exakt einen Story-Beitrag und keinen Feed-Post", async () => {
+  const gesendet = [];
+  const fetchVorher = globalThis.fetch;
+  globalThis.fetch = async (_, o) => {
+    gesendet.push(JSON.parse(o.body));
+    return new Response(JSON.stringify([{ postId: "story-only" }]), { status: 200 });
+  };
+  try {
+    const postiz = new Postiz({ url: "http://postiz", apiKey: "k", einstellungen: "/gibt/es/nicht.json" });
+    const ergebnis = await postiz.beitrag({
+      typ: "now", zeit: new Date(0), caption: "Wird nicht in die Story übernommen",
+      medien: [], storyMedium: { id: "fertige-story", path: "/story.jpg" },
+      story: true, nurStory: true,
+      kanaele: [{ id: "ig1", identifier: "instagram" }, { id: "fb1", identifier: "facebook" }],
+    });
+    assert.deepEqual(ergebnis, { post: [], story: [{ postId: "story-only" }] });
+    assert.equal(gesendet.length, 1);
+    assert.deepEqual(gesendet[0].posts.map((p) => p.integration.id), ["ig1", "fb1"]);
+    assert.equal(gesendet[0].posts[0].settings.post_type, "story");
+    assert.deepEqual(gesendet[0].posts[0].value[0].image, [{ id: "fertige-story", path: "/story.jpg" }]);
+    assert.equal(gesendet[0].posts[0].value[0].content, "");
+  } finally {
+    globalThis.fetch = fetchVorher;
+  }
+});
+
+test("Nur Story lehnt fremde Kanäle ab, ohne etwas zu posten", async () => {
+  const vorher = globalThis.fetch;
+  let aufrufe = 0;
+  globalThis.fetch = async () => { aufrufe++; return new Response("[]"); };
+  try {
+    const postiz = new Postiz({ url: "http://postiz", apiKey: "k", einstellungen: "/gibt/es/nicht.json" });
+    await assert.rejects(postiz.beitrag({
+      typ: "now", zeit: new Date(), caption: "Test", story: true, nurStory: true,
+      medien: [{ id: "a", path: "/a.jpg" }],
+      kanaele: [{ id: "x1", identifier: "x" }],
+    }), /Instagram-\/Facebook/);
+    assert.equal(aufrufe, 0);
+  } finally {
+    globalThis.fetch = vorher;
+  }
+});
+
+test("Nur Story zählt nur den tatsächlich benötigten Upload und eine Postiz-Anfrage", () => {
+  const kanaele = [{ id: "ig", identifier: "instagram" }];
+  assert.equal(Postiz.bedarf({ medien: 5, story: true, nurStory: true, storyUpload: true, kanaele }), 2);
+  assert.equal(Postiz.bedarf({ medien: 1, story: true, nurStory: true, storyBereit: true, kanaele }), 1);
+  assert.equal(Postiz.bedarf({ medien: 1, story: true, nurStory: true, kanaele }), 2);
+});

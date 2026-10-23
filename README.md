@@ -33,6 +33,8 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🤝 Collab | Instagram-Collab-Partner (bis zu 3), z. B. `@piraten_nuernberg` – erscheint, wenn ein Instagram-Kanal gewählt ist |
 | 🔁 Repost | andere X- bzw. LinkedIn-Konten teilen den Beitrag nach dem Erscheinen, sofort oder verzögert (Postiz-„Re-poster“) |
 | 📱 Story | Foto/Video zusätzlich als Story auf Instagram und Facebook (erstes Bild bzw. das Video); was nicht 9:16 ist, bekommt eine eigene Story-Fassung mit Vorschau |
+| 📱 Nur Story | **Ausschließlich eine Story** auf Instagram/Facebook, kein Feed-Post; vorhandene Kanalauswahl wird beim Verlassen des Modus wiederhergestellt |
+| ✏️ Text ins Bild | Bei Fotostorys optional einen kurzen Text schicken: wird in der 9:16-Fassung auf einer dunklen Karte eingebrannt; mit Vorschau, maximal sechs Zeilen, `-` zum Entfernen |
 | 📲 9:16 für Insta | nur Querformat-Videos: Instagram (als Reel) und TikTok bekommen dieselbe 9:16-Fassung wie die Story, X, Facebook, LinkedIn, YouTube usw. das Querformat (Standard: `HOCHKANT_STANDARD`) |
 | 🗑️ Verwerfen | Vorschlag löschen |
 
