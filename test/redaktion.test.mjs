@@ -4,7 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { antragVorschlaege, grafikInhalt, IdeenSpeicher } from "../src/redaktion.mjs";
-import { textZeilen, textGrafik } from "../src/grafik-text.mjs";
+import { textZeilen, textGrafik, logoFuerGrafik, grafikGeometrie, ausgewogeneZeilen } from "../src/grafik-text.mjs";
 import { execFileSync } from "node:child_process";
 import { untersuche } from "../src/video.mjs";
 
@@ -69,4 +69,50 @@ test("Sharepic und 9:16-Story rendern lokal samt Logo", { skip: !ffmpeg }, async
     assert.deepEqual([d.breite, d.hoehe], [breite, hoehe]);
     assert.ok(fs.statSync(datei).size > 10000);
   }
+});
+
+test("Grafik wählt die lesbare Variante des vorhandenen PIRATEN-&-Humanisten-Logos", () => {
+  assert.equal(path.basename(logoFuerGrafik("assets/logos/quer-hell.png", "dunkel")), "quer-dunkel.png");
+  assert.equal(path.basename(logoFuerGrafik("assets/logos/quer-dunkel.png", "hell")), "quer-hell.png");
+  assert.equal(path.basename(logoFuerGrafik("assets/logos/quer-dunkel.png", "orange")), "quer-hell.png");
+  assert.equal(logoFuerGrafik("/mein/eigenes-logo.png", "dunkel"), "/mein/eigenes-logo.png");
+});
+
+test("Kurze Aussagen werden mittig und ausgewogen angeordnet", () => {
+  const plan = grafikGeometrie({ format: "post", titelHoehe: 254, textHoehe: 0, logoHoehe: 154 });
+  assert.ok(plan.titelY > 450 && plan.titelY < 690, String(plan.titelY));
+  assert.ok(plan.titelY + 254 < plan.logoY - 95);
+  const story = grafikGeometrie({ format: "story", titelHoehe: 254, textHoehe: 0, logoHoehe: 154 });
+  assert.ok(story.titelY > 680 && story.titelY < 1060);
+  assert.ok(story.logoUnten <= 1920 * 0.8);
+  const zeilen = ausgewogeneZeilen("CSU macht dumme Dinge!", 16);
+  assert.deepEqual(zeilen.flatMap((z) => z.split(" ")), ["CSU", "macht", "dumme", "Dinge!"]);
+});
+
+test("Regression für das gemeldete Sharepic: große Aussage mittig, Logo mit weißer Schrift", { skip: !ffmpeg }, async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "redaktion-kontrast-"));
+  const datei = path.join(dir, "csu.jpg");
+  await textGrafik({
+    ausgabe: datei, inhalt: grafikInhalt("CSU macht dumme Dinge!"),
+    // Absichtlich die im Fehlerbild unlesbare schwarze Variante konfigurieren.
+    layout: {
+      logo: path.resolve("assets/logos/quer-hell.png"), logoBreite: 0.48,
+      logoStil: "karte", logoPosition: "oben-links",
+      karteFarbe: "#1D1D1B", akzentFarbe: "#F18616",
+      schriftOrdner: path.resolve("assets/fonts"),
+    },
+  });
+  const d = await untersuche(datei);
+  assert.deepEqual([d.breite, d.hoehe], [1080, 1350]);
+  // Im unteren linken Logobereich müssen weiße Schriftpixel erkennbar sein.
+  // Die orange Fläche allein darf diesen Test nicht erfüllen.
+  const crop = execFileSync("ffmpeg", [
+    "-v", "error", "-i", datei, "-vf", "crop=580:175:105:1070",
+    "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+  ], { maxBuffer: 2 * 1024 * 1024 });
+  let hell = 0;
+  for (let i = 0; i < crop.length; i += 3) {
+    if (crop[i] > 180 && crop[i + 1] > 180 && crop[i + 2] > 180) hell++;
+  }
+  assert.ok(hell > 900, `Im Logo fehlen weiße Textpixel (gefunden: ${hell})`);
 });
