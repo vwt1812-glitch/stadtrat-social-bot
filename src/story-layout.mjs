@@ -96,21 +96,52 @@ export function logoPlatzierung({
 }
 
 /** Vertikale Position einer Textkarte: freie Blur-Fläche, sonst Bildmitte innerhalb Safe Area. */
-export function storyTextPlatzierung({ masse, hoehe, bild = null, logo = null, wunsch = "auto" }) {
+export function storyTextPlatzierung({ masse, hoehe, bild = null, logo = null, wunsch = "auto", gesichter = [] }) {
   const safe = sichereZone(masse, "story");
   const padding = 24;
-  const moegliche = [];
-  if (bild && wunsch === "auto") {
-    moegliche.push(bild.unten + padding, bild.oben - padding - hoehe);
+  const mittel = Math.round((safe.oben + safe.unten - hoehe) / 2);
+  const alt = () => {
+    const moegliche = [];
+    if (bild && wunsch === "auto") moegliche.push(bild.unten + padding, bild.oben - padding - hoehe);
+    if (wunsch === "oben") moegliche.push(safe.oben + padding);
+    if (wunsch === "unten") moegliche.push(safe.unten - hoehe - padding);
+    moegliche.push(mittel);
+    for (const y of moegliche) {
+      if (y < safe.oben || y + hoehe > safe.unten) continue;
+      if (logo && y < logo.y + logo.h + padding && y + hoehe > logo.y - padding) continue;
+      return Math.round(y);
+    }
+    return Math.max(safe.oben, Math.min(safe.unten - hoehe, mittel));
+  };
+  // Ohne gefundenes Gesicht bleibt die ursprüngliche Positionswahl exakt erhalten.
+  if (!gesichter.length) return alt();
+  const min = safe.oben, max = safe.unten - hoehe;
+  if (max < min) return alt();
+  // Textkarte ist fast bildbreit. Den vollständigen Gesichtskopf plus Puffer schützen.
+  const rechtecke = gesichter.map((g) => ({
+    x: (g.x - 0.035) * masse.breite,
+    y: (g.y - 0.065) * masse.hoehe,
+    w: (g.w + 0.07) * masse.breite,
+    h: (g.h + 0.125) * masse.hoehe,
+  }));
+  const overlap = (a, b) => Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x))
+    * Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+  const bezug = {
+    oben: min + padding, mitte: mittel, unten: max - padding, auto: alt(),
+  }[wunsch] ?? alt();
+  const kandidaten = new Set([bezug, mittel, min, max, min + padding, max - padding]);
+  if (bild) {
+    kandidaten.add(bild.unten + padding);
+    kandidaten.add(bild.oben - padding - hoehe);
   }
-  if (wunsch === "oben") moegliche.push(safe.oben + padding);
-  if (wunsch === "unten") moegliche.push(safe.unten - hoehe - padding);
-  moegliche.push(Math.round((safe.oben + safe.unten - hoehe) / 2));
-  for (const y of moegliche) {
-    if (y < safe.oben || y + hoehe > safe.unten) continue;
-    if (logo && y < logo.y + logo.h + padding && y + hoehe > logo.y - padding) continue;
-    return Math.round(y);
-  }
-  // Lieber auf eine freie Safe-Area-Position als unter Plattform-UI zeichnen.
-  return Math.max(safe.oben, Math.min(safe.unten - hoehe, Math.round((safe.oben + safe.unten - hoehe) / 2)));
+  // Feiner Positionsraster, damit ein schmaler freier Streifen nicht verloren geht.
+  for (let y = min; y <= max; y += 16) kandidaten.add(y);
+  const auswahl = [...kandidaten].filter((y) => y >= min && y <= max).map((y) => {
+    const box = { x: 70, y, w: 940, h: hoehe };
+    const gesicht = rechtecke.reduce((sum, r) => sum + overlap(box, r), 0);
+    const logoTreffer = logo ? overlap(box, { x: logo.x - 16, y: logo.y - 16, w: logo.w + 32, h: logo.h + 32 }) : 0;
+    // Hauptsache: Gesicht und Logo frei. Bei gleich gutem Ergebnis ursprüngliche Position bevorzugen.
+    return { y, score: gesicht * 100 + logoTreffer * 100 + Math.abs(y - bezug) * 0.01 };
+  }).sort((a, b) => a.score - b.score);
+  return Math.round(auswahl[0]?.y ?? alt());
 }
