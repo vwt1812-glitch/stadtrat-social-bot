@@ -20,6 +20,7 @@ import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
+import { storyFotoText, storyTextZeilen } from "./story-text.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
@@ -60,8 +61,10 @@ function limitFehler(auftrag, kanaele) {
   if (!postizKanaele.length) return null;
   const medien = (auftrag.medien ?? [datei(auftrag, "fertig.mp4")]).length;
   const bedarf = Postiz.bedarf({
-    medien, hochgeladen: Boolean(auftrag.hochgeladen), story: auftrag.story, kanaele: postizKanaele,
+    medien: auftrag.nurStory ? 1 : medien,
+    hochgeladen: Boolean(auftrag.hochgeladen), story: auftrag.story, nurStory: Boolean(auftrag.nurStory), kanaele: postizKanaele,
     storyUpload: Boolean(auftrag.storyDatei && !auftrag.storyHochgeladen),
+    storyBereit: Boolean(auftrag.storyDatei ? auftrag.storyHochgeladen : auftrag.hochgeladen),
     hochkant: hochkantAn(auftrag), hochkantNetze: config.hochkant.netze,
   });
   const frei = postiz.zaehler.wiederFrei(bedarf);
@@ -75,14 +78,15 @@ function limitFehler(auftrag, kanaele) {
 function standardKanaele(alle, auftrag) {
   const vomKunden = kanaeleVonKunde(alle, auftrag.kunde);
   const vorgabe = vomKunden.filter((k) => config.postiz.kanaele.some((e) => passtZu(k, e)));
-  return passendeKanaele(vorgabe.length ? vorgabe : vomKunden, art(auftrag)).map((k) => k.id);
+  const passend = passendeKanaele(vorgabe.length ? vorgabe : vomKunden, art(auftrag));
+  return (auftrag.nurStory ? passend.filter((k) => STORY[k.identifier]) : passend).map((k) => k.id);
 }
 
 async function gewaehlteKanaele(auftrag) {
   const alle = await alleKanaele();
   if (auftrag.kunde === undefined) auftraege.aendern(auftrag.id, { kunde: findeKunde(alle, config.postiz.kunde)?.id ?? null });
   if (!auftrag.kanaele) auftraege.aendern(auftrag.id, { kanaele: standardKanaele(alle, auftrag) });
-  return alle.filter((k) => auftrag.kanaele.includes(k.id));
+  return alle.filter((k) => auftrag.kanaele.includes(k.id) && (!auftrag.nurStory || STORY[k.identifier]));
 }
 
 // ---------- Texte pro Kanal ----------
@@ -211,7 +215,9 @@ function details(auftrag, alle) {
   if (auftrag.collabs?.length) zeilen.push(`🤝 Collab: ${auftrag.collabs.map((c) => `@${html(c)}`).join(", ")}`);
   const reposter = alle.filter((k) => auftrag.repost?.kanaele.includes(k.id));
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
-  if (auftrag.story && art(auftrag) !== "text") zeilen.push(`📱 Zusätzlich als Story auf Instagram/Facebook${auftrag.storyDatei ? " (eigene 9:16-Fassung)" : ""}`);
+  if (auftrag.nurStory) zeilen.push("📱 Ausschließlich als Story – kein Feed-Beitrag");
+  else if (auftrag.story && art(auftrag) !== "text") zeilen.push(`📱 Zusätzlich als Story auf Instagram/Facebook${auftrag.storyDatei ? " (eigene 9:16-Fassung)" : ""}`);
+  if (auftrag.storyText && art(auftrag) === "foto" && auftrag.story) zeilen.push(`✏️ Bildtext: ${html(auftrag.storyText)}`);
   if (hochkantAn(auftrag)) zeilen.push("📲 Instagram/TikTok bekommen eine eigene 9:16-Fassung, die anderen das Querformat");
   if (auftrag.bauchbinde && art(auftrag) === "video") zeilen.push(`🪪 Bauchbinde: ${bauchbindeText(auftrag.bauchbinde)}`);
   if (auftrag.untertitelLage && art(auftrag) === "video") {
@@ -234,7 +240,7 @@ const datei = (auftrag, name) => path.join(auftrag.ordner, name);
 const HILFE = `<b>So funktioniert's</b>
 Schick mir
 • ein <b>Video</b> – am besten <b>als Datei</b> (📎 → Datei), dann bleibt die volle Qualität erhalten. Ich baue Logo und Untertitel ein.
-• ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zur Caption.
+• ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zur Caption. Über <b>📱 Nur Story</b> und <b>✏️ Text ins Bild</b> kannst du eine reine Fotostory machen.
 • einfach <b>Text</b> – daraus wird ein Textbeitrag (nicht für Instagram, TikTok, YouTube).
 
 Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpassen und mit <b>Ja</b> posten.
@@ -261,10 +267,10 @@ async function menueInhalt(auftrag) {
     transkript: "\n<i>(einfacher Vorschlag aus dem Transkript)</i>",
     hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
   }[auftrag.captionQuelle] ?? "";
-  const titel = art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
+  const titel = auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
   const hinweise = [];
   try {
-    const liste = laengen(auftrag, kanaele);
+    const liste = auftrag.nurStory ? [] : laengen(auftrag, kanaele);
     const eigen = liste.filter((l) => l.eigen && !l.zuLang);
     if (eigen.length) hinweise.push(`✂️ Eigene Fassung: ${eigen.map((l) => `${html(l.kanal.name)} (${zahlText(l)})`).join(", ")}`);
     const zuLang = liste.filter((l) => l.zuLang);
@@ -272,7 +278,11 @@ async function menueInhalt(auftrag) {
   } catch (e) {
     hinweise.push(`⚠️ ${html(e.message)}`);
   }
-  const text = [`<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`, ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise].join("\n");
+  const text = [
+    auftrag.nurStory ? `<b>${titel}</b>\nDie Story erhält keine Feed-Caption. Text kannst du direkt aufs Foto setzen.`
+      : `<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`,
+    ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise,
+  ].join("\n");
   const extra = {
     video: [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📍 Position", auftrag, "pos"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
     foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
@@ -280,16 +290,20 @@ async function menueInhalt(auftrag) {
   }[art(auftrag)];
   const zeilen = [
     [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
-    [knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])],
+    ...(!auftrag.nurStory ? [[knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])]] : []),
     ...(extra.length ? [extra] : []),
-    [knopf("📺 Kanäle", auftrag, "kanaele"), ...(kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
+    [knopf("📺 Kanäle", auftrag, "kanaele"), ...(!auftrag.nurStory && kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
   ];
   const optionen = [];
   if (kundenAus(alle).length) optionen.push(knopf("👤 Kunde", auftrag, "kunde"));
-  if (art(auftrag) !== "text" && kanaele.some((k) => k.identifier.startsWith("instagram"))) optionen.push(knopf("🤝 Collab", auftrag, "collab"));
-  if (repostKandidaten(alle, kanaele).length) optionen.push(knopf("🔁 Repost", auftrag, "repost"));
-  if (art(auftrag) !== "text" && kanaele.some((k) => STORY[k.identifier])) optionen.push(knopf(auftrag.story ? "📱 Story ✓" : "📱 Story", auftrag, "story"));
-  if (hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))) {
+  if (!auftrag.nurStory && art(auftrag) !== "text" && kanaele.some((k) => k.identifier.startsWith("instagram"))) optionen.push(knopf("🤝 Collab", auftrag, "collab"));
+  if (!auftrag.nurStory && repostKandidaten(alle, kanaele).length) optionen.push(knopf("🔁 Repost", auftrag, "repost"));
+  if (art(auftrag) !== "text" && !auftrag.nurStory && kanaele.some((k) => STORY[k.identifier])) optionen.push(knopf(auftrag.story ? "📱 Story ✓" : "📱 Story", auftrag, "story"));
+  if (art(auftrag) !== "text" && alle.some((k) => STORY[k.identifier] && (auftrag.kunde == null || k.customer?.id === auftrag.kunde))) {
+    optionen.push(knopf(auftrag.nurStory ? "📱 Nur Story ✓" : "📱 Nur Story", auftrag, "nurst"));
+  }
+  if (art(auftrag) === "foto" && auftrag.story) optionen.push(knopf(auftrag.storyText ? "✏️ Bildtext ✓" : "✏️ Text ins Bild", auftrag, "storytext"));
+  if (!auftrag.nurStory && hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))) {
     optionen.push(knopf(auftrag.hochkant ? "📲 9:16 ✓" : "📲 9:16 für Insta", auftrag, "hochkant"));
   }
   if (optionen.length) zeilen.push(optionen);
@@ -324,7 +338,7 @@ async function zeitMenue(auftrag) {
 async function kanalMenue(auftrag) {
   const alle = await alleKanaele();
   await gewaehlteKanaele(auftrag);
-  const sichtbar = new Set(kanaeleVonKunde(alle, auftrag.kunde).map((k) => k.id));
+  const sichtbar = new Set(kanaeleVonKunde(alle, auftrag.kunde).filter((k) => !auftrag.nurStory || STORY[k.identifier]).map((k) => k.id));
   // Indizes beziehen sich auf die Gesamtliste, damit die Knöpfe eindeutig bleiben
   const zeilen = alle.flatMap((k, i) => sichtbar.has(k.id)
     ? [[knopf(`${auftrag.kanaele.includes(k.id) ? "✅" : "⬜"} ${k.name} (${k.identifier})`, auftrag, `k:${i}`)]]
@@ -333,7 +347,7 @@ async function kanalMenue(auftrag) {
   const unten = [knopf("✔️ Fertig", auftrag, "zurueck")];
   if (kundenAus(alle).length) unten.unshift(knopf("👤 Kunde wechseln", auftrag, "kunde"));
   zeilen.push(unten);
-  const titel = kunde ? `<b>Kanäle von ${html(kunde.name)}</b>` : "<b>Auf welchen Kanälen posten?</b>";
+  const titel = auftrag.nurStory ? "<b>Story-Kanäle (Instagram/Facebook)</b>" : kunde ? `<b>Kanäle von ${html(kunde.name)}</b>` : "<b>Auf welchen Kanälen posten?</b>";
   await zeigeMenue(auftrag, { text: titel, reply_markup: { inline_keyboard: zeilen } });
 }
 
@@ -366,6 +380,9 @@ async function repostMenue(auftrag) {
 async function bestaetigung(auftrag, typ, zeit) {
   const kanaele = await gewaehlteKanaele(auftrag);
   if (!kanaele.length) return { fehler: "Bitte zuerst mindestens einen Kanal wählen." };
+  if (auftrag.nurStory && kanaele.some((k) => !STORY[k.identifier])) return { fehler: "Nur Story ist auf Instagram und Facebook möglich." };
+  if (auftrag.nurStory && art(auftrag) === "text") return { fehler: "Bitte zuerst ein Foto oder Video schicken." };
+  if (auftrag.storyText && auftrag.story && !auftrag.storyDatei) return { fehler: "Die Story mit Bildtext wurde noch nicht erstellt. Bitte die Vorschau erneut erzeugen." };
   const unpassend = kanaele.filter((k) =>
     (art(auftrag) === "text" && BRAUCHT_MEDIEN.includes(k.identifier)) || (art(auftrag) === "foto" && NUR_VIDEO.includes(k.identifier)));
   if (unpassend.length) {
@@ -373,7 +390,7 @@ async function bestaetigung(auftrag, typ, zeit) {
     return { fehler: `${unpassend.map((k) => k.name).join(", ")} braucht ${was} – bitte unter „Kanäle“ abwählen.` };
   }
   if (typ === "schedule" && zeit.getTime() < Date.now() + 60e3) return { fehler: "Die Zeit liegt in der Vergangenheit." };
-  const liste = laengen(auftrag, kanaele);
+  const liste = auftrag.nurStory ? [] : laengen(auftrag, kanaele);
   const zuLang = liste.filter((l) => l.zuLang);
   if (zuLang.length) return { fehler: `Zu lang für ${zuLang.map((l) => `${l.kanal.name} (${zahlText(l)})`).join(", ")} – bitte unter „✂️ Pro Kanal“ anpassen.` };
   const eigen = liste.filter((l) => l.eigen).map((l) => html(l.kanal.name));
@@ -383,10 +400,10 @@ async function bestaetigung(auftrag, typ, zeit) {
   const wann = typ === "now" ? "<b>jetzt</b>" : `am <b>${zeitText(zeit)}</b>`;
   return {
     text: [
-      `Wirklich ${wann} auf ${kanaele.map((k) => `<b>${html(k.name)}</b>`).join(", ")} posten?`,
+      `Wirklich ${wann} ${auftrag.nurStory ? "nur die Story" : "den Beitrag"} auf ${kanaele.map((k) => `<b>${html(k.name)}</b>`).join(", ")} posten?`,
       ...details(auftrag, await alleKanaele()),
       ...(eigen.length ? [`✂️ Eigene Fassung für ${eigen.join(", ")} (über „Zurück → Pro Kanal“ ansehen)`] : []),
-      `<blockquote expandable>${html(auftrag.caption)}</blockquote>`,
+      ...(!auftrag.nurStory ? [`<blockquote expandable>${html(auftrag.caption)}</blockquote>`] : []),
     ].join("\n"),
     reply_markup: { inline_keyboard: [[knopf("✅ Ja, posten", auftrag, "ja"), knopf("↩️ Zurück", auftrag, "zurueck")]] },
   };
