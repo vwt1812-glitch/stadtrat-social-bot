@@ -59,7 +59,7 @@ Emojis 4), alle anderen in JavaScript-Zeichen (ein Emoji meist 2).
 
 Postiz veröffentlicht im Hintergrund. Hängt dort etwas (oft der Orchestrator nach einem Neustart) oder lehnt ein
 Netzwerk ab, bleibt das sonst unbemerkt. Der Bot schaut deshalb 15 Minuten nach jedem Termin in Postiz nach und
-meldet sich – einmal pro Post, mit Kanal, Termin und Fehlermeldung, und noch einmal, wenn er nachgeholt wurde.
+meldet sich **einmal pro Post oder Story auch bei Erfolg**, sobald Postiz den Status `PUBLISHED` bestätigt. Bei Fehlern meldet er Kanal, Termin und Grund; wird der Beitrag später nachgeholt, folgt eine Bestätigung.
 Hängen alle Posts: `docker exec postiz pm2 list`, im Zweifel `docker restart postiz`.
 
 Postiz erlaubt standardmäßig **30 API-Anfragen pro Stunde** (`API_LIMIT` in der Postiz-Konfiguration). Ein Beitrag
