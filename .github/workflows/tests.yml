@@ -22,14 +22,14 @@ jobs:
         run: |
           node --version
           node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); if (major !== 22 || minor < 23 || (minor === 23 && patch < 4)) process.exit(1)"
-      - name: FFmpeg prüfen oder aus Ubuntu 24.04 installieren
-        timeout-minutes: 5
-        run: |
-          if ! command -v ffmpeg >/dev/null 2>&1; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::Retries=1 -o Acquire::http::Timeout=15 install -y ffmpeg
-          fi
-          command -v ffprobe
-          ffmpeg -hide_banner -version | head -n 1
-          ffmpeg -hide_banner -encoders | grep libx264
       - run: npm ci
+      - name: FFmpeg und FFprobe als feste npm-Binärpakete bereitstellen
+        timeout-minutes: 4
+        run: |
+          npm install --no-save --package-lock=false @ffmpeg-installer/linux-x64 @ffprobe-installer/linux-x64
+          mkdir -p "$RUNNER_TEMP/media-bin"
+          ln -s "$GITHUB_WORKSPACE/node_modules/@ffmpeg-installer/linux-x64/ffmpeg" "$RUNNER_TEMP/media-bin/ffmpeg"
+          ln -s "$GITHUB_WORKSPACE/node_modules/@ffprobe-installer/linux-x64/ffprobe" "$RUNNER_TEMP/media-bin/ffprobe"
+          echo "$RUNNER_TEMP/media-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/media-bin/ffmpeg" -hide_banner -encoders | grep libx264
       - run: npm test
