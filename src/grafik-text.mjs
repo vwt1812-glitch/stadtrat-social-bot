@@ -107,7 +107,7 @@ export function grafikGeometrie({ format, titelHoehe, textHoehe, logoHoehe }) {
   };
 }
 
-export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei", stufe = "voll" }) {
+export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei", stufe = "voll", animation = false, dauer = 5 }) {
   if (!["post", "story"].includes(format)) throw new Error("Ungültiges Grafikformat.");
   const palette = FARBEN[stil] ?? FARBEN.dunkel;
   const story = format === "story";
@@ -160,13 +160,22 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
   if (titelAnzahl) {
     filter.push(`drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill`);
   }
-  if (linienAnteil > 0) {
+  if (!animation && linienAnteil > 0) {
     filter.push(`drawbox=x=100:y=${linieY}:w=${Math.ceil((body.length ? 700 : 430) * linienAnteil)}:h=6:color=${farbe(palette.akzent)}:t=fill`);
   }
   const schreiben = async (name, content, font, fontSize, fc, x, y) => {
     const filename = `grafik-${name}.txt`;
     await fs.writeFile(path.join(ordner, filename), content, "utf8");
-    filter.push(`drawtext=fontfile='${font}':textfile='${filename}':expansion=none:fontsize=${fontSize}:fontcolor=${farbe(fc)}:x=${x}:y=${y}`);
+    let posX = String(x);
+    let alpha = "";
+    if (animation) {
+      const onset = name.startsWith("titel-") ? 0.28 + Number(name.split("-").at(-1)) * 0.19
+        : name.startsWith("text-") ? 1.20 + Number(name.split("-").at(-1)) * 0.1 : 0;
+      const zeit = `min(1,max(0,(t-${onset.toFixed(2)})/0.45))`;
+      alpha = `:alpha='${zeit}'`;
+      if (name.startsWith("titel-")) posX = `'${x}-24*(1-${zeit})'`;
+    }
+    filter.push(`drawtext=fontfile='${font}':textfile='${filename}':expansion=none:fontsize=${fontSize}:fontcolor=${farbe(fc)}:x=${posX}:y=${y}${alpha}`);
   };
   await schreiben("label", inhalt.etikett, normal, 28, palette.akzent, 90, plan.labelY);
   for (let i = 0; i < titelAnzahl; i++) {
@@ -176,15 +185,41 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     await schreiben(`text-${i}`, body[i], normal, 39, palette.sub, 112, untertitelY + i * bodyZeile);
   }
   const args = ["-y", "-v", "error", "-f", "lavfi", "-i",
-    `color=c=${farbe(palette.grund)}:s=${breite}x${hoehe}:d=1`];
-  if (logo && stufe === "voll") args.push("-i", logo.datei);
+    `color=c=${farbe(palette.grund)}:s=${breite}x${hoehe}:r=25:d=${animation ? dauer : 1}`];
+  if (animation) {
+    // Separate Mini-Ebene: Pixel werden anhand der Videozeit T aufgedeckt.
+    // Anders als Zwischenbilder wächst die Linie bei jedem Frame.
+    const w = body.length ? 700 : 430;
+    args.push("-f", "lavfi", "-i", `color=c=${farbe(palette.akzent)}:s=${w}x6:r=25:d=${dauer}`);
+  }
+  if (logo && (animation || stufe === "voll")) {
+    if (animation) args.push("-loop", "1", "-framerate", "25");
+    args.push("-i", logo.datei);
+  }
   let graph = `[0:v]${filter.join(",")}[grund]`;
-  if (logo && stufe === "voll") {
+  let letzte = "grund";
+  if (animation) {
+    const w = body.length ? 700 : 430;
+    graph += `;[1:v]format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*lte(X,${w}*min(1,max(0,(T-1.05)/0.65)))'[linie]`;
+    graph += `;[grund][linie]overlay=100:${linieY}:format=auto:shortest=1[mitlinie]`;
+    letzte = "mitlinie";
+  }
+  if (logo && (animation || stufe === "voll")) {
     const x = 100 - logo.sichtbar.x + logo.x;
     const y = plan.logoY - logo.sichtbar.y + logo.y;
-    graph += `;[grund][1:v]overlay=${x}:${y}:format=auto[fertig]`;
+    const index = animation ? 2 : 1;
+    if (animation) {
+      graph += `;[${index}:v]format=rgba,fade=t=in:st=${Math.min(1.85, dauer * 0.60).toFixed(2)}:d=${Math.min(0.55, dauer * 0.22).toFixed(2)}:alpha=1[logoin]`;
+      graph += `;[${letzte}][logoin]overlay=${x}:${y}:format=auto:shortest=1[mitlogo]`;
+    } else graph += `;[${letzte}][${index}:v]overlay=${x}:${y}:format=auto[mitlogo]`;
+    letzte = "mitlogo";
   }
-  args.push("-filter_complex", graph, "-map", logo && stufe === "voll" ? "[fertig]" : "[grund]",
+  if (animation) {
+    graph += `;[${letzte}]format=yuv420p[video]`;
+    args.push("-filter_complex", graph, "-map", "[video]", "-t", String(dauer),
+      "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
+      "-movflags", "+faststart", ausgabe);
+  } else args.push("-filter_complex", graph, "-map", `[${letzte}]`,
     "-frames:v", "1", "-q:v", "3", ausgabe);
   await ausfuehren("ffmpeg", args, { cwd: ordner });
   return ausgabe;
@@ -210,46 +245,5 @@ export async function textAnimation({
 }) {
   if (!["post", "story"].includes(format)) throw new Error("Ungültiges Animationsformat.");
   if (!Number.isFinite(dauer) || dauer < 2 || dauer > 12) throw new Error("Animationsdauer muss zwischen 2 und 12 Sekunden liegen.");
-  const ordner = path.dirname(ausgabe);
-  const breite = 1080;
-  const hoehe = format === "story" ? 1920 : 1350;
-  // Anzahl der Titelzeilen anhand derselben echten Schriftmessung wie im Standbild.
-  const schrift = path.join(layout.schriftOrdner, "Inter-Bold.otf");
-  const logoHoehe = 150; // nur obere Grenze, die endgültige Grafik prüft ihre exakte Geometrie
-  const reserve = grafikGeometrie({ format, titelHoehe: 0, textHoehe: inhalt.beschreibung ? 280 : 0, logoHoehe });
-  const title = await titelEinpassen(inhalt.titel, schrift, ordner, {
-    maxBreite: 872, maxZeilen: format === "story" ? 6 : 5,
-    maxHoehe: reserve ? reserve.unten - reserve.oben - 40 - (inhalt.beschreibung ? 334 : 0) : 0,
-  });
-  // Kopf -> einzelne Titelzeilen -> zehn kleine Linienfortschritte -> Logo.
-  const stufen = ["kopf", ...title.zeilen.map((_, i) => `titel-${i + 1}`),
-    ...Array.from({ length: 10 }, (_, i) => `linie-${i + 1}`), "voll"];
-  const dateien = [];
-  for (let i = 0; i < stufen.length; i++) {
-    const d = path.join(ordner, `animation-${format}-${i}.jpg`);
-    await textGrafik({ ausgabe: d, inhalt, layout, format, stil, logoModus, stufe: stufen[i] });
-    dateien.push(d);
-  }
-  const bilder = Math.round(dauer * 25);
-  const args = ["-y", "-v", "error"];
-  for (const d of dateien) args.push("-loop", "1", "-framerate", "25", "-i", d);
-  const fades = [];
-  let vorher = "0:v";
-  const wechsel = stufen.length - 1;
-  // Logo stets als letzte Stufe; für kurze Clips später, bei 5s ungefähr ab 3.6s.
-  for (let i = 1; i <= wechsel; i++) {
-    const letzte = i === wechsel;
-    const zeit = letzte ? dauer * 0.72 : 0.12 + (dauer * 0.53) * ((i - 1) / Math.max(1, wechsel - 1));
-    const fade = letzte ? Math.min(0.65, dauer * 0.18) : Math.min(0.28, dauer * 0.075);
-    const name = `schritt${i}`;
-    fades.push(`[${vorher}][${i}:v]xfade=transition=fade:duration=${fade.toFixed(3)}:offset=${zeit.toFixed(3)}[${name}]`);
-    vorher = name;
-  }
-  fades.push(`[${vorher}]format=yuv420p[video]`);
-  args.push("-filter_complex", fades.join(";"),
-    "-map", "[video]", "-frames:v", String(bilder), "-an",
-    "-c:v", "libx264", "-preset", "veryfast", "-crf", "24",
-    "-movflags", "+faststart", ausgabe);
-  await ausfuehren("ffmpeg", args, { cwd: ordner });
-  return ausgabe;
+  return textGrafik({ ausgabe, inhalt, layout, format, stil, logoModus, animation: true, dauer });
 }
