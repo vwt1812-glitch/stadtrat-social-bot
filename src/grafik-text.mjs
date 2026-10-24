@@ -158,7 +158,11 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     : linienStufe ? Math.max(0, Math.min(1, Number(linienStufe[1]) / 10)) : 1;
   const filter = [];
   if (titelAnzahl) {
-    filter.push(`drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill`);
+    // Senkrechter Akzent erscheint zusammen mit der ersten Titelzeile.
+    const akzentAlpha = animation
+      ? ":enable='gte(t,0.34)'"
+      : "";
+    filter.push(`drawbox=x=88:y=${titelY - 20}:w=10:h=${Math.min(92, titel.zeilenhoehe)}:color=${farbe(palette.akzent)}:t=fill${akzentAlpha}`);
   }
   if (!animation && linienAnteil > 0) {
     filter.push(`drawbox=x=100:y=${linieY}:w=${Math.ceil((body.length ? 700 : 430) * linienAnteil)}:h=6:color=${farbe(palette.akzent)}:t=fill`);
@@ -169,7 +173,7 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     let posX = String(x);
     let alpha = "";
     if (animation) {
-      const onset = name.startsWith("titel-") ? 0.28 + Number(name.split("-").at(-1)) * 0.19
+      const onset = name.startsWith("titel-") ? 0.34 + Number(name.split("-").at(-1)) * 0.30
         : name.startsWith("text-") ? 1.20 + Number(name.split("-").at(-1)) * 0.1 : 0;
       const zeit = `min(1,max(0,(t-${onset.toFixed(2)})/0.45))`;
       alpha = `:alpha='${zeit}'`;
