@@ -209,7 +209,7 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     const y = plan.logoY - logo.sichtbar.y + logo.y;
     const index = animation ? 2 : 1;
     if (animation) {
-      graph += `;[${index}:v]format=rgba,fade=t=in:st=1.85:d=0.55:alpha=1[logoin]`;
+      graph += `;[${index}:v]format=rgba,fade=t=in:st=${Math.min(1.85, dauer * 0.60).toFixed(2)}:d=${Math.min(0.55, dauer * 0.22).toFixed(2)}:alpha=1[logoin]`;
       graph += `;[${letzte}][logoin]overlay=${x}:${y}:format=auto:shortest=1[mitlogo]`;
     } else graph += `;[${letzte}][${index}:v]overlay=${x}:${y}:format=auto[mitlogo]`;
     letzte = "mitlogo";
