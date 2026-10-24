@@ -467,7 +467,7 @@ export function storyFlaeche({ breite, hoehe } = STORY_MASSE, { vorneHoehe = hoe
   return `split[sgrund][sbild];` +
     `[sgrund]scale=${breite}:${hoehe}:force_original_aspect_ratio=increase,crop=${breite}:${hoehe},` +
     `boxblur=40:2,eq=saturation=0.85[sunscharf];` +
-    `[sbild]scale=${breite}:${gerade(vorneHoehe)}:force_original_aspect_ratio=decrease:force_divisible_by=2[svorne];` +
+    `[sbild]scale=${breite}:${gerade(vorneHoehe)}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[svorne];` +
     `[sunscharf][svorne]overlay=(W-w)/2:(H-h)/2,setsar=1`;
 }
 
