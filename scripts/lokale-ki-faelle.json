@@ -1,0 +1,39 @@
+[
+  {
+    "id": "livestream",
+    "quelle": "Wir haben Livestreams der Nürnberger Stadtratssitzungen beantragt. Der Antrag wurde abgelehnt. Auch die Veröffentlichung der bereits vorhandenen Audioaufzeichnungen wurde abgelehnt. Wir setzen uns weiterhin für transparente Kommunalpolitik ein.",
+    "fakten": [
+      "Eigener Antrag auf Livestreams",
+      "Livestream-Antrag wurde abgelehnt",
+      "Veröffentlichung vorhandener Audioaufzeichnungen ebenfalls abgelehnt",
+      "Weiterhin Einsatz für Transparenz"
+    ]
+  },
+  {
+    "id": "livestream-nur-antrag",
+    "quelle": "Die Gruppe beantragt, dass Stadtratssitzungen künftig live übertragen werden. Über den Antrag wurde noch nicht entschieden.",
+    "fakten": [
+      "Antrag auf künftige Liveübertragungen",
+      "Noch keine Entscheidung",
+      "Keine Behauptung über bestehende Livestreams"
+    ]
+  },
+  {
+    "id": "ausschuss",
+    "quelle": "Die Verwaltung hat eine Prüfung zugesagt. Ein Beschluss zur Umsetzung liegt noch nicht vor. Die Ergebnisse der Prüfung sollen später vorgestellt werden.",
+    "fakten": [
+      "Prüfung zugesagt",
+      "Keine Umsetzungsentscheidung",
+      "Ergebnisse für später angekündigt"
+    ]
+  },
+  {
+    "id": "veranstaltung",
+    "quelle": "Beim offenen Stammtisch am Freitag können Interessierte Fragen stellen und über kommunalpolitische Themen diskutieren. Eine Anmeldung ist nicht erforderlich.",
+    "fakten": [
+      "Offener Stammtisch am Freitag",
+      "Fragen und Diskussion möglich",
+      "Keine Anmeldung nötig"
+    ]
+  }
+]
