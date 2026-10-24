@@ -6,6 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { storyTextZeilen, storyFotoText } from "../src/story-text.mjs";
 import { untersuche } from "../src/video.mjs";
+import { storyTextPlatzierung, sichereZone } from "../src/story-layout.mjs";
 
 test("Story-Text wird sinnvoll auf maximal sechs Zeilen umgebrochen", () => {
   const zeilen = storyTextZeilen("Mehr Transparenz im Nürnberger Stadtrat!\nLivestreams jetzt.");
@@ -42,4 +43,27 @@ test("Story-Foto erhält eingebrannten Text in 1080×1920", { skip: !ffmpegDa },
   const d = await untersuche(ausgabe);
   assert.deepEqual([d.breite, d.hoehe], [1080, 1920]);
   assert.ok(fs.statSync(ausgabe).size > 3000);
+});
+
+test("Story-Bildtext meidet Gesichter, darf aber im Blur innerhalb der Safe Area stehen", () => {
+  const masse = { breite: 1080, hoehe: 1920 };
+  const bild = { links: 0, rechts: 1080, oben: 440, unten: 1360, breite: 1080, hoehe: 920 };
+  const gesichter = [{ x: 0.32, y: 0.48, w: 0.32, h: 0.20 }];
+  const h = 180;
+  const ohne = storyTextPlatzierung({ masse, hoehe: h, bild });
+  const mit = storyTextPlatzierung({ masse, hoehe: h, bild, gesichter });
+  const safe = sichereZone(masse, "story");
+  assert.equal(ohne, Math.round((safe.oben + safe.unten - h) / 2)); // Bisherige mittige Fallback-Position.
+  assert.ok(mit >= safe.oben && mit + h <= safe.unten);
+  assert.ok(mit + h < 0.415 * masse.hoehe || mit > 0.745 * masse.hoehe,
+    "Text darf den geschützten Kopfbereich nicht überdecken");
+  const schmal = { ...bild, oben: 530, unten: 1120, hoehe: 590 };
+  const blurUnten = storyTextPlatzierung({ masse, hoehe: h, bild: schmal, gesichter: [{ x: 0.3, y: 0.25, w: 0.25, h: 0.11 }] });
+  assert.ok(blurUnten >= schmal.unten + 24, "Blur-Bereich unten soll erlaubt bleiben");
+});
+
+test("Ohne erkannte Gesichter bleibt die bestehende Story-Position unverändert", () => {
+  const x = { masse: { breite: 1080, hoehe: 1920 }, hoehe: 180,
+    bild: { oben: 450, unten: 1150 } };
+  assert.equal(storyTextPlatzierung(x), storyTextPlatzierung({ ...x, gesichter: [] }));
 });

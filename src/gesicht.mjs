@@ -18,10 +18,10 @@ export const LAGE_REIHENFOLGE = ["unten", "oben", "mitte"];
  * @returns {Promise<{bilder:number, gesichter:{t:number,x:number,y:number,w:number,h:number}[]}|null>}
  *   null, wenn OpenCV fehlt oder etwas schiefgeht – die Gesichtssuche ist nur eine Hilfe
  */
-export async function gesichtSuchen(video, { python }) {
+export async function gesichtSuchen(video, { python }, bilder = 12) {
   if (!python || !fs.existsSync(python)) return null;
   try {
-    return JSON.parse(await ausfuehren(python, [SKRIPT, video]));
+    return JSON.parse(await ausfuehren(python, [SKRIPT, video, String(bilder)]));
   } catch (e) {
     console.error("Gesichtssuche:", e.message);
     return null;

@@ -70,7 +70,7 @@ export async function storyFotoText({ eingabe, ausgabe, text, layout }) {
   const hoehe = zeilen.length * zeilenHoehe + 74;
   const oben = storyTextPlatzierung({
     masse: { breite: 1080, hoehe: 1920 }, hoehe, bild: layout.bild,
-    logo: layout.logoBereich, wunsch: layout.storyTextPosition ?? "auto",
+    logo: layout.logoBereich, gesichter: layout.gesichter ?? [], wunsch: layout.storyTextPosition ?? "auto",
   });
   const filter = [
     `drawbox=x=70:y=${oben}:w=940:h=${hoehe}:color=0x1D1D1B@0.84:t=fill`,
