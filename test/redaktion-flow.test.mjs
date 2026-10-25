@@ -7,6 +7,14 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { grafikText } from "../src/redaktion.mjs";
 
+test("Telegram: bearbeitete Sprachnotiz wird als aktuelle Idee gespeichert", (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ideen-flow-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  execFileSync(process.execPath, ["--experimental-test-module-mocks",
+    fileURLToPath(new URL("./fixtures/edit-then-graphic.mjs", import.meta.url)), dir, "idee", "post"],
+  { timeout: 15000, stdio: "pipe" });
+});
+
 for (const aktion of ["anim", "grafik"]) {
   for (const format of ["post", "story"]) {
     test(`Telegram: Transkript bearbeiten → ${aktion}:${format} verwendet den neuen Text`, (t) => {

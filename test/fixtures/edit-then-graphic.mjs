@@ -68,6 +68,14 @@ mock.method(Telegram.prototype, "aufruf", async (methode) => {
       assert.equal(a.grafikAnimation, aktion === "anim");
       process.exit(0);
     }
+    if (schritt === 3 && aktion === "idee") {
+      const ideenDatei = path.join(datenDir, "ideen.json");
+      if (fs.existsSync(ideenDatei)) {
+        const ideen = JSON.parse(fs.readFileSync(ideenDatei, "utf8"));
+        assert.equal(ideen[0].text, bearbeitet);
+        process.exit(0);
+      }
+    }
     if (update) return [{ update_id: ++schritt, ...update }];
     await pause(5);
   }
