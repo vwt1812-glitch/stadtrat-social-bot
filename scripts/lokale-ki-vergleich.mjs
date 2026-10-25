@@ -5,16 +5,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const daten = JSON.parse(await fs.readFile(path.join(root, "lokale-ki-faelle.json"), "utf8"));
+const runde2 = process.argv.includes("--runde2");
+const dateiname = runde2 ? "lokale-ki-faelle-runde2.json" : "lokale-ki-faelle.json";
+const daten = JSON.parse(await fs.readFile(path.join(root, dateiname), "utf8"));
 const adresse = process.env.LOKALE_KI_URL || "http://127.0.0.1:8088";
 const modell = process.env.LOKALE_KI_MODELL || "lokales-modell";
-const datei = process.argv[2] || path.join(process.cwd(), "lokale-ki-ergebnisse.json");
+const datei = process.argv.find((arg, index) => index >= 2 && arg !== "--runde2") ||
+  path.join(process.cwd(), runde2 ? "lokale-ki-ergebnisse-runde2.json" : "lokale-ki-ergebnisse.json");
 const prompts = {
   fakten(fall) {
-    return "Extrahiere aus dem folgenden Text ausschließlich überprüfbare Aussagen. Gib jede Aussage als eine kurze nummerierte Zeile aus. Trenne ausdrücklich Antrag/Forderung, Entscheidung, Umsetzung und Ausblick. Erfinde nichts, leite keinen Erfolg aus einem Antrag ab. Keine Einleitung.\n\n" + fall.quelle;
+    return (runde2
+      ? "Liste nur konkrete Informationen, die im folgenden gesprochenen Rohtext ausdrücklich genannt sind. Verwende kurze Stichpunkte. Du musst KEINE Kategorien füllen. Wenn etwas ungeklärt ist, benenne es als ungeklärt. Unterscheide Vorhaben, Antrag, Entscheidung und Umsetzung. Keine Vermutungen, keine Schlussfolgerungen, keine Einleitung.\n\n"
+      : "Extrahiere aus dem folgenden Text ausschließlich überprüfbare Aussagen. Gib jede Aussage als eine kurze nummerierte Zeile aus. Trenne ausdrücklich Antrag/Forderung, Entscheidung, Umsetzung und Ausblick. Erfinde nichts, leite keinen Erfolg aus einem Antrag ab. Keine Einleitung.\n\n") + fall.quelle;
   },
   redaktion(fall) {
-    return "Du überarbeitest einen deutschen Informationstext. Formuliere klar und natürlich, maximal 350 Zeichen. Nutze ausschließlich die Fakten im folgenden Text. Verändere weder Zuständigkeit noch Status von Forderungen oder Beschlüssen. Keine zusätzlichen Aussagen, keine Floskeln, keine Hashtags. Nur den fertigen Text ausgeben.\n\n" + fall.quelle;
+    return (runde2
+      ? "Formuliere aus dieser holprigen, gesprochenen Notiz einen verständlichen, sachlichen deutschen Kurztext mit maximal 350 Zeichen. Entferne Füllwörter, Wiederholungen und Satzabbrüche und ordne die Informationen sinnvoll. Behalte ALLE konkreten Angaben einschließlich Unsicherheiten und offenen Fragen bei. Erfinde keine Namen, Orte, Termine, Beschlüsse oder Erfolge. Keine Hashtags, keine Einleitung; gib nur den fertigen Text aus.\n\n"
+      : "Du überarbeitest einen deutschen Informationstext. Formuliere klar und natürlich, maximal 350 Zeichen. Nutze ausschließlich die Fakten im folgenden Text. Verändere weder Zuständigkeit noch Status von Forderungen oder Beschlüssen. Keine zusätzlichen Aussagen, keine Floskeln, keine Hashtags. Nur den fertigen Text ausgeben.\n\n") + fall.quelle;
   },
 };
 async function antwort(prompt) {
@@ -40,6 +47,7 @@ async function antwort(prompt) {
   } finally { clearTimeout(timeout); }
 }
 const ergebnisse = [];
+console.log("Testrunde:", runde2 ? "2 (Rohtexte)" : "1 (Ausgangstexte)");
 for (const fall of daten) {
   for (const aufgabe of ["fakten", "redaktion"]) {
     console.log("Prüfe", fall.id, aufgabe, "…");
@@ -61,6 +69,6 @@ for (const fall of daten) {
     }
   }
 }
-await fs.writeFile(datei, JSON.stringify({ erstellt: new Date().toISOString(), modell, adresse, ergebnisse }, null, 2) + "\n", "utf8");
+await fs.writeFile(datei, JSON.stringify({ erstellt: new Date().toISOString(), runde: runde2 ? 2 : 1, modell, adresse, ergebnisse }, null, 2) + "\n", "utf8");
 console.log("\nGespeichert:", datei);
 console.log("Die Prüf-Felder sind absichtlich leer: Wahrheit und sprachliche Qualität müssen Menschen prüfen.");

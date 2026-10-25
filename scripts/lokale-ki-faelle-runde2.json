@@ -1,0 +1,62 @@
+[
+  {
+    "id": "sprachnotiz-livestream",
+    "quelle": "Also ja, wir hatten ja diese Livestreams beantragt, von den Stadtratssitzungen in Nürnberg, und das wurde dann halt abgelehnt. Und die Audioaufnahmen, die es schon gibt, wollten wir zumindest veröffentlichen lassen, das ist aber auch abgelehnt worden. Wir wollen da weiter dranbleiben, also Transparenz.",
+    "fakten": [
+      "Wir haben Livestreams der Nürnberger Stadtratssitzungen beantragt",
+      "Livestream-Antrag abgelehnt",
+      "Veröffentlichung bereits vorhandener Audioaufzeichnungen abgelehnt",
+      "Weiterhin Einsatz für Transparenz"
+    ]
+  },
+  {
+    "id": "sprachnotiz-offener-antrag",
+    "quelle": "Ähm, wir wollen, also die Gruppe hat jetzt einen Antrag gestellt, dass die Sitzungen künftig gestreamt werden sollen. Entschieden ist da aber noch nix, also nicht schreiben, dass es schon Streams gibt oder dass das beschlossen wäre.",
+    "fakten": [
+      "Die Gruppe hat Antrag auf künftige Livestreams gestellt",
+      "Über Antrag noch nicht entschieden",
+      "Keine bereits bestehende Übertragung behaupten",
+      "Keinen Beschluss behaupten"
+    ]
+  },
+  {
+    "id": "sprachnotiz-verwaltung",
+    "quelle": "Also die Verwaltung hat gesagt, sie prüft das, das ist zugesagt. Aber irgendwie, ein Beschluss dass das wirklich gemacht wird, der ist noch nicht da. Ergebnisse von dieser Prüfung sollen dann später mal vorgestellt werden, wann genau, weiß ich nicht.",
+    "fakten": [
+      "Verwaltung hat Prüfung zugesagt",
+      "Kein Umsetzungsbeschluss",
+      "Prüfungsergebnisse sollen später vorgestellt werden",
+      "Zeitpunkt nicht bekannt"
+    ]
+  },
+  {
+    "id": "sprachnotiz-stammtisch",
+    "quelle": "Ja also Freitag ist wieder unser offener Stammtisch. Da kann man vorbeikommen und Fragen stellen, und wir reden über Themen aus der Kommunalpolitik, also diskutieren. Anmelden muss man sich nicht. Uhrzeit hab ich jetzt nicht gesagt, bitte auch keine dazuschreiben.",
+    "fakten": [
+      "Offener Stammtisch am Freitag",
+      "Interessierte können Fragen stellen",
+      "Diskussion kommunalpolitischer Themen",
+      "Keine Anmeldung erforderlich",
+      "Uhrzeit nicht angegeben"
+    ]
+  },
+  {
+    "id": "sprachnotiz-geruecht",
+    "quelle": "Ich hab gehört, dass nächste Woche vielleicht abgestimmt wird, aber das ist nicht bestätigt. Sicher ist nur, dass unser Antrag eingereicht wurde. Bitte nicht sagen, die Sache wäre schon entschieden.",
+    "fakten": [
+      "Antrag wurde eingereicht",
+      "Mögliche Abstimmung nächste Woche nur unbestätigtes Gerücht",
+      "Keine Entscheidung belegt"
+    ]
+  },
+  {
+    "id": "sprachnotiz-presse",
+    "quelle": "Also die Pressemitteilung ist, nee, die haben wir noch nicht rausgeschickt. Der Text ist fertig, aber die Freigabe fehlt noch. Sobald die vorliegt, können wir sie veröffentlichen, aber bitte jetzt noch nicht behaupten, sie wäre online.",
+    "fakten": [
+      "Pressemitteilung ist verfasst",
+      "Noch nicht freigegeben",
+      "Noch nicht veröffentlicht",
+      "Veröffentlichung erst nach Freigabe"
+    ]
+  }
+]
