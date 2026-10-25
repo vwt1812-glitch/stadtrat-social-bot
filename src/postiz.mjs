@@ -322,27 +322,43 @@ export class Postiz {
    * @param {Function} [o.vorAnlegen] persistiert vor dem Request den unklaren Teilschritt
    * @param {Function} [o.nachAnlegen] persistiert jedes bestätigte Teilergebnis
    * @param {Function} [o.beiAblehnung] löscht bei eindeutig abgelehnten Requests die Unklar-Markierung
+   * @param {Record<string,{id:string,path:string}>} [o.thumbnails] Cover-Uploads pro Kanal-ID
+   * @param {number|null} [o.thumbnailTimestamp] Framezeit in Millisekunden (reguläres TikTok)
+   * @param {boolean} [o.mastodonThumbnails] nur für den optional angepassten Postiz-Provider
    * @returns {Promise<{post: {postId:string}[], story?: {postId:string}[]}>} IDs für die Kontrolle
    */
   async beitrag({
     typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, nurStory = false, storyMedium = null,
     hochkantMedium = null, hochkantNetze = HOCHKANT,
     fortschritt = {}, vorAnlegen = async () => {}, nachAnlegen = async () => {}, beiAblehnung = async () => {},
+    thumbnails = {}, thumbnailTimestamp = null, mastodonThumbnails = false,
   }) {
     const eigene = this.eigeneEinstellungen();
+    const feedPost = (k) => {
+      const captionText = captions[k.id] ?? caption;
+      const settings = einstellungenFuer(k, { caption: captionText, collabs, repost, eigene });
+      const coverErlaubt = ["instagram", "instagram-standalone", "youtube", "tiktok-business"].includes(k.identifier) || (k.identifier === "mastodon" && mastodonThumbnails);
+      const cover = coverErlaubt ? thumbnails[k.id] : null;
+      const medienFuerKanal = hochkantMedium && hochkantNetze.includes(k.identifier) ? [hochkantMedium] : medien;
+      const image = medienFuerKanal.map((m, i) => {
+        // Nur Video, nur erstes Medium: nie Cover als zusätzliches Feedbild oder Storymedium senden.
+        if (i || !/\.mp4(?:[?#]|$)/i.test(m.path)) return m;
+        if (cover) return { ...m, thumbnail: cover.path };
+        if (k.identifier === "tiktok" && settings.content_posting_method === "DIRECT_POST" &&
+            settings.privacy_level === "PUBLIC_TO_EVERYONE" && Number.isSafeInteger(thumbnailTimestamp) && thumbnailTimestamp >= 0) {
+          return { ...m, thumbnailTimestamp };
+        }
+        return m;
+      });
+      if (k.identifier === "youtube" && cover && image[0]?.thumbnail) settings.thumbnail = cover;
+      return { integration: { id: k.id }, value: [{ content: alsHtml(captionText), image }], settings };
+    };
     const body = {
       type: typ,
       date: zeit.toISOString(),
       shortLink: false,
       tags: [],
-      posts: kanaele.map((k) => ({
-        integration: { id: k.id },
-        value: [{
-          content: alsHtml(captions[k.id] ?? caption),
-          image: hochkantMedium && hochkantNetze.includes(k.identifier) ? [hochkantMedium] : medien,
-        }],
-        settings: einstellungenFuer(k, { caption: captions[k.id] ?? caption, collabs, repost, eigene }),
-      })),
+      posts: kanaele.map(feedPost),
     };
     const storyKanaele = kanaele.filter((k) => STORY[k.identifier]);
     if (nurStory && (!story || storyKanaele.length !== kanaele.length || !storyKanaele.length || (!storyMedium && !medien.length))) {
@@ -384,10 +400,10 @@ export class Postiz {
    * So viele Anfragen braucht ein Beitrag: Uploads + Post, ggf. Story-Post, und der Upload der
    * eigenen 9:16-Fassung (`storyUpload`), wenn Story oder Hochformat-Netzwerke sie brauchen.
    */
-  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT, fortschritt = {} }) {
+  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT, fortschritt = {}, coverUploads = 0 }) {
     if (nurStory) return (fortschritt.story ? 0 : 1) + (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1);
     const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
     const mitHochkant = hochkant && medien && kanaele.some((k) => hochkantNetze.includes(k.identifier));
-    return (hochgeladen ? 0 : medien) + (fortschritt.post ? 0 : 1) + (mitStory && !fortschritt.story ? 1 : 0) + (storyUpload && (mitStory || mitHochkant) ? 1 : 0);
+    return (hochgeladen ? 0 : medien) + (fortschritt.post ? 0 : 1) + (mitStory && !fortschritt.story ? 1 : 0) + (storyUpload && (mitStory || mitHochkant) ? 1 : 0) + (fortschritt.post ? 0 : coverUploads);
   }
 }

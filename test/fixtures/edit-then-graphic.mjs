@@ -25,6 +25,7 @@ speicher.aendern(auftrag.id, {
 const stand = () => JSON.parse(fs.readFileSync(path.join(datenDir, "auftraege.json"), "utf8"))[auftrag.id];
 let gerendert = false;
 mock.module("../../src/grafik-text.mjs", { namedExports: {
+  textGrafik: async () => { throw new Error("Unexpected thumbnail rendering"); },
   textAnimation: async ({ inhalt, format: ziel }) => {
     assert.equal(aktion, "anim");
     assert.equal(ziel, format);
