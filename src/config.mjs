@@ -48,6 +48,8 @@ function logoPfad() {
 }
 
 export function ladeConfig() {
+  const mastodonAnbindung = env("MASTODON_ANBINDUNG", "postiz");
+  if (!["postiz", "direkt"].includes(mastodonAnbindung)) throw new Error("MASTODON_ANBINDUNG muss postiz oder direkt sein.");
   return {
     telegram: {
       token: pflicht("TELEGRAM_BOT_TOKEN"),
@@ -63,6 +65,8 @@ export function ladeConfig() {
       // Postiz-Standard API_LIMIT=30 pro Stunde; 0 = nicht mitzählen
       maxAnfragen: Number(env("POSTIZ_MAX_ANFRAGEN", "28")),
       einstellungen: pfad(env("KANAL_EINSTELLUNGEN", "kanaele.json")),
+      // Nur nach Installation des dokumentierten Postiz-Patches einschalten.
+      mastodonThumbnails: env("POSTIZ_MASTODON_THUMBNAILS", "nein") === "ja",
     },
     whisper: {
       bin: env("WHISPER_BIN", "whisper-cli"),
@@ -113,7 +117,8 @@ export function ladeConfig() {
       crf: env("VIDEO_CRF", "21"),
     },
     caption: captionConfig(),
-    mastodon: env("MASTODON_URL") && env("MASTODON_TOKEN")
+    // Postiz ist Standard. Der frühere direkte Anschluss bleibt ausdrücklich wählbar.
+    mastodon: mastodonAnbindung === "direkt" && env("MASTODON_URL") && env("MASTODON_TOKEN")
       ? {
           url: env("MASTODON_URL"),
           token: env("MASTODON_TOKEN"),

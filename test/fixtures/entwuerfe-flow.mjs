@@ -7,6 +7,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { Auftraege } from "../../src/auftraege.mjs";
 import { Telegram } from "../../src/telegram.mjs";
 import { Postiz } from "../../src/postiz.mjs";
+import * as thumbnailOriginal from "../../src/thumbnail.mjs";
 
 const [dir, szenario] = process.argv.slice(2);
 Object.assign(process.env, {
@@ -17,12 +18,18 @@ Object.assign(process.env, {
 const s = new Auftraege(dir), a = s.neu(123);
 const foto = path.join(a.ordner, "foto.jpg");
 fs.writeFileSync(foto, "test");
-s.aendern(a.id, { art: "foto", status: "vorschau", caption: "Original", captions: { ig: "Eigene Fassung" },
+s.aendern(a.id, { art: szenario === "thumbnail" ? "video" : "foto", status: "vorschau", caption: "Original", captions: { ig: "Eigene Fassung" },
   medien: [foto], originale: [foto], hochgeladen: [{ id: "m", path: "/foto.jpg" }],
   story: szenario !== "archiv", kunde: "kunde", kanaele: ["ig"], menueNachricht: 1,
   quellenkarte: { sha256: "hash", stand: "ungeprüft" },
 });
 const stand = () => JSON.parse(fs.readFileSync(path.join(dir, "auftraege.json"), "utf8"))[a.id];
+mock.module("../../src/thumbnail.mjs", { namedExports: {
+  ...thumbnailOriginal,
+  thumbnailsErstellen: async ({ optionen }) => ({ ...optionen, dateien: { original: foto, hochkant: foto }, hochgeladen: {},
+    videoStand: await thumbnailOriginal.videoStand(foto) }),
+} });
+mock.method(Telegram.prototype, "herunterladen", async (_, ziel) => { fs.writeFileSync(ziel, "neues Cover"); });
 const callback = (aktion, prefix = "a") => ({ callback_query: {
   id: String(schritt), from: { id: 123 }, message: { chat: { id: 123 } },
   data: prefix === "a" ? `a:${a.id}:${aktion}` : `d:${aktion}:${a.id}`,
@@ -50,7 +57,22 @@ mock.method(Telegram.prototype, "aufruf", async (methode, params = {}) => {
     await pause(10);
     const b = stand();
     let update;
-    if (szenario === "archiv") {
+    if (szenario === "thumbnail") {
+      if (schritt === 0) update = callback("thumbtext");
+      if (schritt === 1 && b.wartetAuf === "thumbnailText") update = text("Eigener Titel");
+      if (schritt === 2 && b.thumbnail?.text === "Eigener Titel" && b.status === "vorschau") update = callback("thumbbild");
+      if (schritt === 3 && b.wartetAuf === "thumbnailBild") update = { message: { from: { id: 123 }, chat: { id: 123, type: "private" },
+        photo: [{ file_id: "cover-bild", file_size: 100 }] } };
+      if (schritt === 4 && b.thumbnail?.modus === "bild" && b.status === "vorschau") {
+        assert.equal(b.caption, "Original");
+        assert.equal(b.art, "video");
+        assert.deepEqual(b.medien, [foto]);
+        assert.equal(Object.keys(new Auftraege(dir).alle).length, 1);
+        assert.ok(b.thumbnail.bild.endsWith(".jpg"));
+        assert.equal(teile.length, 0);
+        process.exit(0);
+      }
+    } else if (szenario === "archiv") {
       if (schritt === 0) update = callback("quelltext");
       if (schritt === 1 && b.wartetAuf === "quelle") update = text("Titel: Testquelle\nStand: eingereicht\nStanddatum: 2026-10-25\nBeleg: Eingangsnachweis");
       if (schritt === 2 && b.quellenkarte.titel === "Testquelle" && !b.wartetAuf) update = callback("caption");

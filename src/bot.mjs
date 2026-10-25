@@ -23,8 +23,9 @@ import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeB
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 import { storyFotoText, storyTextZeilen } from "./story-text.mjs";
 import { textGrafiken, textAnimation } from "./grafik-text.mjs";
-import { IdeenSpeicher, antragVorschlaege, grafikText } from "./redaktion.mjs";
+import { IdeenSpeicher, antragVorschlaege, grafikText, kurzerTitel } from "./redaktion.mjs";
 import { quellenVorlage, quellenBearbeiten, quellenZeilen } from "./quellen.mjs";
+import { thumbnailsErstellen, thumbnailZiel, videoStand, frameZeit, coverBedarf, THUMBNAIL_PROFILE, originalProfil } from "./thumbnail.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
@@ -72,6 +73,7 @@ function limitFehler(auftrag, kanaele) {
     storyBereit: Boolean(auftrag.storyDatei ? auftrag.storyHochgeladen : auftrag.hochgeladen),
     hochkant: hochkantAn(auftrag), hochkantNetze: config.hochkant.netze,
     fortschritt: auftrag.postiz,
+    coverUploads: art(auftrag) === "video" && !auftrag.nurStory ? coverBedarf(auftrag.thumbnail, postizKanaele, config.postiz.mastodonThumbnails) : 0,
   });
   const frei = postiz.zaehler.wiederFrei(bedarf);
   if (!frei) return null;
@@ -358,6 +360,7 @@ async function menueInhalt(auftrag) {
     ...(auftrag.antragVarianten?.length ? [[knopf("📄 Andere Antragspassage", auftrag, "antragmenu")]] : []),
     [knopf("💾 Idee speichern", auftrag, "idee")],
     [knopf("📚 Quelle / Stand", auftrag, "quelle"), ...(auftrag.versionen?.length ? [knopf("↶ Text zurück", auftrag, "undo")] : [])],
+    ...(art(auftrag) === "video" && !auftrag.nurStory ? [[knopf(auftrag.thumbnail ? "🖼️ Titelbild ✓" : "🖼️ Titelbild", auftrag, "thumb")]] : []),
     ...(!auftrag.nurStory ? [[knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])]] : []),
     ...(extra.length ? [extra] : []),
     [knopf("📺 Kanäle", auftrag, "kanaele"), ...(!auftrag.nurStory && kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
@@ -380,6 +383,75 @@ async function menueInhalt(auftrag) {
   if (optionen.length) zeilen.push(optionen);
   zeilen.push([knopf("🗃️ Archivieren", auftrag, "archiv"), knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
+}
+
+function coverVideo(a) {
+  return a.medien?.[0] ?? datei(a, "fertig.mp4");
+}
+
+async function thumbnailMenue(a) {
+  const kanaele = await gewaehlteKanaele(a);
+  const t = a.thumbnail;
+  const infos = kanaele.map((k) => {
+    const z = thumbnailZiel(k, t, config.postiz.mastodonThumbnails);
+    const profil = z.profil === "original" ? null : THUMBNAIL_PROFILE[z.profil];
+    return `• ${html(k.name)}: ${z.hinweis ? html(z.hinweis) : "Cover wird übertragen."}` + (profil ? ` (${profil.breite}×${profil.hoehe})` : "");
+  });
+  return {
+    text: "<b>Titelbild für Videos</b>\n" + (t ? `Gewählt: ${html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` : "Noch kein eigenes Titelbild.\n") +
+      "Textgrafik nutzt dieselben Farben, Schrift und Logos wie Sharepics. Bild und Caption werden getrennt bearbeitet.\n" + infos.join("\n") +
+      "\nJPEG-Ausgaben: höchstens 2 MiB. Kanäle ohne Cover-Unterstützung erhalten kein zusätzliches Feedbild. Shorts-Cover werden für Studio exportiert.",
+    reply_markup: { inline_keyboard: [
+      [knopf("🎞️ Frame auswählen", a, "thumbframe"), knopf("📝 Textgrafik", a, "thumbtext")],
+      [knopf("📷 Eigenes Bild", a, "thumbbild")],
+      ...(t ? [
+        [knopf("✏️ Covertext / Bildtext", a, "thumbtext"), knopf("🔄 Neu erzeugen", a, "thumbneu")],
+        [knopf(t.youtubeShort ? "YouTube: Shorts (Export)" : "YouTube: normales Video", a, "thumbshort")],
+        [knopf("📎 Cover herunterladen", a, "thumbexport"), knopf("🗑️ Titelbild entfernen", a, "thumboff")],
+      ] : []),
+      [knopf("↩️ Zurück", a, "zurueck")],
+    ] },
+  };
+}
+
+async function thumbnailBauen(a, optionen) {
+  const kanaele = await gewaehlteKanaele(a);
+  auftraege.aendern(a.id, { status: "arbeitet", wartetAuf: null });
+  await tg.senden(a.chatId, "🖼️ Erstelle die Titelbilder in den passenden Größen …");
+  einreihen(async () => {
+    try {
+      const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), layout: config.layout,
+        optionen, kanaele, mastodonPatch: config.postiz.mastodonThumbnails });
+      // Nur nach vollständigem Rendern übernehmen; eine misslungene Änderung lässt das bisherige Cover intakt.
+      auftraege.aendern(a.id, { thumbnail });
+      for (const [key, bild] of Object.entries(thumbnail.dateien)) {
+        await tg.fotos(a.chatId, [bild], `Titelbild – ${key}`);
+      }
+    } catch (e) {
+      console.error(e);
+      await tg.senden(a.chatId, `❌ Titelbild: ${html(e.message)}`);
+    }
+    const aktuell = auftraege.aendern(a.id, { status: "vorschau" });
+    await neuesMenue(aktuell, await thumbnailMenue(aktuell));
+  });
+}
+
+async function thumbnailPruefen(a, kanaele) {
+  if (!a.thumbnail || a.nurStory || art(a) !== "video" || a.postiz?.post) return null;
+  const t = a.thumbnail;
+  try {
+    if (JSON.stringify(await videoStand(coverVideo(a))) !== JSON.stringify(t.videoStand)) return "Das Video wurde geändert. Bitte unter Titelbild → Neu erzeugen die Vorschau aktualisieren.";
+    for (const k of kanaele) {
+      const z = thumbnailZiel(k, t, config.postiz.mastodonThumbnails);
+      if ((z.bild || z.zeit) && !t.dateien?.[z.profil]) return "Für die geänderte Kanalauswahl fehlt eine Covergröße. Bitte unter Titelbild → Neu erzeugen ergänzen.";
+      if (z.bild) {
+        const profil = z.profil === "original" ? originalProfil(await untersuche(coverVideo(a))) : THUMBNAIL_PROFILE[z.profil];
+        const stat = await fs.stat(t.dateien[z.profil]);
+        if (stat.size > profil.maxBytes) return "Ein Cover überschreitet das Dateilimit. Bitte neu erzeugen.";
+      }
+    }
+  } catch { return "Eine Titelbild-Datei fehlt. Bitte unter Titelbild → Neu erzeugen aktualisieren."; }
+  return null;
 }
 
 function fortsetzenMenue(a) {
@@ -530,6 +602,8 @@ async function repostMenue(auftrag) {
 
 async function bestaetigung(auftrag, typ, zeit) {
   const kanaele = await gewaehlteKanaele(auftrag);
+  const coverFehler = await thumbnailPruefen(auftrag, kanaele);
+  if (coverFehler) return { fehler: coverFehler };
   if (!kanaele.length) return { fehler: "Bitte zuerst mindestens einen Kanal wählen." };
   if (auftrag.nurStory && kanaele.some((k) => !STORY[k.identifier])) return { fehler: "Nur Story ist auf Instagram und Facebook möglich." };
   if (auftrag.nurStory && art(auftrag) === "text") return { fehler: "Bitte zuerst ein Foto oder Video schicken." };
@@ -553,6 +627,10 @@ async function bestaetigung(auftrag, typ, zeit) {
     text: [
       `Wirklich ${wann} ${auftrag.nurStory ? "nur die Story" : "den Beitrag"} auf ${kanaele.map((k) => `<b>${html(k.name)}</b>`).join(", ")} posten?`,
       ...details(auftrag, await alleKanaele()),
+      ...(auftrag.thumbnail && !auftrag.nurStory && art(auftrag) === "video" ? kanaele.map((k) => {
+        const z = thumbnailZiel(k, auftrag.thumbnail, config.postiz.mastodonThumbnails);
+        return z.hinweis ? `🖼️ ${html(k.name)}: ${html(z.hinweis)}` : `🖼️ ${html(k.name)}: eigenes Titelbild`;
+      }) : []),
       ...(eigen.length ? [`✂️ Eigene Fassung für ${eigen.join(", ")} (über „Zurück → Pro Kanal“ ansehen)`] : []),
       ...(!auftrag.nurStory ? [`<blockquote expandable>${html(auftrag.caption)}</blockquote>`] : []),
     ].join("\n"),
@@ -934,6 +1012,21 @@ async function veroeffentlichen(auftrag) {
         auftrag = auftraege.aendern(auftrag.id, { storyHochgeladen: await postiz.hochladen(auftrag.storyDatei) });
       }
       await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
+      const thumbnails = {};
+      if (auftrag.thumbnail && !auftrag.nurStory && art(auftrag) === "video" && !auftrag.postiz?.post) {
+        const fehler = await thumbnailPruefen(auftrag, postizKanaele);
+        if (fehler) throw new Error(fehler);
+        for (const k of postizKanaele) {
+          const z = thumbnailZiel(k, auftrag.thumbnail, config.postiz.mastodonThumbnails);
+          if (!z.bild) continue;
+          if (!auftrag.thumbnail.hochgeladen[z.profil]) {
+            const upload = await postiz.hochladen(auftrag.thumbnail.dateien[z.profil]);
+            auftrag = auftraege.aendern(auftrag.id, { thumbnail: { ...auftrag.thumbnail,
+              hochgeladen: { ...auftrag.thumbnail.hochgeladen, [z.profil]: upload } } });
+          }
+          thumbnails[k.id] = auftrag.thumbnail.hochgeladen[z.profil];
+        }
+      }
       const ergebnis = await postiz.beitrag({
         typ, zeit, caption: auftrag.caption, captions: auftrag.captions, medien: auftrag.hochgeladen ?? [], kanaele: postizKanaele,
         collabs: art(auftrag) === "text" || auftrag.nurStory ? [] : auftrag.collabs,
@@ -944,6 +1037,8 @@ async function veroeffentlichen(auftrag) {
         vorAnlegen: async (teil) => { auftrag = auftraege.aendern(auftrag.id, { postizUnklar: teil }); },
         nachAnlegen: async (stand) => { auftrag = auftraege.aendern(auftrag.id, { postiz: stand, postizUnklar: null }); },
         beiAblehnung: async () => { auftrag = auftraege.aendern(auftrag.id, { postizUnklar: null }); },
+        thumbnails, thumbnailTimestamp: art(auftrag) === "video" && !auftrag.nurStory && auftrag.thumbnail?.modus === "frame" ? auftrag.thumbnail.frameMs : null,
+        mastodonThumbnails: config.postiz.mastodonThumbnails,
       });
       auftrag = auftraege.aendern(auftrag.id, { postiz: ergebnis, postizFertig: true });
     }
@@ -994,6 +1089,7 @@ async function knopfGedrueckt(cq) {
   if (auftrag.chatId !== cq.message?.chat.id) return antwort("Dieser Auftrag gehört zu einem anderen Chat.", true);
   if (auftrag.archiviert) return antwort("Bitte zuerst über /archiv wiederherstellen.", true);
   if (auftrag.status !== "vorschau") return antwort(`Nicht mehr änderbar (Status: ${auftrag.status}).`, true);
+  if (aktion.startsWith("thumb") && (art(auftrag) !== "video" || auftrag.nurStory)) return antwort("Titelbilder sind nur für Feed-Videos vorgesehen.", true);
   if ((auftrag.postiz || auftrag.postizUnklar || auftrag.mastodon) && !["weiter", "pruefen", "nichtangelegt", "geprueft"].includes(aktion)) {
     await zeigeMenue(auftrag, fortsetzenMenue(auftrag));
     return antwort("Die Veröffentlichung wurde bereits begonnen.", true);
@@ -1012,6 +1108,40 @@ async function knopfGedrueckt(cq) {
   };
 
   switch (aktion) {
+    case "thumb":
+      if (art(auftrag) !== "video" || auftrag.nurStory) return antwort("Titelbilder sind für Feed-Videos vorgesehen.", true);
+      await zeigeMenue(auftrag, await thumbnailMenue(auftrag));
+      return antwort();
+    case "thumbframe": {
+      if (art(auftrag) !== "video") return antwort("Bitte zuerst ein Video auswählen.", true);
+      const masse = await untersuche(coverVideo(auftrag));
+      auftraege.aendern(id, { wartetAuf: "thumbnailFrame" });
+      await antwort();
+      return tg.senden(auftrag.chatId, `Zeit innerhalb des fertigen Videos schicken: Sekunden oder MM:SS, z. B. 3.5. Videolänge: ${masse.dauer.toFixed(1)} s. Mit „Covertext“ kannst du danach eine Überschrift ergänzen.`);
+    }
+    case "thumbtext":
+      auftraege.aendern(id, { wartetAuf: "thumbnailText" });
+      await antwort();
+      return tg.senden(auftrag.chatId, "Covertext schicken: erste Zeile Überschrift (max. 70 Zeichen), optional zweite Zeile Erklärung (max. 60). Der Text ist unabhängig von der Caption.\nVorschlag:\n<pre>" + html(auftrag.thumbnail?.text ?? kurzerTitel(grafikText(auftrag) ?? auftrag.caption, 60)) + "</pre>");
+    case "thumbbild":
+      auftraege.aendern(id, { wartetAuf: "thumbnailBild" });
+      await antwort();
+      return tg.senden(auftrag.chatId, "Schick ein JPG oder PNG als Foto oder Datei (max. 12 MB). Es wird als Titelbild verwendet, kein neuer Foto-Beitrag. Mit „Covertext“ kannst du danach Text ergänzen.");
+    case "thumbneu":
+    case "thumbshort":
+      if (!auftrag.thumbnail) return antwort("Bitte zuerst ein Titelbild auswählen.");
+      await antwort();
+      return thumbnailBauen(auftrag, { ...auftrag.thumbnail,
+        youtubeShort: aktion === "thumbshort" ? !auftrag.thumbnail.youtubeShort : auftrag.thumbnail.youtubeShort });
+    case "thumboff":
+      auftraege.aendern(id, { thumbnail: null });
+      await zeigeMenue(auftrag);
+      return antwort("Titelbild entfernt");
+    case "thumbexport":
+      if (!auftrag.thumbnail?.dateien) return antwort("Noch keine Cover vorhanden.");
+      await antwort();
+      for (const [key, bild] of Object.entries(auftrag.thumbnail.dateien)) await tg.datei(auftrag.chatId, "sendDocument", "document", bild, { caption: `Cover – ${key}` });
+      return;
     case "weiter":
       await antwort("Setze die fehlenden Teile fort …");
       return veroeffentlichen(auftrag);
@@ -1472,6 +1602,18 @@ async function texteingabe(auftrag, text) {
     return neuesMenue(auftrag);
   }
   switch (auftrag.wartetAuf) {
+    case "thumbnailFrame": {
+      let ms;
+      try { ms = frameZeit(text, (await untersuche(coverVideo(auftrag))).dauer); }
+      catch (e) { return tg.senden(auftrag.chatId, html(e.message)); }
+      return thumbnailBauen(auftrag, { ...auftrag.thumbnail, modus: "frame", frameMs: ms, mitText: false });
+    }
+    case "thumbnailText": {
+      const textNeu = text.trim();
+      if (!textNeu) return tg.senden(auftrag.chatId, "Bitte einen Covertext eingeben.");
+      const modus = auftrag.thumbnail?.modus ?? "text";
+      return thumbnailBauen(auftrag, { ...auftrag.thumbnail, modus, text: textNeu, mitText: modus !== "text" });
+    }
     case "quelle": {
       let q;
       try { q = quellenBearbeiten(text, auftrag.quellenkarte); }
@@ -1692,11 +1834,18 @@ async function nachricht(msg) {
     return;
   }
 
+  const wartend = auftraege.wartend(chatId);
+  if (wartend?.wartetAuf === "thumbnailBild" && (msg.photo || msg.document?.mime_type?.startsWith("image/"))) {
+    const bild = msg.photo?.at(-1) ?? msg.document;
+    if (bild.file_size > 12 * MB) return tg.senden(chatId, "Bitte ein Titelbild unter 12 MB schicken.");
+    const ziel = datei(wartend, `cover-upload-${createHash("sha256").update(bild.file_id).digest("hex").slice(0, 12)}.jpg`);
+    await tg.herunterladen(bild.file_id, ziel);
+    return thumbnailBauen(wartend, { ...wartend.thumbnail, modus: "bild", bild: ziel, mitText: false });
+  }
   const video = msg.video ?? (msg.document?.mime_type?.startsWith("video/") ? msg.document : null);
   if (video) return neuesVideo(msg, video);
   const foto = msg.photo?.at(-1) ?? (msg.document?.mime_type?.startsWith("image/") ? msg.document : null);
   if (foto) return fotoEingang(msg, foto);
-  const wartend = auftraege.wartend(chatId);
   // Die Antwort auf einen laufenden Dialog hat Vorrang vor neuen Medientypen.
   if (!wartend && (msg.voice || msg.audio)) return sprachnachricht(msg, msg.voice || msg.audio);
   if (!wartend && msg.document && (msg.document.mime_type === "application/pdf" || /\.pdf$/i.test(msg.document.file_name ?? ""))) {

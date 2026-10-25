@@ -16,6 +16,21 @@ Der Redaktionsassistent funktioniert **ohne `ANTHROPIC_API_KEY` oder `OPENAI_API
 
 ## Ablauf in Telegram
 
+### Titelbilder für Videos
+
+**🖼️ Titelbild** bietet einen Videoframe, eine Textgrafik im bestehenden Sharepic-Stil oder ein eigenes
+Bild. Covertext und Caption bleiben unabhängig. Der Bot erzeugt JPEGs unter 2 MiB in den passenden
+Größen: Instagram 1080×1920, YouTube 3840×2160, Shorts-Export 2160×3840. Auswählen, Vorschau prüfen,
+bei Bedarf Covertext ergänzen und als Datei herunterladen. Nach neuem Videorendern das Cover neu erzeugen.
+
+Mastodon läuft standardmäßig über Postiz (`MASTODON_ANBINDUNG=postiz`). Dessen Standard-Provider reicht
+Cover derzeit nicht weiter. Der optionale Patchhelfer bereitet eine Postiz-Quellkopie vor; ohne separaten
+Build/Deployment bleibt Mastodon beim Coverexport. Erst danach `POSTIZ_MASTODON_THUMBNAILS=ja` setzen.
+Facebook, X und Bluesky erhalten vorerst ebenfalls nur Cover zum manuellen Verwenden, keine angeblich
+gesetzten Thumbnails. Shorts-Cover werden für Studio exportiert, nicht ungeprüft automatisch gesetzt.
+
+Größenempfehlungen, harte Grenzen, unterstützte Provider und Patch-Anleitung: [docs/THUMBNAILS.md](docs/THUMBNAILS.md).
+
 ### Entwürfe, Archiv und Quellen
 
 - `/entwuerfe` zeigt alle noch offenen Entwürfe dieses Chats, mit Seiten zum Weiterblättern.
@@ -124,8 +139,9 @@ braucht eine Anfrage pro Datei plus eine für den Post (plus eine für die Story
 
 ### Mastodon direkt
 
-Postiz postet auf Mastodon immer **öffentlich** und ohne Inhaltswarnung. Viele Instanzen erwarten bei politischen
-Accounts aber „ungelistet“ und Inhaltswarnungen. Mit `MASTODON_URL` und `MASTODON_TOKEN` postet der Bot selbst:
+Der Mastodon-Standardweg bleibt Postiz. Der vorhandene Direktanschluss ist mit `MASTODON_ANBINDUNG=direkt`
+ausdrücklich wählbar. Postiz postet auf Mastodon **öffentlich** und ohne Inhaltswarnung. Viele Instanzen erwarten bei politischen
+Accounts aber „ungelistet“ und Inhaltswarnungen. Mit `MASTODON_ANBINDUNG=direkt`, `MASTODON_URL` und `MASTODON_TOKEN` postet der Bot selbst:
 
 1. Auf der Instanz: Einstellungen → Entwicklung → Neue Anwendung, Berechtigungen `read:accounts`, `write:media`,
    `write:statuses`. Den Zugriffstoken als `MASTODON_TOKEN` eintragen.
