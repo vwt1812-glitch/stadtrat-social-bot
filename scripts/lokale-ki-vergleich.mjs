@@ -26,14 +26,17 @@ async function antwort(prompt) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: modell, temperature: 0.2, max_tokens: 220, stream: false,
+        model: modell, temperature: 0.7, top_p: 0.8, top_k: 20, max_tokens: 220, stream: false,
+        chat_template_kwargs: { enable_thinking: false },
         messages: [{ role: "user", content: prompt }],
       }),
       signal: controller.signal,
     });
     if (!response.ok) throw new Error("Lokaler Server: HTTP " + response.status + " – " + (await response.text()).slice(0, 200));
     const data = await response.json();
-    return { text: data.choices?.[0]?.message?.content?.trim() ?? "", sekunden: +((performance.now() - anfang) / 1000).toFixed(1), tokens: data.usage?.completion_tokens ?? null };
+    const inhalt = data.choices?.[0]?.message?.content?.trim() ?? "";
+    if (!inhalt) throw new Error("Leere Antwort trotz " + (data.usage?.completion_tokens ?? "?") + " Tokens; finish_reason=" + (data.choices?.[0]?.finish_reason ?? "?") + ". Denkmodus / Chat-Template prüfen.");
+    return { text: inhalt, sekunden: +((performance.now() - anfang) / 1000).toFixed(1), tokens: data.usage?.completion_tokens ?? null };
   } finally { clearTimeout(timeout); }
 }
 const ergebnisse = [];
