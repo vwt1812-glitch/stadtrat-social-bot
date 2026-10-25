@@ -416,7 +416,7 @@ async function thumbnailMenue(a) {
 
 async function thumbnailBauen(a, optionen) {
   const kanaele = await gewaehlteKanaele(a);
-  auftraege.aendern(a.id, { status: "arbeitet", wartetAuf: null });
+  auftraege.aendern(a.id, { status: "arbeitet", wartetAuf: null, plan: null });
   await tg.senden(a.chatId, "🖼️ Erstelle die Titelbilder in den passenden Größen …");
   einreihen(async () => {
     try {
@@ -1134,7 +1134,7 @@ async function knopfGedrueckt(cq) {
       return thumbnailBauen(auftrag, { ...auftrag.thumbnail,
         youtubeShort: aktion === "thumbshort" ? !auftrag.thumbnail.youtubeShort : auftrag.thumbnail.youtubeShort });
     case "thumboff":
-      auftraege.aendern(id, { thumbnail: null });
+      auftraege.aendern(id, { thumbnail: null, plan: null });
       await zeigeMenue(auftrag);
       return antwort("Titelbild entfernt");
     case "thumbexport":

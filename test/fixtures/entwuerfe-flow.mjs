@@ -22,6 +22,7 @@ s.aendern(a.id, { art: szenario === "thumbnail" ? "video" : "foto", status: "vor
   medien: [foto], originale: [foto], hochgeladen: [{ id: "m", path: "/foto.jpg" }],
   story: szenario !== "archiv", kunde: "kunde", kanaele: ["ig"], menueNachricht: 1,
   quellenkarte: { sha256: "hash", stand: "ungeprüft" },
+  ...(szenario === "thumbnail" ? { plan: { typ: "now", zeit: new Date().toISOString() } } : {}),
 });
 const stand = () => JSON.parse(fs.readFileSync(path.join(dir, "auftraege.json"), "utf8"))[a.id];
 mock.module("../../src/thumbnail.mjs", { namedExports: {
@@ -65,6 +66,7 @@ mock.method(Telegram.prototype, "aufruf", async (methode, params = {}) => {
         photo: [{ file_id: "cover-bild", file_size: 100 }] } };
       if (schritt === 4 && b.thumbnail?.modus === "bild" && b.status === "vorschau") {
         assert.equal(b.caption, "Original");
+        assert.equal(b.plan, null);
         assert.equal(b.art, "video");
         assert.deepEqual(b.medien, [foto]);
         assert.equal(Object.keys(new Auftraege(dir).alle).length, 1);
