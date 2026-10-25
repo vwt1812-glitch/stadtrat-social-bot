@@ -59,6 +59,13 @@ export function antragVorschlaege(pdfText) {
   return result;
 }
 
+/** Textbeiträge verwenden den aktuellen Entwurf, bestehende Grafiken ihren eigenen Bildtext. */
+export function grafikText(auftrag, quelle = null) {
+  return quelle ?? (auftrag.art === "text"
+    ? auftrag.caption ?? auftrag.grafikQuelleText ?? auftrag.notizen
+    : auftrag.grafikQuelleText ?? auftrag.caption ?? auftrag.notizen);
+}
+
 export function grafikInhalt(text, { ausAntrag = false } = {}) {
   const zeilen = String(text ?? "").replace(/\r/g, "").split("\n").map((z) => z.trim()).filter(Boolean);
   const erste = zeilen[0] ?? "";

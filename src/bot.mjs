@@ -22,7 +22,7 @@ import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeB
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 import { storyFotoText, storyTextZeilen } from "./story-text.mjs";
 import { textGrafiken, textAnimation } from "./grafik-text.mjs";
-import { IdeenSpeicher, antragVorschlaege } from "./redaktion.mjs";
+import { IdeenSpeicher, antragVorschlaege, grafikText } from "./redaktion.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
@@ -781,7 +781,7 @@ async function textBeitrag(chatId, text, zusaetze = {}) {
 
 /** Bestehenden Textauftrag in eine echte Postiz-Bild- oder Storyveröffentlichung umwandeln. */
 async function textZuGrafik(auftrag, format = "post", quelle = null) {
-  const text = quelle ?? auftrag.grafikQuelleText ?? auftrag.notizen ?? auftrag.caption;
+  const text = grafikText(auftrag, quelle);
   const vorlage = await textGrafiken({
     ordner: auftrag.ordner, text, layout: config.layout,
     ausAntrag: Boolean(auftrag.antragVarianten?.length),
@@ -940,7 +940,7 @@ async function knopfGedrueckt(cq) {
       einreihen(async () => {
         try {
           let a = auftraege.get(id);
-          const text = a.grafikQuelleText ?? a.notizen ?? a.caption;
+          const text = grafikText(a);
           const story = arg === "story";
           const ausgabe = datei(a, `redaktion-animation-${arg}.mp4`);
           await textAnimation({
