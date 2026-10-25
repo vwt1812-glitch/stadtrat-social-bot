@@ -136,7 +136,7 @@ test("Story als eigener Beitrag für Instagram und Facebook", async () => {
   const altesFetch = globalThis.fetch;
   globalThis.fetch = async (url, o) => {
     gesendet.push(JSON.parse(o.body));
-    return new Response(JSON.stringify([{ postId: `p${gesendet.length}` }]), { status: 200 });
+    return new Response(JSON.stringify(JSON.parse(o.body).posts.map((p) => ({ postId: `p${gesendet.length}-${p.integration.id}` }))), { status: 200 });
   };
   let ergebnis;
   try {
@@ -149,7 +149,7 @@ test("Story als eigener Beitrag für Instagram und Facebook", async () => {
   } finally {
     globalThis.fetch = altesFetch;
   }
-  assert.deepEqual(ergebnis, { post: [{ postId: "p1" }], story: [{ postId: "p2" }] });
+  assert.deepEqual(ergebnis, { post: [{ postId: "p1-ig" }, { postId: "p1-x1" }, { postId: "p1-fb" }], story: [{ postId: "p2-ig" }, { postId: "p2-fb" }] });
   const story = gesendet[1];
   assert.deepEqual(story.posts.map((p) => p.integration.id), ["ig", "fb"]);
   assert.deepEqual(story.posts[0].value[0].image, [{ id: "m1", path: "http://postiz/u/1.jpg" }]);
@@ -162,7 +162,7 @@ test("eigene Fassung je Kanal in der Postiz-Anfrage", async () => {
   const altesFetch = globalThis.fetch;
   globalThis.fetch = async (url, o) => {
     gesendet.push(JSON.parse(o.body));
-    return new Response("[]", { status: 200 });
+    return new Response(JSON.stringify(JSON.parse(o.body).posts.map((p) => ({ postId: p.integration.id }))), { status: 200 });
   };
   try {
     const postiz = new Postiz({ url: "http://postiz/api", apiKey: "k", einstellungen: "/gibt/es/nicht.json" });
@@ -183,7 +183,7 @@ test("9:16-Fassung nur für die Hochformat-Netzwerke", async () => {
   const altesFetch = globalThis.fetch;
   globalThis.fetch = async (url, o) => {
     gesendet.push(JSON.parse(o.body));
-    return new Response(JSON.stringify([{ postId: "p" }]), { status: 200 });
+    return new Response(JSON.stringify(JSON.parse(o.body).posts.map((p) => ({ postId: p.integration.id }))), { status: 200 });
   };
   try {
     const postiz = new Postiz({ url: "http://postiz", apiKey: "k", einstellungen: "/gibt/es/nicht.json" });
@@ -206,7 +206,7 @@ test("Nur Story erzeugt exakt einen Story-Beitrag und keinen Feed-Post", async (
   const fetchVorher = globalThis.fetch;
   globalThis.fetch = async (_, o) => {
     gesendet.push(JSON.parse(o.body));
-    return new Response(JSON.stringify([{ postId: "story-only" }]), { status: 200 });
+    return new Response(JSON.stringify(JSON.parse(o.body).posts.map((p) => ({ postId: `story-${p.integration.id}` }))), { status: 200 });
   };
   try {
     const postiz = new Postiz({ url: "http://postiz", apiKey: "k", einstellungen: "/gibt/es/nicht.json" });
@@ -216,7 +216,7 @@ test("Nur Story erzeugt exakt einen Story-Beitrag und keinen Feed-Post", async (
       story: true, nurStory: true,
       kanaele: [{ id: "ig1", identifier: "instagram" }, { id: "fb1", identifier: "facebook" }],
     });
-    assert.deepEqual(ergebnis, { post: [], story: [{ postId: "story-only" }] });
+    assert.deepEqual(ergebnis, { post: [], story: [{ postId: "story-ig1" }, { postId: "story-fb1" }] });
     assert.equal(gesendet.length, 1);
     assert.deepEqual(gesendet[0].posts.map((p) => p.integration.id), ["ig1", "fb1"]);
     assert.equal(gesendet[0].posts[0].settings.post_type, "story");

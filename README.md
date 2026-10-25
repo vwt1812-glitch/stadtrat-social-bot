@@ -16,6 +16,29 @@ Der Redaktionsassistent funktioniert **ohne `ANTHROPIC_API_KEY` oder `OPENAI_API
 
 ## Ablauf in Telegram
 
+### Entwürfe, Archiv und Quellen
+
+- `/entwuerfe` zeigt alle noch offenen Entwürfe dieses Chats, mit Seiten zum Weiterblättern.
+  Antippen öffnet den vollständigen gespeicherten Stand: Medien, Kunde, Kanäle, Kanaltexte und Quellenkarte.
+- **🗃️ Archivieren** legt einen Entwurf dauerhaft beiseite. `/archiv` stellt ihn durch Antippen wieder her.
+  Archivierte Entwürfe samt Medien werden nicht nach 14 Tagen entfernt; sie belegen weiterhin Speicherplatz.
+  Zum späteren Entfernen wiederherstellen und **Verwerfen** wählen (danach gilt die normale Bereinigung).
+- **↶ Text zurück** nimmt die letzte Änderung an Caption, Kanaltexten oder Quellenkarte zurück,
+  bis zu zehn Versionen, auch nach einem Neustart. Grafiktext, Untertitel und gerenderte Medien sind davon
+  unabhängig und werden nicht zurückgerendert. Vorhandene Grafiken weiterhin über **Grafiktext** bearbeiten.
+- **📚 Quelle / Stand** hält Titel, Dokumentdatum, Aktenzeichen, Quellenlink, Verfahrensstand und dessen Beleg fest.
+  Vorlage bearbeiten und als Nachricht zurückschicken; Datum als `JJJJ-MM-TT`, `-` leert ein Feld.
+  Ein Stand außer `ungeprüft` braucht **Standdatum und Beleg**. Das ist eine manuelle Bestätigung,
+  keine automatische Faktenprüfung. Die Quellenkarte wird nicht automatisch in Caption oder Grafik geschrieben.
+- Neue Antrags-PDFs erhalten Dateiname und SHA-256 der Originaldatei. Auszüge zeigen, soweit eindeutig
+  zuordenbar, die PDF-Seiten ab 1 (nicht die aufgedruckten Seitenzahlen, weiterhin maximal 15 Seiten).
+  Bei älteren Entwürfen können Metadaten manuell ergänzt werden.
+- **Wiedervorlage** ist vorerst eine Datumsnotiz in der Quellenkarte; es gibt keine automatische Erinnerung.
+
+Die Entwurfsliste und das Archiv sind pro Telegram-Chat gemeinsam. Der Ideenspeicher bleibt ein einfacher
+Textspeicher; für einen vollständigen Stand mit Medien und Quellen bitte das Archiv verwenden.
+Die Speicherung bleibt lokal im bestehenden JSON-Format, ohne neue Dienste oder Datenbankinstallation.
+
 Was du schickst, bestimmt die Art des Beitrags:
 
 | Eingabe | Was der Bot macht |
@@ -74,6 +97,21 @@ Gezählt wird genau wie in Postiz: X über twitter-text (Emojis doppelt, Links 2
 Emojis 4), alle anderen in JavaScript-Zeichen (ein Emoji meist 2).
 
 ### Nach dem Posten
+
+Feed und zusätzliche Story werden einzeln bestätigt und ihre Post-IDs sofort gespeichert.
+Scheitert danach die Story, bietet der Bot **Fehlende Teile erneut versuchen** an und lässt den Feed aus.
+Während einer begonnenen Veröffentlichung sind Änderungen an Inhalt und Kanälen gesperrt.
+Bestätigte Teilbeiträge werden auch bei einem noch offenen Auftrag auf Veröffentlichung kontrolliert.
+
+Bei einem Verbindungsabbruch, Serverfehler oder einer unvollständigen Antwort kann Postiz bereits etwas
+angelegt haben. Der Bot speichert diesen Teilschritt vor der Anfrage und sperrt Wiederholungen, auch nach
+einem Neustart. Unter **In Postiz prüfen** erst den Kalender kontrollieren:
+- **Unklarer Teil fehlt sicher** bestätigt deine Prüfung und schaltet einen bewussten neuen Versuch frei.
+- **Ist vorhanden / extern erledigt** beendet den Auftrag im Bot. Fehlende Teile dort vorher manuell
+  fertigstellen; für unbekannte Post-IDs gibt es keine automatische Veröffentlichungskontrolle.
+
+Der Schutz verhindert blindes Wiederholen; er ersetzt keine serverseitige Idempotenz bei Postiz.
+Eindeutige API-Ablehnungen (z. B. Validierungsfehler oder Ratenlimit) können erneut versucht werden.
 
 Postiz veröffentlicht im Hintergrund. Hängt dort etwas (oft der Orchestrator nach einem Neustart) oder lehnt ein
 Netzwerk ab, bleibt das sonst unbemerkt. Der Bot schaut deshalb 15 Minuten nach jedem Termin in Postiz nach und
@@ -259,6 +297,7 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
 | `pi/` | Installation, Update und Dienst für den Raspberry Pi |
 | `src/zeit.mjs` | Zeitangaben wie „morgen 18 Uhr“ verstehen |
 | `src/auftraege.mjs` | Stand je Video in `daten/auftraege.json`; fertige Aufträge werden nach 14 Tagen gelöscht |
+| `src/quellen.mjs` | Quellenkarte, manuell belegter Verfahrensstand und Datumseingaben |
 
 Tests: `npm test`
 

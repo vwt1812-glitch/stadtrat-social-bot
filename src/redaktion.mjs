@@ -56,6 +56,21 @@ export function antragVorschlaege(pdfText) {
     const passage = auszug(zeilen.filter((z) => z !== titel).slice(0, 8).join(" "), 225);
     if (passage.length >= 30) result.push({ art: "auszug", titel: "Textauszug", text: passage, etikett: "WORTLAUT AUS DEM ANTRAG" });
   }
+  // pdftotext trennt Seiten mit Formfeed. Seiten zählen ab 1, unabhängig von gedruckten Seitenzahlen.
+  for (const v of result) {
+    const probe = v.text.replace(/\s*\[…\]$/, "").replace(/\s+/g, " ").trim();
+    const vor = text.split("\f").map((s) => s.replace(/\s+/g, " ").trim());
+    const flach = vor.join(" ");
+    const index = flach.indexOf(probe);
+    if (index < 0 || flach.indexOf(probe, index + 1) !== -1) continue;
+    let laenge = 0;
+    v.seiten = [];
+    for (let i = 0; i < vor.length; i++) {
+      const ende = laenge + vor[i].length;
+      if (index < ende && index + probe.length > laenge) v.seiten.push(i + 1);
+      laenge = ende + 1;
+    }
+  }
   return result;
 }
 

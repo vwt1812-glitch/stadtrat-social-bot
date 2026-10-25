@@ -12,7 +12,7 @@ const MAX_TAGE = 3;
 export function erwartetePosts(auftraege) {
   const ids = new Map();
   for (const a of auftraege) {
-    if (!["geplant", "gepostet"].includes(a.status) || !a.postiz) continue;
+    if (!["geplant", "gepostet", "vorschau", "postet", "extern"].includes(a.status) || !a.postiz) continue;
     for (const [art, posts] of [["Beitrag", a.postiz.post ?? []], ["Story", a.postiz.story ?? []]]) {
       for (const p of posts) {
         if (p?.postId) ids.set(p.postId, {

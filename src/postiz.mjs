@@ -256,9 +256,14 @@ export class Postiz {
       // Postiz erwartet den Key ohne „Bearer“
       headers: { Authorization: this.apiKey, ...(body && !istForm ? { "Content-Type": "application/json" } : {}) },
       body: istForm ? body : body ? JSON.stringify(body) : undefined,
+      ...(methode === "POST" && pfad === "/posts" ? { signal: AbortSignal.timeout(120000) } : {}),
     });
     const text = await res.text();
-    if (!res.ok) throw new Error(`Postiz ${methode} ${pfad}: ${res.status} ${text.slice(0, 500)}`);
+    if (!res.ok) {
+      const e = new Error(`Postiz ${methode} ${pfad}: ${res.status} ${text.slice(0, 500)}`);
+      e.sicherAbgelehnt = [400, 401, 403, 404, 405, 413, 415, 422, 429].includes(res.status);
+      throw e;
+    }
     return text ? JSON.parse(text) : null;
   }
 
@@ -313,11 +318,16 @@ export class Postiz {
    * @param {{id:string,path:string}} [o.storyMedium] eigene Story-Fassung (9:16), sonst das erste Medium
    * @param {{id:string,path:string}} [o.hochkantMedium] 9:16-Fassung für die Hochformat-Netzwerke statt `medien`
    * @param {string[]} [o.hochkantNetze] welche Netzwerke die 9:16-Fassung bekommen
+   * @param {object} [o.fortschritt] bereits bestätigte Feed-/Story-Ergebnisse
+   * @param {Function} [o.vorAnlegen] persistiert vor dem Request den unklaren Teilschritt
+   * @param {Function} [o.nachAnlegen] persistiert jedes bestätigte Teilergebnis
+   * @param {Function} [o.beiAblehnung] löscht bei eindeutig abgelehnten Requests die Unklar-Markierung
    * @returns {Promise<{post: {postId:string}[], story?: {postId:string}[]}>} IDs für die Kontrolle
    */
   async beitrag({
     typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, nurStory = false, storyMedium = null,
     hochkantMedium = null, hochkantNetze = HOCHKANT,
+    fortschritt = {}, vorAnlegen = async () => {}, nachAnlegen = async () => {}, beiAblehnung = async () => {},
   }) {
     const eigene = this.eigeneEinstellungen();
     const body = {
@@ -338,9 +348,27 @@ export class Postiz {
     if (nurStory && (!story || storyKanaele.length !== kanaele.length || !storyKanaele.length || (!storyMedium && !medien.length))) {
       throw new Error("Nur Story braucht mindestens einen Instagram-/Facebook-Kanal und ein Foto oder Video.");
     }
-    const ergebnis = { post: nurStory ? [] : await this.#anfrage("POST", "/posts", body) };
-    if (story && (medien.length || storyMedium) && storyKanaele.length) {
-      ergebnis.story = await this.#anfrage("POST", "/posts", {
+    const ergebnis = { ...fortschritt };
+    const anlegen = async (teil, daten) => {
+      await vorAnlegen(teil);
+      let posts;
+      try {
+        posts = await this.#anfrage("POST", "/posts", daten);
+      } catch (e) {
+        if (e.sicherAbgelehnt) await beiAblehnung(teil);
+        throw e;
+      }
+      // Auch eine unerwartete 2xx-Antwort darf keinen ungesicherten Wiederholungsversuch auslösen.
+      if (!Array.isArray(posts) || posts.length !== daten.posts.length || posts.some((p) => !p?.postId)) {
+        throw new Error("Postiz hat keine vollständigen Post-IDs bestätigt. Bitte den Kalender prüfen.");
+      }
+      ergebnis[teil] = posts;
+      await nachAnlegen(structuredClone(ergebnis));
+    };
+    if (nurStory) ergebnis.post = [];
+    else if (!Object.hasOwn(ergebnis, "post")) await anlegen("post", body);
+    if (story && (medien.length || storyMedium) && storyKanaele.length && !Object.hasOwn(ergebnis, "story")) {
+      await anlegen("story", {
         ...body,
         posts: storyKanaele.map((k) => ({
           integration: { id: k.id },
@@ -356,10 +384,10 @@ export class Postiz {
    * So viele Anfragen braucht ein Beitrag: Uploads + Post, ggf. Story-Post, und der Upload der
    * eigenen 9:16-Fassung (`storyUpload`), wenn Story oder Hochformat-Netzwerke sie brauchen.
    */
-  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT }) {
-    if (nurStory) return 1 + (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1);
+  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT, fortschritt = {} }) {
+    if (nurStory) return (fortschritt.story ? 0 : 1) + (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1);
     const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
     const mitHochkant = hochkant && medien && kanaele.some((k) => hochkantNetze.includes(k.identifier));
-    return (hochgeladen ? 0 : medien) + 1 + (mitStory ? 1 : 0) + (storyUpload && (mitStory || mitHochkant) ? 1 : 0);
+    return (hochgeladen ? 0 : medien) + (fortschritt.post ? 0 : 1) + (mitStory && !fortschritt.story ? 1 : 0) + (storyUpload && (mitStory || mitHochkant) ? 1 : 0);
   }
 }

@@ -3,6 +3,7 @@
 
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { ladeConfig } from "./config.mjs";
 import { Telegram, html } from "./telegram.mjs";
 import {
@@ -23,6 +24,7 @@ import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
 import { storyFotoText, storyTextZeilen } from "./story-text.mjs";
 import { textGrafiken, textAnimation } from "./grafik-text.mjs";
 import { IdeenSpeicher, antragVorschlaege, grafikText } from "./redaktion.mjs";
+import { quellenVorlage, quellenBearbeiten, quellenZeilen } from "./quellen.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
@@ -69,6 +71,7 @@ function limitFehler(auftrag, kanaele) {
     storyUpload: Boolean(auftrag.storyDatei && !auftrag.storyHochgeladen),
     storyBereit: Boolean(auftrag.storyDatei ? auftrag.storyHochgeladen : auftrag.hochgeladen),
     hochkant: hochkantAn(auftrag), hochkantNetze: config.hochkant.netze,
+    fortschritt: auftrag.postiz,
   });
   const frei = postiz.zaehler.wiederFrei(bedarf);
   if (!frei) return null;
@@ -168,10 +171,12 @@ async function kiFassung(auftrag, kanal, max) {
 }
 
 /** Haupttext geändert → Kanal-Fassungen passen nicht mehr. */
-async function captionsZuruecksetzen(auftrag) {
-  if (!Object.keys(auftrag.captions ?? {}).length) return auftrag;
-  await tg.senden(auftrag.chatId, "ℹ️ Die eigenen Fassungen pro Kanal wurden zurückgesetzt, weil sich der Haupttext geändert hat.");
-  return auftraege.aendern(auftrag.id, { captions: {} });
+async function captionsZuruecksetzen(auftrag, felder) {
+  const hatteFassungen = Object.keys(auftrag.captions ?? {}).length > 0;
+  // Eine redaktionelle Änderung ist genau eine Version, inklusive abhängiger Kanaltexte.
+  auftrag = auftraege.aendern(auftrag.id, { ...felder, captions: {} });
+  if (hatteFassungen) await tg.senden(auftrag.chatId, "ℹ️ Die eigenen Fassungen pro Kanal wurden zurückgesetzt, weil sich der Haupttext geändert hat.");
+  return auftrag;
 }
 
 // ---------- Bauchbinde ----------
@@ -286,6 +291,8 @@ Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpas
 
 /idee Text – Gedanken für später speichern
 /ideen – deine gespeicherten Ideen wieder aufrufen
+/entwuerfe – vollständige Entwürfe wieder öffnen oder archivieren
+/archiv – archivierte Entwürfe wiederherstellen
 /antrag – Hinweise für das Hochladen von Antrags-PDFs
 /kanaele – verbundene Postiz-Kanäle nach Kunden
 /status – prüft Postiz, Whisper, ffmpeg und KI
@@ -295,6 +302,7 @@ Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpas
 // ---------- Menüs ----------
 
 async function menueInhalt(auftrag) {
+  if (auftrag.postiz || auftrag.postizUnklar || auftrag.mastodon) return fortsetzenMenue(auftrag);
   let kanalText;
   let kanaele = [];
   let alle = [];
@@ -349,6 +357,7 @@ async function menueInhalt(auftrag) {
     ] : []),
     ...(auftrag.antragVarianten?.length ? [[knopf("📄 Andere Antragspassage", auftrag, "antragmenu")]] : []),
     [knopf("💾 Idee speichern", auftrag, "idee")],
+    [knopf("📚 Quelle / Stand", auftrag, "quelle"), ...(auftrag.versionen?.length ? [knopf("↶ Text zurück", auftrag, "undo")] : [])],
     ...(!auftrag.nurStory ? [[knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])]] : []),
     ...(extra.length ? [extra] : []),
     [knopf("📺 Kanäle", auftrag, "kanaele"), ...(!auftrag.nurStory && kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
@@ -369,8 +378,88 @@ async function menueInhalt(auftrag) {
     optionen.push(knopf(auftrag.hochkant ? "📲 9:16 ✓" : "📲 9:16 für Insta", auftrag, "hochkant"));
   }
   if (optionen.length) zeilen.push(optionen);
-  zeilen.push([knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
+  zeilen.push([knopf("🗃️ Archivieren", auftrag, "archiv"), knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
+}
+
+function fortsetzenMenue(a) {
+  const bestaetigt = Object.entries(a.postiz ?? {}).filter(([, ids]) => ids.length)
+    .map(([teil, ids]) => `${teil === "post" ? "Feed" : "Story"}: ${ids.map((p) => p.postId).join(", ")}`);
+  const unklar = a.postizUnklar;
+  return {
+    text: ["<b>Veröffentlichung fortsetzen</b>", ...bestaetigt.map(html),
+      unklar ? `⚠️ Für ${unklar === "post" ? "Feed" : "Story"} fehlt eine sichere Bestätigung. Bitte zuerst im Postiz-Kalender prüfen. Keine automatische Wiederholung.`
+        : "Bereits bestätigte Beiträge werden übersprungen. Inhalt und Kanalauswahl bleiben bis zum Abschluss gesperrt.",
+      a.plan?.typ === "schedule" ? `Ursprünglicher Termin: ${html(zeitText(new Date(a.plan.zeit)))}` : "Veröffentlichung: sofort",
+    ].join("\n"),
+    reply_markup: { inline_keyboard: [[knopf(unklar ? "🔎 In Postiz prüfen" : "▶️ Fehlende Teile erneut versuchen", a, unklar ? "pruefen" : "weiter")]] },
+  };
+}
+
+async function entwuerfeMenue(chatId, archiviert = false, seite = 0) {
+  const alle = auftraege.liste(chatId, archiviert);
+  const max = Math.max(0, Math.ceil(alle.length / 8) - 1);
+  seite = Math.max(0, Math.min(Number(seite) || 0, max));
+  const liste = alle.slice(seite * 8, seite * 8 + 8);
+  const zeilen = liste.map((a) => [{
+    text: `${a.postizUnklar || a.postiz ? "⚠️" : "📝"} ${String(a.caption || a.grafikQuelleText || a.id).replace(/\s+/g, " ").slice(0, 45)} · ${a.id}`,
+    callback_data: `d:${archiviert ? "wieder" : "open"}:${a.id}`,
+  }]);
+  const navigation = [];
+  if (seite > 0) navigation.push({ text: "←", callback_data: `d:list:${Number(archiviert)}:${seite - 1}` });
+  if (seite < max) navigation.push({ text: "→", callback_data: `d:list:${Number(archiviert)}:${seite + 1}` });
+  if (navigation.length) zeilen.push(navigation);
+  zeilen.push([{ text: archiviert ? "📝 Aktive Entwürfe" : "🗃️ Archiv", callback_data: `d:list:${Number(!archiviert)}:0` }]);
+  return tg.senden(chatId, `<b>${archiviert ? "Archiv" : "Entwürfe"}</b> – ${alle.length} gespeichert, Seite ${seite + 1}/${max + 1}.\n` +
+    (archiviert ? "Antippen stellt den vollständigen Entwurf wieder her." : "Antippen öffnet den gespeicherten Stand mit Medien, Kunde und Kanälen."),
+  { reply_markup: { inline_keyboard: zeilen } });
+}
+
+async function entwurfsKnopf(cq) {
+  const [, aktion, id, seite] = cq.data.split(":");
+  const chatId = cq.message.chat.id;
+  const antwort = (text) => tg.aufruf("answerCallbackQuery", { callback_query_id: cq.id, text }).catch(() => {});
+  if (aktion === "list") {
+    await antwort();
+    return entwuerfeMenue(chatId, id === "1", seite);
+  }
+  let a = auftraege.get(id);
+  if (!a || a.chatId !== chatId || a.status !== "vorschau") return antwort("Entwurf nicht verfügbar.");
+  if (aktion === "wieder" && a.archiviert) a = auftraege.archivieren(id, false);
+  else if (aktion !== "open" || a.archiviert) return antwort("Bitte die aktuelle Entwurfsliste öffnen.");
+  a = auftraege.oeffnen(id);
+  await antwort("Entwurf geöffnet");
+  if (!a.postiz && !a.postizUnklar && art(a) !== "text") {
+    try {
+      const medien = a.nurStory && a.storyDatei ? [a.storyDatei] : a.medien ?? [];
+      if (art(a) === "foto" && medien.length) await tg.fotos(chatId, medien, "Gespeicherter Entwurf – Vorschau");
+      else if (medien.length) {
+        let video = medien[0];
+        if (!tg.lokal && (await fs.stat(video)).size > 49 * MB) {
+          // Nur die zur aktuellen Datei gehörende Vorschau verwenden.
+          const klein = datei(a, "vorschau.mp4");
+          const [original, vorschauStand] = await Promise.all([fs.stat(video), fs.stat(klein)]);
+          if (vorschauStand.mtimeMs < original.mtimeMs) throw new Error("Bitte die große Videovorschau im bisherigen Chat prüfen.");
+          video = klein;
+        }
+        await tg.datei(chatId, "sendVideo", "video", video, { caption: "Gespeicherter Entwurf – Vorschau", supports_streaming: "true" });
+      }
+    } catch (e) {
+      await tg.senden(chatId, `⚠️ Gespeicherte Medienvorschau nicht verfügbar: ${html(e.message.slice(0, 200))}`);
+    }
+  }
+  return neuesMenue(a);
+}
+
+function quellenInhalt(a) {
+  const passage = a.antragVarianten?.[a.antragIndex ?? 0];
+  const zeilen = quellenZeilen(a.quellenkarte, passage);
+  return {
+    text: "<b>Quelle und Verfahrensstand</b>\n" + (zeilen.length ? zeilen.map(html).join("\n") : "Noch keine Quelle hinterlegt.") +
+      (passage ? `\n\nOriginalauszug:\n<blockquote>${html(passage.text)}</blockquote>` : "") +
+      "\n\nDer Stand wird manuell belegt; der Bot prüft keine Beschlüsse. Die Quellenkarte wird nicht automatisch in Caption oder Grafik übernommen.",
+    reply_markup: { inline_keyboard: [[knopf("✏️ Quelle bearbeiten", a, "quelltext"), knopf("↩️ Zurück", a, "zurueck")]] },
+  };
 }
 
 /** Menü in der bestehenden Nachricht anzeigen. */
@@ -813,17 +902,19 @@ function antragMenue(auftrag) {
 
 async function veroeffentlichen(auftrag) {
   if (auftrag.status !== "vorschau" || !auftrag.plan) return;
+  if (auftrag.postizUnklar) return neuesMenue(auftrag);
   auftrag = auftraege.aendern(auftrag.id, { status: "postet" });
   const { typ } = auftrag.plan;
   const zeit = typ === "now" ? new Date() : new Date(auftrag.plan.zeit);
   try {
-    const kanaele = await gewaehlteKanaele(auftrag);
+    const kanaele = auftrag.sendeKanaele ?? await gewaehlteKanaele(auftrag);
+    if (!auftrag.sendeKanaele) auftrag = auftraege.aendern(auftrag.id, { sendeKanaele: kanaele });
     const postizKanaele = kanaele.filter((k) => k.id !== DIREKT);
     const direkt = kanaele.find((k) => k.id === DIREKT);
     const medien = auftrag.medien ?? [datei(auftrag, "fertig.mp4")];
     const hinweise = [];
 
-    if (postizKanaele.length && !auftrag.postiz) {
+    if (postizKanaele.length && !auftrag.postizFertig) {
       const limit = limitFehler(auftrag, kanaele);
       if (limit) throw new Error(limit);
       // Bei reinen Storys weder Karussellbilder noch den normalen Feed-Beitrag hochladen:
@@ -849,8 +940,12 @@ async function veroeffentlichen(auftrag) {
         repost: auftrag.nurStory ? null : auftrag.repost, story, nurStory: Boolean(auftrag.nurStory),
         storyMedium: story && auftrag.storyDatei ? auftrag.storyHochgeladen : null,
         hochkantMedium: hochkant && auftrag.storyDatei ? auftrag.storyHochgeladen : null, hochkantNetze: config.hochkant.netze,
+        fortschritt: auftrag.postiz ?? {},
+        vorAnlegen: async (teil) => { auftrag = auftraege.aendern(auftrag.id, { postizUnklar: teil }); },
+        nachAnlegen: async (stand) => { auftrag = auftraege.aendern(auftrag.id, { postiz: stand, postizUnklar: null }); },
+        beiAblehnung: async () => { auftrag = auftraege.aendern(auftrag.id, { postizUnklar: null }); },
       });
-      auftrag = auftraege.aendern(auftrag.id, { postiz: ergebnis });
+      auftrag = auftraege.aendern(auftrag.id, { postiz: ergebnis, postizFertig: true });
     }
 
     // Mastodon direkt: Ein Fehler hier darf den Postiz-Beitrag nicht wiederholen lassen
@@ -881,7 +976,9 @@ async function veroeffentlichen(auftrag) {
     if (hinweise.length) await tg.senden(auftrag.chatId, html(hinweise.join("\n")));
   } catch (e) {
     console.error(e);
-    auftrag = auftraege.aendern(auftrag.id, { status: "vorschau" });
+    auftrag = auftraege.aendern(auftrag.id, { status: "vorschau",
+      ...(!auftrag.postiz && !auftrag.postizUnklar && !auftrag.mastodon ? { sendeKanaele: null } : {}),
+    });
     await tg.senden(auftrag.chatId, `❌ Posten fehlgeschlagen:\n<pre>${html(e.message)}</pre>`);
     await neuesMenue(auftrag);
   }
@@ -894,7 +991,13 @@ async function knopfGedrueckt(cq) {
   const [, id, aktion, arg, arg2] = (cq.data ?? "").split(":");
   let auftrag = auftraege.get(id);
   if (!auftrag) return antwort("Dieser Vorschlag ist nicht mehr da.", true);
+  if (auftrag.chatId !== cq.message?.chat.id) return antwort("Dieser Auftrag gehört zu einem anderen Chat.", true);
+  if (auftrag.archiviert) return antwort("Bitte zuerst über /archiv wiederherstellen.", true);
   if (auftrag.status !== "vorschau") return antwort(`Nicht mehr änderbar (Status: ${auftrag.status}).`, true);
+  if ((auftrag.postiz || auftrag.postizUnklar || auftrag.mastodon) && !["weiter", "pruefen", "nichtangelegt", "geprueft"].includes(aktion)) {
+    await zeigeMenue(auftrag, fortsetzenMenue(auftrag));
+    return antwort("Die Veröffentlichung wurde bereits begonnen.", true);
+  }
   // Klicks auf ältere Menüs dieses Auftrags umleiten
   if (cq.message?.message_id && cq.message.message_id !== auftrag.menueNachricht) {
     auftrag = auftraege.aendern(id, { menueNachricht: cq.message.message_id });
@@ -909,8 +1012,47 @@ async function knopfGedrueckt(cq) {
   };
 
   switch (aktion) {
+    case "weiter":
+      await antwort("Setze die fehlenden Teile fort …");
+      return veroeffentlichen(auftrag);
+    case "pruefen":
+      await antwort();
+      await zeigeMenue(auftrag, {
+        text: "Bitte im Postiz-Kalender den unklaren Teil prüfen. Falls vorhanden, dort fertigstellen und hier abschließen. Nur wenn der unklare Teil sicher NICHT angelegt wurde, darf er erneut angelegt werden.",
+        reply_markup: { inline_keyboard: [[knopf("Ist vorhanden / extern erledigt", auftrag, "geprueft")],
+          [knopf("Unklarer Teil fehlt sicher", auftrag, "nichtangelegt")]] },
+      });
+      return;
+    case "nichtangelegt":
+      if (!auftrag.postizUnklar) return antwort("Keine unklare Anfrage vorhanden.", true);
+      auftrag = auftraege.aendern(id, { postizUnklar: null });
+      await zeigeMenue(auftrag, fortsetzenMenue(auftrag));
+      return antwort("Prüfung bestätigt. Fehlenden Teil jetzt bewusst erneut versuchen.");
+    case "geprueft":
+      if (!auftrag.postizUnklar) return antwort("Keine unklare Anfrage vorhanden.", true);
+      auftraege.aendern(id, { status: "extern", wartetAuf: null, externErledigt: new Date().toISOString() });
+      await zeigeMenue(auftrag, { text: "Extern abgeschlossen. Es wird nichts erneut angelegt. Für den unklaren Teil gibt es ohne Post-ID keine automatische Veröffentlichungskontrolle; bitte Feed und Story in Postiz prüfen.", reply_markup: { inline_keyboard: [] } });
+      return antwort("Abgeschlossen");
+    case "archiv":
+      auftraege.archivieren(id);
+      await zeigeMenue(auftrag, { text: "🗃️ Vollständiger Entwurf archiviert. Mit /archiv wiederherstellen.", reply_markup: { inline_keyboard: [] } });
+      return antwort("Archiviert");
+    case "undo": {
+      const a = auftraege.rueckgaengig(id);
+      if (!a) return antwort("Keine frühere Textfassung vorhanden.");
+      await neuesMenue(a);
+      return antwort("Caption, Kanaltexte und Quelle zurückgesetzt. Bildtext und gerenderte Medien bleiben separat.", true);
+    }
+    case "quelle":
+      await zeigeMenue(auftrag, quellenInhalt(auftrag));
+      return antwort();
+    case "quelltext":
+      auftraege.aendern(id, { wartetAuf: "quelle" });
+      await antwort();
+      await tg.senden(auftrag.chatId, "Bitte diese Vorlage bearbeiten und zurückschicken. Datum als JJJJ-MM-TT, - leert ein Feld. Ein bestätigter Stand braucht Standdatum und Beleg. Wiedervorlage speichert nur eine Notiz.");
+      return tg.senden(auftrag.chatId, `<pre>${html(quellenVorlage(auftrag.quellenkarte))}</pre>`);
     case "idee": {
-      const gespeichert = ideen.speichern(auftrag.chatId, auftrag.grafikQuelleText || auftrag.notizen || auftrag.caption,
+      const gespeichert = ideen.speichern(auftrag.chatId, grafikText(auftrag) ?? "",
         auftrag.antragVarianten?.length ? "antrag" : "entwurf");
       return antwort(`Idee gespeichert (${gespeichert.id}).`);
     }
@@ -1330,6 +1472,13 @@ async function texteingabe(auftrag, text) {
     return neuesMenue(auftrag);
   }
   switch (auftrag.wartetAuf) {
+    case "quelle": {
+      let q;
+      try { q = quellenBearbeiten(text, auftrag.quellenkarte); }
+      catch (e) { return tg.senden(auftrag.chatId, `❌ ${html(e.message)}`); }
+      auftrag = auftraege.aendern(auftrag.id, { quellenkarte: q, wartetAuf: null });
+      return neuesMenue(auftrag, quellenInhalt(auftrag));
+    }
     case "grafiktext": {
       auftrag = auftraege.aendern(auftrag.id, { wartetAuf: null, status: "arbeitet" });
       await tg.senden(auftrag.chatId, "🖼️ Erstelle die Grafik mit deinem neuen Text …");
@@ -1365,8 +1514,7 @@ async function texteingabe(auftrag, text) {
       return;
     }
     case "caption":
-      auftrag = auftraege.aendern(auftrag.id, { caption: text.trim(), captionQuelle: "eigene", wartetAuf: null });
-      auftrag = await captionsZuruecksetzen(auftrag);
+      auftrag = await captionsZuruecksetzen(auftrag, { caption: text.trim(), captionQuelle: "eigene", wartetAuf: null });
       return neuesMenue(auftrag);
     case "kanaltext": {
       const kanal = (await alleKanaele()).find((k) => k.id === auftrag.wartetKanal);
@@ -1380,8 +1528,7 @@ async function texteingabe(auftrag, text) {
       const material = { art: art(auftrag), transkript: auftrag.transkript, notizen: auftrag.notizen, bilder: auftrag.fuerKi, bisher: auftrag.caption };
       const v = await captionVorschlag(material, config.caption, hinweis || "neu formulieren");
       if (v.fehler) await tg.senden(auftrag.chatId, `⚠️ ${html(v.fehler)}`);
-      auftrag = auftraege.aendern(auftrag.id, { caption: v.text, captionQuelle: v.quelle, wartetAuf: null });
-      auftrag = await captionsZuruecksetzen(auftrag);
+      auftrag = await captionsZuruecksetzen(auftrag, { caption: v.text, captionQuelle: v.quelle, wartetAuf: null });
       return neuesMenue(auftrag);
     }
     case "bauchbinde": {
@@ -1490,6 +1637,12 @@ async function pdfAntrag(msg, dokument) {
       const auftrag = auftraege.aendern(a.id, {
         art: "text", notizen: erste.text, caption: erste.text,
         captionQuelle: "dokument", antragVarianten: varianten, antragIndex: 0,
+        quellenkarte: {
+          dateiname: path.basename(dokument.file_name || "antrag.pdf").slice(0, 200),
+          titel: varianten[0].text.slice(0, 300), stand: "ungeprüft",
+          sha256: createHash("sha256").update(await fs.readFile(pdf)).digest("hex"),
+          erfasst: new Date().toISOString(),
+        },
         medien: [], status: "vorschau",
       });
       await tg.senden(a.chatId,
@@ -1555,6 +1708,8 @@ async function nachricht(msg) {
 
   const text = msg.text ?? "";
   if (/^\/(start|hilfe|help)\b/.test(text)) return tg.senden(chatId, HILFE);
+  if (/^\/entwuerfe\b/.test(text)) return entwuerfeMenue(chatId);
+  if (/^\/archiv\b/.test(text)) return entwuerfeMenue(chatId, true);
   if (/^\/antrag\b/.test(text)) return tg.senden(chatId,
     "Schick mir den Antrag direkt als PDF-Datei. Ich lese lokal bis zu 15 Seiten (digitaler Text, keine Scan-OCR) und zeige dir überprüfbare Textstellen für Post und Grafik.");
   if (/^\/ideen\b/.test(text)) return ideenMenue(chatId);
@@ -1667,7 +1822,8 @@ async function main() {
       const verarbeite = u.message
         ? nachricht(u.message)
         : u.callback_query && erlaubt(u.callback_query.from.id, u.callback_query.message?.chat.id)
-          ? (u.callback_query.data?.startsWith("idea:") ? ideenKnopf(u.callback_query) : knopfGedrueckt(u.callback_query))
+          ? (u.callback_query.data?.startsWith("idea:") ? ideenKnopf(u.callback_query)
+            : u.callback_query.data?.startsWith("d:") ? entwurfsKnopf(u.callback_query) : knopfGedrueckt(u.callback_query))
           : null;
       verarbeite?.catch((e) => fehlerMelden(u.message?.chat.id ?? u.callback_query?.message?.chat.id, e));
     }
