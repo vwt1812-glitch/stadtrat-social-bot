@@ -68,7 +68,7 @@ bei diesen Plattformen keine bestimmte automatisch ausgewählte Vorschau.
 
 ### Zusätzliches Quercover und Fotovorlage
 
-Nach der ersten Coverauswahl erzeugt **Quercover ergänzen** unabhängig von der Orientierung des
+Nach der ersten Coverauswahl erzeugt **Querdatei zusätzlich erstellen** unabhängig von der Orientierung des
 Videos eine weitere Datei in **1920×1080 px (16:9)**. Sie wird exportiert; die automatische
 Plattformzuordnung bleibt bestehen (z. B. Hochkant für Instagram, eigenes YouTube-Profil für YouTube).
 Ein Quercover macht das veröffentlichte Video nicht automatisch zum Querformat. Gleich große
@@ -86,7 +86,9 @@ Der Balken verdeckt keinen Teil des scharfen Fotos mehr. Der Bot liefert dazu ei
 Diese Vorschauen sind Gestaltungstests und Exporte; der Upload bleibt 1080×1920. Sie sind keine
 Zusage über jede Appansicht oder manuell verschobene Zuschnitte. An quadratischen Zuschnitten
 kann weiterhin Inhalt verloren gehen.
-**Vorlage** schaltet zur bisherigen Textgrafik zurück. Quercover behalten ihr bisheriges Layout.
+**Zur Textgrafik wechseln** schaltet zur bisherigen Textgrafik zurück; die Gegenrichtung heißt
+**Zu Foto mit Textbalken wechseln**. Diese Auswahl erscheint nach dem Ergänzen von Bildtext.
+Quercover behalten ihr bisheriges Layout.
 Die reine Textgrafik bleibt ebenfalls verfügbar. Schon im Eingangsbild eingebrannte Logos und Texte
 werden nicht entfernt; für diese Vorlage möglichst einen unverzierten Frame oder ein Originalfoto
 verwenden. Die Frame-Auswahl greift im Bot auf das hochgeladene Originalvideo zurück, damit vom Bot
@@ -94,7 +96,8 @@ hinzugefügte Logos, Untertitel und Bauchbinden nicht doppelt ins Cover eingebra
 
 ### Hochkantvideo als Querformat
 
-Bei Hochkantvideos bietet das Hauptmenü **Auch als 16:9**. Die Feed-Fassung wird aus dem
+Bei Hochkantvideos führt **Videoformat ändern → Feed auf Querformat umstellen** zur Querfassung.
+Die Feed-Fassung wird aus dem
 unveränderten Original auf **1920×1080 px** mit vollständigem scharfem Bild in der Mitte und
 unscharfen Seitenflächen neu gerendert. Ton bleibt erhalten; Untertitel, Logo und Bauchbinde werden
 für die Ausgabe neu gesetzt. Gleichzeitig wird die 9:16-Zuordnung für die konfigurierten
@@ -109,19 +112,20 @@ die normale untere Position. Manuell gewählte Positionen bleiben wirksam. Bei m
 Untertiteln sitzt das Querlogo unten auf der Seitenfläche. Die Hochkant-Einstellungen des Auftrags
 werden dabei nicht verändert.
 
-Ein erneuter Klick auf **16:9 ✓** stellt das ursprüngliche Feedformat und die vorherige
+**Videoformat ändern → Feed im Originalformat** stellt das ursprüngliche Feedformat und die vorherige
 Hochkant-Auswahl wieder her. Nach Formatänderungen vorhandene Cover neu erzeugen und die Vorschau
 prüfen. Eine fehlgeschlagene Formatberechnung blockiert die Veröffentlichung bis zum erfolgreichen
 erneuten Rendern. Der zusätzliche Renderdurchlauf läuft wie bisher in der seriellen Warteschlange
 des Pi; es ist keine generative KI beteiligt.
 
-Bei einem Feedvideo **Titelbild** öffnen. Zeit als Sekunden oder `MM:SS` wählen, eigenen kurzen Text
+Bei einem Feedvideo **Video-Titelbild erstellen/bearbeiten** öffnen. Zeit als Sekunden oder `MM:SS` wählen, eigenen kurzen Text
 für eine Grafik schicken oder ein JPG/PNG hochladen. Ein Bild während des Titelbild-Dialogs wird
-nicht als neuer Fotobeitrag angelegt. **Covertext** ergänzt auch auf einem Bild/Videoframe eine Überschrift.
-Die Vorschauen werden für die gewählten Kanäle erzeugt. **Cover herunterladen** liefert JPEGs als Dateien.
+nicht als neuer Fotobeitrag angelegt. **Text im Titelbild ändern** ergänzt auch auf einem Bild/Videoframe eine Überschrift.
+Die Vorschauen werden für die gewählten Kanäle erzeugt. **Titelbilder herunterladen** liefert JPEGs als Dateien.
 
-**YouTube: normales Video / Shorts** bestimmt das Ausgabeprofil. Im Shorts-Modus bleibt es beim Export.
-Nach Kanalwechsel oder neuem Videorendern **Neu erzeugen** wählen. Die Bestätigung blockiert veraltete
+Bei ausgewähltem YouTube-Kanal wechseln die Tasten **YouTube: zu Shorts-Export wechseln** und
+**YouTube: zu normalem Video wechseln** das Ausgabeprofil. Im Shorts-Modus bleibt es beim Export.
+Nach Kanalwechsel oder neuem Videorendern **Titelbilder neu berechnen** wählen. Die Bestätigung blockiert veraltete
 oder fehlende Cover; bestätigte Feed-Teilveröffentlichungen werden bei einem Story-Wiederholungsversuch
 nicht mit einem neuen Cover erneut angelegt. Cover zählen als eigene Postiz-Uploads im Stundenbudget.
 Mehrere Instagram-Konten teilen denselben Coverupload.
