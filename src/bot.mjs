@@ -428,9 +428,9 @@ async function thumbnailMenue(a) {
   });
   return {
     text: "<b>Video-Titelbild</b>\n" + (t ? `Quelle: ${{ text: "Nur Text", frame: "Bild aus dem Video", bild: "Hochgeladenes Foto" }[t.modus] ?? html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` +
-      `Gestaltung: ${t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Textbalken"}\n` +
+      `Gestaltung: ${t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Text"}\n` +
       `Zusätzliche Querdatei zum Download: ${t.quer ? "ja" : "nein"}\n` : "Noch kein eigenes Titelbild.\n") +
-      "Foto mit Textbalken: Foto, Logo und Überschrift. Titelbildtext und Beitragstext werden getrennt bearbeitet. Die zusätzliche Querdatei dient nur dem Download und ändert das Videoformat nicht.\n" + infos.join("\n") +
+      "Foto mit Text: Hochkant bleibt das Foto vollflächig; im Querformat stehen Bild und Text nebeneinander. Titelbildtext und Beitragstext werden getrennt bearbeitet. Die zusätzliche Querdatei dient nur dem Download und ändert das Videoformat nicht.\n" + infos.join("\n") +
       "\nJPEG-Ausgaben: höchstens 2 MiB. Kanäle ohne Cover-Unterstützung erhalten kein zusätzliches Feedbild. Shorts-Cover werden für Studio exportiert.",
     reply_markup: { inline_keyboard: [
       [knopf("🎞️ Bild aus Video auswählen", a, "thumbframe")],
@@ -440,7 +440,8 @@ async function thumbnailMenue(a) {
         [knopf("✏️ Text im Titelbild ändern", a, "thumbtext")],
         [knopf("🔄 Titelbilder neu berechnen", a, "thumbneu")],
         [knopf(t.quer ? "🖥️ Zusätzliche Querdatei entfernen" : "🖥️ Querdatei zusätzlich erstellen", a, "thumbquer")],
-        ...(t.modus !== "text" && t.mitText ? [[knopf(t.vorlage === "grafik" ? "🖼️ Zu Foto mit Textbalken wechseln" : "📝 Zur Textgrafik wechseln", a, "thumbstil")]] : []),
+        ...(t.modus !== "text" && t.mitText ? [[knopf(t.vorlage === "grafik" ? "🖼️ Zu Foto mit Text wechseln" : "📝 Zur Textgrafik wechseln", a, "thumbstil")]] : []),
+        ...(t.modus !== "text" && t.mitText && t.vorlage !== "grafik" ? [[knopf("📍 Textposition im Hochkantbild", a, "thumbtextpos")]] : []),
         ...(kanaele.some((k) => k.identifier === "youtube") ? [[knopf(t.youtubeShort ? "YouTube: zu normalem Video wechseln" : "YouTube: zu Shorts-Export wechseln", a, "thumbshort")]] : []),
         [knopf("📎 Titelbilder herunterladen", a, "thumbexport")],
         [knopf("🗑️ Eigenes Titelbild entfernen", a, "thumboff")],
@@ -457,7 +458,7 @@ async function thumbnailBauen(a, optionen) {
   einreihen(async () => {
     try {
       const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), quelle: a.original ?? coverVideo(a), layout: config.layout,
-        optionen, kanaele, mastodonPatch: config.postiz.mastodonThumbnails });
+        optionen, kanaele, mastodonPatch: config.postiz.mastodonThumbnails, gesicht: config.gesicht });
       // Nur nach vollständigem Rendern übernehmen; eine misslungene Änderung lässt das bisherige Cover intakt.
       auftraege.aendern(a.id, { thumbnail });
       const gezeigt = new Set();
@@ -1194,6 +1195,23 @@ async function knopfGedrueckt(cq) {
         quer: aktion === "thumbquer" ? !auftrag.thumbnail.quer : auftrag.thumbnail.quer,
         vorlage: aktion === "thumbstil" ? (auftrag.thumbnail.vorlage === "grafik" ? "foto" : "grafik") : auftrag.thumbnail.vorlage,
         youtubeShort: aktion === "thumbshort" ? !auftrag.thumbnail.youtubeShort : auftrag.thumbnail.youtubeShort });
+    case "thumbtextpos": {
+      if (!auftrag.thumbnail || auftrag.thumbnail.modus === "text") return antwort("Bitte zuerst ein Foto- oder Frame-Titelbild auswählen.");
+      if (!arg) {
+        await zeigeMenue(auftrag, {
+          text: "<b>Textposition im Hochkant-Titelbild</b>\nAutomatisch nutzt die lokale Gesichtserkennung, soweit verfügbar; ohne Treffer sitzt der Text unten. Oben/Unten legt die bevorzugte Position fest. Das Foto bleibt vollflächig. Quercover behalten ihre getrennte Bild- und Textfläche.",
+          reply_markup: { inline_keyboard: [
+            ...[["auto", "Automatisch"], ["oben", "Text oben"], ["unten", "Text unten"]].map(([wert, name]) =>
+              [knopf(`${(auftrag.thumbnail.textPosition ?? "auto") === wert ? "🔘" : "⚪"} ${name}`, auftrag, `thumbtextpos:${wert}`)]),
+            [knopf("↩️ Zum Titelbild-Menü", auftrag, "thumb")],
+          ] },
+        });
+        return antwort();
+      }
+      if (!["auto", "oben", "unten"].includes(arg)) return antwort("Ungültige Textposition.", true);
+      await antwort();
+      return thumbnailBauen(auftrag, { ...auftrag.thumbnail, textPosition: arg });
+    }
     case "thumboff":
       auftraege.aendern(id, { thumbnail: null, plan: null });
       await zeigeMenue(auftrag);

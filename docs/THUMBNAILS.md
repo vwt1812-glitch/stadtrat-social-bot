@@ -75,20 +75,29 @@ Ein Quercover macht das veröffentlichte Video nicht automatisch zum Querformat.
 Ausgaben von „original“ und „hochkant“ werden in Telegram-Vorschau und Download nur einmal gezeigt;
 intern bleiben beide Profilnamen für die Plattformzuordnung erhalten.
 
-Bei Bild oder Videoframe mit Covertext nutzt **Foto + Balken** ein großes, vollständig sichtbares
-Foto, das vorhandene Logo oben und orange Schrift auf einem dunklen Balken. Freie Flächen werden
-mit einem unscharfen Hintergrund gefüllt. Bei Hochkant liegen der kleinere Logo-Kopf, das scharfe
-Foto und der Titelbalken in getrennten Bereichen innerhalb von y=305 bis y=1615. Damit bleiben
-Logo, Foto und Titel sowohl beim mittigen 4:5-Ausschnitt (y=285 bis y=1635) als auch beim mittigen
-3:4-Ausschnitt (y=240 bis y=1680) sichtbar. Zum engeren 4:5-Rand bleiben mindestens 20 px Abstand.
-Der Balken verdeckt keinen Teil des scharfen Fotos mehr. Der Bot liefert dazu eine mittige
+Bei Bild oder Videoframe mit Covertext nutzt **Foto mit Text** zwei eigene Anordnungen:
+
+- **Hochkant:** Das Foto füllt die gesamte Fläche scharf aus. Ein passendes 9:16-Motiv wird nicht
+  zwischen Logo und Text zusammengeschrumpft. Abweichende Seitenverhältnisse werden proportional
+  zugeschnitten, nicht gestreckt oder mit unscharfen Rändern ergänzt. Logo und Textbalken bleiben
+  zwischen y=305 und y=1615 innerhalb der mittigen 4:5- und 3:4-Ausschnitte. Die vorhandene lokale
+  OpenCV-Suche wird einmal pro ausgewähltem Bild verwendet, soweit installiert. Sie hilft beim
+  Bildausschnitt und bei der Platzierung des Balkens außerhalb des erkannten Gesichts. Ohne Treffer
+  wird mittig zugeschnitten und der Balken unten platziert. **Textposition im Hochkantbild** bietet
+  zusätzlich Automatisch/Oben/Unten. Die Automatik ist eine Hilfe und kann Gesichter übersehen;
+  bei Bedarf die Position oder den Videoframe ändern. Das Logo kann dabei ebenfalls ausweichen.
+- **Quer:** Links ist eine eigene Fotofläche, rechts stehen Logo, Überschrift und optionaler
+  Erklärungstext auf dunklem Grund. Schrift und Logo liegen vollständig außerhalb der Fotofläche.
+  Das Foto wird auf diese Fläche zugeschnitten; erkannte Gesichter bestimmen bevorzugt den Fokus.
+  Die Textmenge bleibt begrenzt, damit auch auf kleinen Vorschauen etwas erkennbar ist.
+
+Das betrifft nur die Fotocover, nicht das eigentliche Video. Der Bot liefert weiterhin eine mittige
 **raster-vorschau** in 1080×1440 (3:4) und eine **feed-vorschau** in 1080×1350 (4:5).
 Diese Vorschauen sind Gestaltungstests und Exporte; der Upload bleibt 1080×1920. Sie sind keine
 Zusage über jede Appansicht oder manuell verschobene Zuschnitte. An quadratischen Zuschnitten
 kann weiterhin Inhalt verloren gehen.
 **Zur Textgrafik wechseln** schaltet zur bisherigen Textgrafik zurück; die Gegenrichtung heißt
-**Zu Foto mit Textbalken wechseln**. Diese Auswahl erscheint nach dem Ergänzen von Bildtext.
-Quercover behalten ihr bisheriges Layout.
+**Zu Foto mit Text wechseln**. Diese Auswahl erscheint nach dem Ergänzen von Bildtext.
 Die reine Textgrafik bleibt ebenfalls verfügbar. Schon im Eingangsbild eingebrannte Logos und Texte
 werden nicht entfernt; für diese Vorlage möglichst einen unverzierten Frame oder ein Originalfoto
 verwenden. Die Frame-Auswahl greift im Bot auf das hochgeladene Originalvideo zurück, damit vom Bot

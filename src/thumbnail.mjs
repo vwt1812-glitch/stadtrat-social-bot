@@ -5,6 +5,7 @@ import { ausfuehren, untersuche } from "./video.mjs";
 import { textGrafik } from "./grafik-text.mjs";
 import { grafikInhalt } from "./redaktion.mjs";
 import { fotoCover } from "./cover-foto.mjs";
+import { gesichtSuchen } from "./gesicht.mjs";
 
 // Feste Ausgabeprofile sind unsere Defaults, nicht die Mindestgrößen aller Plattformen.
 // Unter 2 MiB hält die JPEGs auch für konservativ konfigurierte Uploads klein.
@@ -71,7 +72,7 @@ export async function jpegProfil(eingabe, ausgabe, profil) {
   throw new Error("Das Titelbild lässt sich nicht sicher unter 2 MiB verkleinern. Bitte ein einfacheres Bild wählen.");
 }
 
-export async function thumbnailsErstellen({ ordner, video, quelle = video, layout, optionen, kanaele, mastodonPatch = false }) {
+export async function thumbnailsErstellen({ ordner, video, quelle = video, layout, optionen, kanaele, mastodonPatch = false, gesicht = null }) {
   const masse = await untersuche(video);
   const stand = await videoStand(video);
   const ausgabeDir = path.join(ordner, `cover-${randomBytes(4).toString("hex")}`);
@@ -84,6 +85,8 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
       "-frames:v", "1", "-q:v", "2", bild]);
   }
   if (!["text", "frame", "bild"].includes(optionen.modus) || (optionen.modus !== "text" && !bild)) throw new Error("Bitte zuerst ein Bild oder einen Videoframe auswählen.");
+  const funde = gesicht && bild && optionen.mitText && optionen.vorlage !== "grafik"
+    ? await gesichtSuchen(bild, gesicht, 1) : null;
   const profile = new Set(["original", ...(optionen.quer ? ["quer"] : []), ...kanaele.map((k) => thumbnailZiel(k, optionen, mastodonPatch).profil)]);
   const dateien = {};
   for (const key of profile) {
@@ -97,7 +100,8 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
       }
       eingabe = path.join(ausgabeDir, `${key}-grafik.jpg`);
       if (optionen.modus !== "text" && optionen.vorlage !== "grafik") {
-        await fotoCover({ ausgabe: eingabe, inhalt, layout, bild, quer: profil.breite > profil.hoehe });
+        await fotoCover({ ausgabe: eingabe, inhalt, layout, bild, quer: profil.breite > profil.hoehe,
+          gesichter: funde?.gesichter ?? [], textPosition: optionen.textPosition ?? "auto" });
       } else {
         await textGrafik({ ausgabe: eingabe, inhalt, layout, format: profil.format,
           hintergrund: optionen.modus === "text" ? null : bild });

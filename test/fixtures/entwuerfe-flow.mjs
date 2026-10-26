@@ -76,6 +76,11 @@ mock.method(Telegram.prototype, "aufruf", async (methode, params = {}) => {
         assert.equal(Object.keys(new Auftraege(dir).alle).length, 1);
         assert.ok(b.thumbnail.bild.endsWith(".jpg"));
         assert.equal(teile.length, 0);
+        update = callback("thumbtextpos:oben");
+      }
+      if (schritt === 5 && b.thumbnail?.textPosition === "oben" && b.status === "vorschau") {
+        assert.equal(b.caption, "Original");
+        assert.equal(teile.length, 0);
         process.exit(0);
       }
     } else if (szenario === "archiv") {

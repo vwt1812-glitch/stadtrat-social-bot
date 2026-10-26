@@ -25,18 +25,16 @@ test("Querlayout reserviert die Seitenfläche und übernimmt keine automatische 
   assert.equal(manuell.logoPosition, "unten-links");
 });
 
-test("Foto, Logo und Titel bleiben ohne Überdeckung in 4:5 und 3:4 sichtbar", () => {
+test("Logo und Titel bleiben getrennt und in 4:5 sowie 3:4 sichtbar", () => {
   for (const balkenHoehe of [194, 324, 480]) {
     const b = fotoCoverBereiche({ balkenHoehe, logoHoehe: 140 });
-    assert.ok(b.logoY + 140 <= b.fotoY);
-    assert.ok(b.fotoY + b.fotoHoehe <= b.balkenY);
+    assert.ok(b.balkenY >= b.logoY + 160 || b.balkenY + balkenHoehe + 20 <= b.logoY);
     for (const [oben, unten] of [[285, 1635], [240, 1680]]) {
       assert.ok(b.logoY >= oben + 20);
       assert.ok(b.balkenY + balkenHoehe <= unten - 20);
     }
-    assert.ok(b.fotoHoehe >= 560);
   }
-  assert.throws(() => fotoCoverBereiche({ balkenHoehe: 900, logoHoehe: 140 }), /kürzen/);
+  assert.throws(() => fotoCoverBereiche({ balkenHoehe: 1300, logoHoehe: 140 }), /kürzen/);
 });
 
 for (const modus of ["wechsel", "fehler"]) test(`Telegram: Hochkant → Querformat (${modus})`, async (t) => {
