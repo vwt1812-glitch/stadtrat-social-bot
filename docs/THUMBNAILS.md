@@ -8,6 +8,7 @@ des Bots; Empfehlungen sind keine vorgeschriebenen Mindestgrößen.
 |---|---|---|
 | Instagram Reel | JPEG 1080×1920, 9:16, max. 2 MiB | `image[0].thumbnail` als öffentlich abrufbare Bildadresse; Postiz setzt `cover_url` |
 | Raster-Vorschau | JPEG 1080×1440, 3:4, max. 2 MiB | Nur Vorschau/Export, niemals automatisch als Plattformcover übertragen |
+| Feed-Vorschau | JPEG 1080×1350, 4:5, max. 2 MiB | Nur Vorschau/Export, niemals automatisch als Plattformcover übertragen |
 | YouTube Video | JPEG 3840×2160, 16:9, max. 2 MiB | `settings.thumbnail` und Videomedium; verifizierter Kanal mit Thumbnail-Freischaltung nötig |
 | YouTube Short | JPEG 2160×3840, 9:16, max. 2 MiB | Vorerst nur Datei-Export für Studio am Computer; API-Übernahme nicht mit einem echten Short bestätigt |
 | Mastodon über Postiz | JPEG im Video-Seitenverhältnis, längste Seite 1920 px, max. 2 MiB | Nur mit angepasstem Postiz-Provider; Standard-Provider ignoriert das Cover |
@@ -77,11 +78,14 @@ intern bleiben beide Profilnamen für die Plattformzuordnung erhalten.
 Bei Bild oder Videoframe mit Covertext nutzt **Foto + Balken** ein großes, vollständig sichtbares
 Foto, das vorhandene Logo oben und orange Schrift auf einem dunklen Balken. Freie Flächen werden
 mit einem unscharfen Hintergrund gefüllt. Bei Hochkant liegen der kleinere Logo-Kopf, das scharfe
-Foto und der Titelbalken in getrennten Bereichen innerhalb von y=240 bis y=1680. Der Balken verdeckt
-keinen Teil des scharfen Fotos mehr. Der Bot liefert dazu eine mittige **raster-vorschau** in
-1080×1440 (3:4), die den kompakteren Aufbau zeigt. Diese Vorschau ist ein Gestaltungstest, keine
-behauptete universelle Rastergröße von Instagram oder TikTok. Die Uploaddatei bleibt 1080×1920;
-an beliebig verschobenen oder quadratischen Zuschnitten kann weiterhin Inhalt verloren gehen.
+Foto und der Titelbalken in getrennten Bereichen innerhalb von y=305 bis y=1615. Damit bleiben
+Logo, Foto und Titel sowohl beim mittigen 4:5-Ausschnitt (y=285 bis y=1635) als auch beim mittigen
+3:4-Ausschnitt (y=240 bis y=1680) sichtbar. Zum engeren 4:5-Rand bleiben mindestens 20 px Abstand.
+Der Balken verdeckt keinen Teil des scharfen Fotos mehr. Der Bot liefert dazu eine mittige
+**raster-vorschau** in 1080×1440 (3:4) und eine **feed-vorschau** in 1080×1350 (4:5).
+Diese Vorschauen sind Gestaltungstests und Exporte; der Upload bleibt 1080×1920. Sie sind keine
+Zusage über jede Appansicht oder manuell verschobene Zuschnitte. An quadratischen Zuschnitten
+kann weiterhin Inhalt verloren gehen.
 **Vorlage** schaltet zur bisherigen Textgrafik zurück. Quercover behalten ihr bisheriges Layout.
 Die reine Textgrafik bleibt ebenfalls verfügbar. Schon im Eingangsbild eingebrannte Logos und Texte
 werden nicht entfernt; für diese Vorlage möglichst einen unverzierten Frame oder ein Originalfoto

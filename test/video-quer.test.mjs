@@ -9,13 +9,15 @@ import { ausfuehren, rendern, untersuche } from "../src/video.mjs";
 import { fotoCover, fotoCoverBereiche } from "../src/cover-foto.mjs";
 import { thumbnailsErstellen } from "../src/thumbnail.mjs";
 
-test("Foto, Logo und Titel teilen die kompakte Vorschau ohne Überdeckung", () => {
+test("Foto, Logo und Titel bleiben ohne Überdeckung in 4:5 und 3:4 sichtbar", () => {
   for (const balkenHoehe of [194, 324, 480]) {
     const b = fotoCoverBereiche({ balkenHoehe, logoHoehe: 140 });
-    assert.ok(b.logoY >= 240);
     assert.ok(b.logoY + 140 <= b.fotoY);
     assert.ok(b.fotoY + b.fotoHoehe <= b.balkenY);
-    assert.equal(b.balkenY + balkenHoehe, 1680);
+    for (const [oben, unten] of [[285, 1635], [240, 1680]]) {
+      assert.ok(b.logoY >= oben + 20);
+      assert.ok(b.balkenY + balkenHoehe <= unten - 20);
+    }
     assert.ok(b.fotoHoehe >= 560);
   }
   assert.throws(() => fotoCoverBereiche({ balkenHoehe: 900, logoHoehe: 140 }), /kürzen/);
@@ -50,7 +52,11 @@ test("Hochkant bleibt vollständig auf der Querfläche; Ton und separate Coverfo
   }
   const cover = await thumbnailsErstellen({ ordner: dir, video: out, quelle: original, layout: { schriftOrdner: path.resolve("assets/fonts") },
     optionen: { modus: "frame", frameMs: 0, quer: true }, kanaele: [{ identifier: "instagram" }] });
-  assert.deepEqual(Object.keys(cover.dateien).sort(), ["hochkant", "original", "quer", "raster-vorschau"]);
+  assert.deepEqual(Object.keys(cover.dateien).sort(), ["feed-vorschau", "hochkant", "original", "quer", "raster-vorschau"]);
+  for (const [key, hoehe] of [["feed-vorschau", 1350], ["raster-vorschau", 1440]]) {
+    const v = await untersuche(cover.dateien[key]);
+    assert.deepEqual([v.breite, v.hoehe], [1080, hoehe]);
+  }
   const q = await untersuche(cover.dateien.quer), h = await untersuche(cover.dateien.hochkant);
   assert.deepEqual([q.breite, q.hoehe, h.breite, h.hoehe], [1920, 1080, 1080, 1920]);
   const frame = await untersuche(path.join(path.dirname(cover.dateien.original), "frame.jpg"));
