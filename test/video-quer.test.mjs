@@ -6,8 +6,20 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ausfuehren, rendern, untersuche } from "../src/video.mjs";
-import { fotoCover } from "../src/cover-foto.mjs";
+import { fotoCover, fotoCoverBereiche } from "../src/cover-foto.mjs";
 import { thumbnailsErstellen } from "../src/thumbnail.mjs";
+
+test("Foto, Logo und Titel teilen die kompakte Vorschau ohne Überdeckung", () => {
+  for (const balkenHoehe of [194, 324, 480]) {
+    const b = fotoCoverBereiche({ balkenHoehe, logoHoehe: 140 });
+    assert.ok(b.logoY >= 240);
+    assert.ok(b.logoY + 140 <= b.fotoY);
+    assert.ok(b.fotoY + b.fotoHoehe <= b.balkenY);
+    assert.equal(b.balkenY + balkenHoehe, 1680);
+    assert.ok(b.fotoHoehe >= 560);
+  }
+  assert.throws(() => fotoCoverBereiche({ balkenHoehe: 900, logoHoehe: 140 }), /kürzen/);
+});
 
 for (const modus of ["wechsel", "fehler"]) test(`Telegram: Hochkant → Querformat (${modus})`, async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "video-quer-flow-"));
@@ -38,7 +50,7 @@ test("Hochkant bleibt vollständig auf der Querfläche; Ton und separate Coverfo
   }
   const cover = await thumbnailsErstellen({ ordner: dir, video: out, quelle: original, layout: { schriftOrdner: path.resolve("assets/fonts") },
     optionen: { modus: "frame", frameMs: 0, quer: true }, kanaele: [{ identifier: "instagram" }] });
-  assert.deepEqual(Object.keys(cover.dateien).sort(), ["hochkant", "original", "quer"]);
+  assert.deepEqual(Object.keys(cover.dateien).sort(), ["hochkant", "original", "quer", "raster-vorschau"]);
   const q = await untersuche(cover.dateien.quer), h = await untersuche(cover.dateien.hochkant);
   assert.deepEqual([q.breite, q.hoehe, h.breite, h.hoehe], [1920, 1080, 1080, 1920]);
   const frame = await untersuche(path.join(path.dirname(cover.dateien.original), "frame.jpg"));
