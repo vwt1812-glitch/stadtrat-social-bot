@@ -9,6 +9,7 @@ import { fotoCover } from "./cover-foto.mjs";
 // Feste Ausgabeprofile sind unsere Defaults, nicht die Mindestgrößen aller Plattformen.
 // Unter 2 MiB hält die JPEGs auch für konservativ konfigurierte Uploads klein.
 export const THUMBNAIL_PROFILE = {
+  "raster-vorschau": { breite: 1080, hoehe: 1440, maxBytes: 2 * 1024 ** 2, format: "vorschau" },
   quer: { breite: 1920, hoehe: 1080, maxBytes: 2 * 1024 ** 2, format: "quer" },
   hochkant: { breite: 1080, hoehe: 1920, maxBytes: 2 * 1024 ** 2, format: "cover-hochkant" },
   youtube: { breite: 3840, hoehe: 2160, maxBytes: 2 * 1024 ** 2, format: "quer" },
@@ -104,6 +105,16 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
     const ziel = path.join(ausgabeDir, `${key}.jpg`);
     await jpegProfil(eingabe, ziel, profil);
     dateien[key] = ziel;
+  }
+  // Zusätzlicher Ansichts-Test, kein Uploadprofil und keine Behauptung über alle App-Raster.
+  const hoch = dateien.hochkant ?? (Math.abs(masse.hoehe / masse.breite - 16 / 9) < 0.03 ? dateien.original : null);
+  if (hoch) {
+    const ausschnitt = path.join(ausgabeDir, "raster-ausschnitt.png");
+    await ausfuehren("ffmpeg", ["-y", "-v", "error", "-i", hoch, "-vf",
+      "crop=iw:iw*4/3:0:(ih-oh)/2,scale=1080:1440", "-frames:v", "1", ausschnitt]);
+    const ziel = path.join(ausgabeDir, "raster-vorschau.jpg");
+    await jpegProfil(ausschnitt, ziel, THUMBNAIL_PROFILE["raster-vorschau"]);
+    dateien["raster-vorschau"] = ziel;
   }
   return { ...optionen, dateien, hochgeladen: {}, videoStand: stand };
 }
