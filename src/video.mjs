@@ -317,16 +317,16 @@ export function wischFilter({ breite, hoehe, steigung, gesamt, verzoegerung = 0,
  * @param {{name:string, funktion?:string}|null} [o.bauchbinde] einblenden, wenn gesetzt
  * @param {boolean} [o.story] Eingabe erst auf eine Story-Fläche setzen; `masse` sind dann die der Story
  */
-export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bauchbinde = null, story = false }) {
+export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bauchbinde = null, story = false, quer = false }) {
   const ordner = path.dirname(ausgabe);
   const args = ["-y", "-v", "error", "-i", eingabe];
   const filter = [];
   let letzte = "0:v";
   let eingang = 1;
-  if (story) {
+  if (story || quer) {
     filter.push(`[0:v]${storyFlaeche(masse)}[flaeche]`);
     letzte = "flaeche";
-    if (layout.logo && layout.logoStil === "frei") {
+    if (story && layout.logo && layout.logoStil === "frei") {
       const schleier = path.join(ordner, "story-schleier.png");
       await storySchleier(masse, schleier, layout.bild);
       args.push("-i", schleier);

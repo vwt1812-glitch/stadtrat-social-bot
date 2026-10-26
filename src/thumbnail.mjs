@@ -4,10 +4,12 @@ import { randomBytes } from "node:crypto";
 import { ausfuehren, untersuche } from "./video.mjs";
 import { textGrafik } from "./grafik-text.mjs";
 import { grafikInhalt } from "./redaktion.mjs";
+import { fotoCover } from "./cover-foto.mjs";
 
 // Feste Ausgabeprofile sind unsere Defaults, nicht die Mindestgrößen aller Plattformen.
 // Unter 2 MiB hält die JPEGs auch für konservativ konfigurierte Uploads klein.
 export const THUMBNAIL_PROFILE = {
+  quer: { breite: 1920, hoehe: 1080, maxBytes: 2 * 1024 ** 2, format: "quer" },
   hochkant: { breite: 1080, hoehe: 1920, maxBytes: 2 * 1024 ** 2, format: "cover-hochkant" },
   youtube: { breite: 3840, hoehe: 2160, maxBytes: 2 * 1024 ** 2, format: "quer" },
   "youtube-short": { breite: 2160, hoehe: 3840, maxBytes: 2 * 1024 ** 2, format: "cover-hochkant" },
@@ -67,7 +69,7 @@ export async function jpegProfil(eingabe, ausgabe, profil) {
   throw new Error("Das Titelbild lässt sich nicht sicher unter 2 MiB verkleinern. Bitte ein einfacheres Bild wählen.");
 }
 
-export async function thumbnailsErstellen({ ordner, video, layout, optionen, kanaele, mastodonPatch = false }) {
+export async function thumbnailsErstellen({ ordner, video, quelle = video, layout, optionen, kanaele, mastodonPatch = false }) {
   const masse = await untersuche(video);
   const stand = await videoStand(video);
   const ausgabeDir = path.join(ordner, `cover-${randomBytes(4).toString("hex")}`);
@@ -76,11 +78,11 @@ export async function thumbnailsErstellen({ ordner, video, layout, optionen, kan
   if (optionen.modus === "frame") {
     const ms = frameZeit(String(optionen.frameMs / 1000), masse.dauer);
     bild = path.join(ausgabeDir, "frame.jpg");
-    await ausfuehren("ffmpeg", ["-y", "-v", "error", "-ss", String(ms / 1000), "-i", video,
+    await ausfuehren("ffmpeg", ["-y", "-v", "error", "-ss", String(ms / 1000), "-i", quelle,
       "-frames:v", "1", "-q:v", "2", bild]);
   }
   if (!["text", "frame", "bild"].includes(optionen.modus) || (optionen.modus !== "text" && !bild)) throw new Error("Bitte zuerst ein Bild oder einen Videoframe auswählen.");
-  const profile = new Set(["original", ...kanaele.map((k) => thumbnailZiel(k, optionen, mastodonPatch).profil)]);
+  const profile = new Set(["original", ...(optionen.quer ? ["quer"] : []), ...kanaele.map((k) => thumbnailZiel(k, optionen, mastodonPatch).profil)]);
   const dateien = {};
   for (const key of profile) {
     const profil = key === "original" ? originalProfil(masse) : THUMBNAIL_PROFILE[key];
@@ -92,8 +94,12 @@ export async function thumbnailsErstellen({ ordner, video, layout, optionen, kan
         throw new Error("Bitte eine Cover-Überschrift bis 70 Zeichen und optional bis 60 Zeichen Erklärung schreiben.");
       }
       eingabe = path.join(ausgabeDir, `${key}-grafik.jpg`);
-      await textGrafik({ ausgabe: eingabe, inhalt, layout, format: profil.format,
-        hintergrund: optionen.modus === "text" ? null : bild });
+      if (optionen.modus !== "text" && optionen.vorlage !== "grafik") {
+        await fotoCover({ ausgabe: eingabe, inhalt, layout, bild, quer: profil.breite > profil.hoehe });
+      } else {
+        await textGrafik({ ausgabe: eingabe, inhalt, layout, format: profil.format,
+          hintergrund: optionen.modus === "text" ? null : bild });
+      }
     }
     const ziel = path.join(ausgabeDir, `${key}.jpg`);
     await jpegProfil(eingabe, ziel, profil);

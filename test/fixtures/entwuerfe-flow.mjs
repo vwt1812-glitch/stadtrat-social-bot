@@ -8,6 +8,7 @@ import { Auftraege } from "../../src/auftraege.mjs";
 import { Telegram } from "../../src/telegram.mjs";
 import { Postiz } from "../../src/postiz.mjs";
 import * as thumbnailOriginal from "../../src/thumbnail.mjs";
+import * as videoOriginal from "../../src/video.mjs";
 
 const [dir, szenario] = process.argv.slice(2);
 Object.assign(process.env, {
@@ -25,6 +26,9 @@ s.aendern(a.id, { art: szenario === "thumbnail" ? "video" : "foto", status: "vor
   ...(szenario === "thumbnail" ? { plan: { typ: "now", zeit: new Date().toISOString() } } : {}),
 });
 const stand = () => JSON.parse(fs.readFileSync(path.join(dir, "auftraege.json"), "utf8"))[a.id];
+if (szenario === "thumbnail") mock.module("../../src/video.mjs", { namedExports: {
+  ...videoOriginal, untersuche: async () => ({ breite: 1080, hoehe: 1920, dauer: 10 }),
+} });
 mock.module("../../src/thumbnail.mjs", { namedExports: {
   ...thumbnailOriginal,
   thumbnailsErstellen: async ({ optionen }) => ({ ...optionen, dateien: { original: foto, hochkant: foto }, hochgeladen: {},
