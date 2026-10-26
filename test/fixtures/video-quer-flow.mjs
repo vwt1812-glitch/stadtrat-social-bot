@@ -19,6 +19,7 @@ fs.writeFileSync(path.join(a.ordner, "untertitel.srt"), "");
 s.aendern(a.id, { art: "video", status: "vorschau", caption: "Caption bleibt", original,
   medien: [original], masse: { breite: 1080, hoehe: 1920, dauer: 5 }, hochkant: false,
   story: false, kanaele: ["ig", "yt"], menueNachricht: 1,
+  untertitelLage: "oben", lageAutomatisch: true,
   plan: { typ: "now", zeit: new Date().toISOString() } });
 const stand = () => JSON.parse(fs.readFileSync(path.join(dir, "auftraege.json"), "utf8"))[a.id];
 const renders = [];
@@ -61,7 +62,14 @@ mock.method(Telegram.prototype, "aufruf", async (methode, params = {}) => {
         assert.equal(b.videoFormatFehler, false);
         assert.equal(renders[0].quer, true);
         assert.deepEqual([renders[0].masse.breite, renders[0].masse.hoehe], [1920, 1080]);
-        assert.ok(renders.some((r) => r.story && r.masse.hoehe === 1920));
+        const hochkant = renders.find((r) => r.masse.hoehe === 1920);
+        assert.ok(hochkant);
+        assert.equal(hochkant.story, false);
+        assert.equal(hochkant.layout.logo, renders[0].layout.logo);
+        assert.equal(hochkant.layout.lage, "oben");
+        assert.equal(renders[0].layout.lage, null);
+        assert.equal(b.untertitelLage, "oben");
+        assert.equal(b.lageAutomatisch, true);
         assert.ok(b.storyDatei);
         assert.ok(vorschauen.some((v) => v[4]?.width === "1920" && v[4]?.height === "1080"));
         update = callback("quer");

@@ -14,7 +14,7 @@ import { Mastodon, DIREKT, mastodonMedien } from "./mastodon.mjs";
 import { erwartetePosts, faelligeKontrollen, abfragezeitraum, auswerten } from "./kontrolle.mjs";
 import { Auftraege } from "./auftraege.mjs";
 import {
-  ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi, storyFoto, istStoryFormat, STORY_MASSE, storyLayout,
+  ausfuehren, untersuche, tonFuerWhisper, rendern, vorschau, fotoRendern, fotoFuerKi, storyFoto, istStoryFormat, STORY_MASSE, storyLayout, querLayout,
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
@@ -769,8 +769,11 @@ async function storyFassung(auftrag) {
     });
     return mitText;
   }
-  const masse = { ...STORY_MASSE, dauer: auftrag.masse.dauer };
-  const layout = storyLayout(layoutFuer(auftrag), auftrag.masse, masse);
+  // Ein vorhandenes 9:16-Video behält beim zusätzlichen Querformat sein normales Layout,
+  // einschließlich Logo-Variante und Untertitelposition. Kein Story-Logo-Wechsel.
+  const nativ = querAn(auftrag) && istStoryFormat(auftrag.masse);
+  const masse = nativ ? auftrag.masse : { ...STORY_MASSE, dauer: auftrag.masse.dauer };
+  const layout = nativ ? layoutFuer(auftrag) : storyLayout(layoutFuer(auftrag), auftrag.masse, masse);
   const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
   let ass = null;
   if (cues.length) {
@@ -780,7 +783,7 @@ async function storyFassung(auftrag) {
   const ziel = datei(auftrag, "story.mp4");
   await rendern({
     eingabe: auftrag.original, ausgabe: ziel, ass, masse, layout, video: config.video,
-    bauchbinde: auftrag.bauchbinde, story: true,
+    bauchbinde: auftrag.bauchbinde, story: !nativ,
   });
   return ziel;
 }
@@ -809,9 +812,10 @@ async function storyAktualisieren(auftrag) {
     await vorschau(storyDatei, senden);
   }
   const wofuer = [hochkantAn(auftrag) && "Instagram/TikTok", auftrag.story && "Story"].filter(Boolean).join(" und ");
+  const vorschauMasse = querAn(auftrag) && istStoryFormat(auftrag.masse) ? auftrag.masse : STORY_MASSE;
   await tg.datei(auftrag.chatId, "sendVideo", "video", senden, {
     caption: `9:16-Fassung für ${wofuer}`, supports_streaming: "true",
-    width: String(STORY_MASSE.breite), height: String(STORY_MASSE.hoehe),
+    width: String(vorschauMasse.breite), height: String(vorschauMasse.hoehe),
   });
   return auftrag;
 }
@@ -825,15 +829,18 @@ async function renderUndVorschau(id) {
   try {
     await schritt(auftrag, "🎬 Baue Logo und Untertitel ein …");
     const masse = feedMasse(auftrag);
+    const layout = querAn(auftrag)
+      ? querLayout(layoutFuer(auftrag), auftrag.masse, masse, { lageAutomatisch: auftrag.lageAutomatisch })
+      : layoutFuer(auftrag);
     const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
     let ass = null;
     if (cues.length) {
       ass = datei(auftrag, "untertitel.ass");
-      await fs.writeFile(ass, zuAss(cues, { ...masse, ...layoutFuer(auftrag) }));
+      await fs.writeFile(ass, zuAss(cues, { ...masse, ...layout }));
     }
     const fertig = datei(auftrag, "fertig.mp4");
     await rendern({
-      eingabe: auftrag.original, ausgabe: fertig, ass, masse, layout: layoutFuer(auftrag), video: config.video,
+      eingabe: auftrag.original, ausgabe: fertig, ass, masse, layout, video: config.video,
       bauchbinde: auftrag.bauchbinde, quer: querAn(auftrag),
     });
     auftraege.aendern(id, { medien: [fertig], hochgeladen: null, videoFormatFehler: false }); // neues Video → neu hochladen
