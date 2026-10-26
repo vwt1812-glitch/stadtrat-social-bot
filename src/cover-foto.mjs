@@ -3,9 +3,10 @@ import path from "node:path";
 import { ausfuehren, logoGrafik, storyFlaeche, textBreite } from "./video.mjs";
 import { ausgewogeneZeilen, logoFuerGrafik } from "./grafik-text.mjs";
 
-// Kompakte 3:4-Gestaltung innerhalb des 9:16-Masters. Keine Beschriftung über dem Foto.
+// Beide mittigen Zuschnitte bleiben erhalten: 4:5 (y=285..1635), 3:4 (y=240..1680).
+// Zusätzlich 20 px Innenabstand. Keine Beschriftung über dem Foto.
 export function fotoCoverBereiche({ balkenHoehe, logoHoehe = 0 }) {
-  const oben = 240, unten = 1680;
+  const oben = 305, unten = 1615;
   const logoY = oben + 20;
   const fotoY = oben + (logoHoehe ? logoHoehe + 40 : 0);
   const balkenY = unten - balkenHoehe;
