@@ -63,6 +63,7 @@ const erlaubt = (...ids) => ids.some((id) => config.telegram.erlaubt.includes(id
 
 /** Bedarf an Postiz-Anfragen prüfen; Fehlertext, wenn das Stundenlimit nicht reicht. */
 function limitFehler(auftrag, kanaele) {
+  if (auftrag.videoFormatFehler) return "Die Videofassung konnte nicht erstellt werden. Bitte das Videoformat erneut wählen und die neue Vorschau prüfen.";
   const postizKanaele = kanaele.filter((k) => k.id !== DIREKT);
   if (!postizKanaele.length) return null;
   const medien = (auftrag.medien ?? [datei(auftrag, "fertig.mp4")]).length;
@@ -241,6 +242,7 @@ function details(auftrag, alle) {
     zeilen.push(`🏷️ Story-Logo: ${html(auftrag.storyLogoPosition)}`);
   }
   if (hochkantAn(auftrag)) zeilen.push("📲 Instagram/TikTok bekommen eine eigene 9:16-Fassung, die anderen das Querformat");
+  if (querAn(auftrag)) zeilen.push("🖥️ Feed-Fassung in 16:9 mit unscharfen Seitenflächen");
   if (auftrag.bauchbinde && art(auftrag) === "video") zeilen.push(`🪪 Bauchbinde: ${bauchbindeText(auftrag.bauchbinde)}`);
   if (auftrag.untertitelLage && art(auftrag) === "video") {
     zeilen.push(`📍 Untertitel: ${LAGE_TEXT[auftrag.untertitelLage]}${auftrag.lageAutomatisch ? " – automatisch, unten wäre dein Gesicht verdeckt" : ""}`);
@@ -380,6 +382,9 @@ async function menueInhalt(auftrag) {
   if (!auftrag.nurStory && hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))) {
     optionen.push(knopf(auftrag.hochkant ? "📲 9:16 ✓" : "📲 9:16 für Insta", auftrag, "hochkant"));
   }
+  if (!auftrag.nurStory && art(auftrag) === "video" && auftrag.masse?.hoehe > auftrag.masse?.breite) {
+    optionen.push(knopf(auftrag.quer ? "🖥️ 16:9 ✓" : "🖥️ Auch als 16:9", auftrag, "quer"));
+  }
   if (optionen.length) zeilen.push(optionen);
   zeilen.push([knopf("🗃️ Archivieren", auftrag, "archiv"), knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
@@ -399,13 +404,15 @@ async function thumbnailMenue(a) {
   });
   return {
     text: "<b>Titelbild für Videos</b>\n" + (t ? `Gewählt: ${html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` : "Noch kein eigenes Titelbild.\n") +
-      "Textgrafik nutzt dieselben Farben, Schrift und Logos wie Sharepics. Bild und Caption werden getrennt bearbeitet.\n" + infos.join("\n") +
+      "Foto + Balken: großes Foto, Logo oben, orange Überschrift auf dunklem Balken. Bild und Caption werden getrennt bearbeitet. Ein zusätzliches Quercover ändert das Videoformat nicht.\n" + infos.join("\n") +
       "\nJPEG-Ausgaben: höchstens 2 MiB. Kanäle ohne Cover-Unterstützung erhalten kein zusätzliches Feedbild. Shorts-Cover werden für Studio exportiert.",
     reply_markup: { inline_keyboard: [
-      [knopf("🎞️ Frame auswählen", a, "thumbframe"), knopf("📝 Textgrafik", a, "thumbtext")],
+      [knopf("🎞️ Frame auswählen", a, "thumbframe"), knopf("📝 Textgrafik", a, "thumbgrafik")],
       [knopf("📷 Eigenes Bild", a, "thumbbild")],
       ...(t ? [
         [knopf("✏️ Covertext / Bildtext", a, "thumbtext"), knopf("🔄 Neu erzeugen", a, "thumbneu")],
+        [knopf(t.quer ? "🖥️ Quercover 1920×1080 ✓" : "🖥️ Quercover ergänzen", a, "thumbquer")],
+        ...(t.modus !== "text" ? [[knopf(t.vorlage === "grafik" ? "Vorlage: Textgrafik" : "Vorlage: Foto + Balken", a, "thumbstil")]] : []),
         [knopf(t.youtubeShort ? "YouTube: Shorts (Export)" : "YouTube: normales Video", a, "thumbshort")],
         [knopf("📎 Cover herunterladen", a, "thumbexport"), knopf("🗑️ Titelbild entfernen", a, "thumboff")],
       ] : []),
@@ -420,12 +427,18 @@ async function thumbnailBauen(a, optionen) {
   await tg.senden(a.chatId, "🖼️ Erstelle die Titelbilder in den passenden Größen …");
   einreihen(async () => {
     try {
-      const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), layout: config.layout,
+      const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), quelle: a.original ?? coverVideo(a), layout: config.layout,
         optionen, kanaele, mastodonPatch: config.postiz.mastodonThumbnails });
       // Nur nach vollständigem Rendern übernehmen; eine misslungene Änderung lässt das bisherige Cover intakt.
       auftraege.aendern(a.id, { thumbnail });
+      const gezeigt = new Set();
+      const masse = await untersuche(coverVideo(a));
       for (const [key, bild] of Object.entries(thumbnail.dateien)) {
-        await tg.fotos(a.chatId, [bild], `Titelbild – ${key}`);
+        const p = key === "original" ? originalProfil(masse) : THUMBNAIL_PROFILE[key];
+        const groesse = `${p.breite}×${p.hoehe}`;
+        if (gezeigt.has(groesse)) continue;
+        gezeigt.add(groesse);
+        await tg.fotos(a.chatId, [bild], `Titelbild – ${key} (${groesse})`);
       }
     } catch (e) {
       console.error(e);
@@ -714,12 +727,14 @@ async function verarbeiten(id, fileId) {
  */
 async function storyNoetig(auftrag) {
   if (auftrag.grafikStoryDatei) return true;
-  if (art(auftrag) === "video") return !istStoryFormat(auftrag.masse);
+  if (art(auftrag) === "video") return querAn(auftrag) || !istStoryFormat(auftrag.masse);
   return art(auftrag) === "foto";
 }
 
 /** Querformat-Video, das sich für Instagram/TikTok in 9:16 umbauen lässt? */
-const hochkantMoeglich = (auftrag) => art(auftrag) === "video" && Boolean(auftrag.masse) && !istStoryFormat(auftrag.masse);
+const querAn = (a) => art(a) === "video" && Boolean(a.quer) && a.masse?.hoehe > a.masse?.breite;
+const feedMasse = (a) => querAn(a) ? { ...a.masse, breite: 1920, hoehe: 1080 } : a.masse;
+const hochkantMoeglich = (auftrag) => art(auftrag) === "video" && Boolean(auftrag.masse) && (querAn(auftrag) || !istStoryFormat(auftrag.masse));
 const hochkantAn = (auftrag) => !auftrag.nurStory && Boolean(auftrag.hochkant) && hochkantMoeglich(auftrag);
 
 /**
@@ -779,7 +794,7 @@ async function storyAktualisieren(auftrag) {
   } catch (e) {
     // Bildtext darf nicht stillschweigend verschwinden: dann NICHT ohne Text veröffentlichen.
     console.error(e);
-    if (auftrag.storyText?.trim()) throw e;
+    if (auftrag.storyText?.trim() || (querAn(auftrag) && hochkantAn(auftrag))) throw e;
     await tg.senden(auftrag.chatId, `⚠️ Story-Fassung ging nicht, die Story nimmt dann das normale Medium:\n<pre>${html(e.message)}</pre>`);
   }
   auftrag = auftraege.aendern(auftrag.id, { storyDatei, storyHochgeladen: null });
@@ -809,18 +824,19 @@ async function renderUndVorschau(id) {
   }
   try {
     await schritt(auftrag, "🎬 Baue Logo und Untertitel ein …");
+    const masse = feedMasse(auftrag);
     const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
     let ass = null;
     if (cues.length) {
       ass = datei(auftrag, "untertitel.ass");
-      await fs.writeFile(ass, zuAss(cues, { ...auftrag.masse, ...layoutFuer(auftrag) }));
+      await fs.writeFile(ass, zuAss(cues, { ...masse, ...layoutFuer(auftrag) }));
     }
     const fertig = datei(auftrag, "fertig.mp4");
     await rendern({
-      eingabe: auftrag.original, ausgabe: fertig, ass, masse: auftrag.masse, layout: layoutFuer(auftrag), video: config.video,
-      bauchbinde: auftrag.bauchbinde,
+      eingabe: auftrag.original, ausgabe: fertig, ass, masse, layout: layoutFuer(auftrag), video: config.video,
+      bauchbinde: auftrag.bauchbinde, quer: querAn(auftrag),
     });
-    auftraege.aendern(id, { medien: [fertig], hochgeladen: null }); // neues Video → neu hochladen
+    auftraege.aendern(id, { medien: [fertig], hochgeladen: null, videoFormatFehler: false }); // neues Video → neu hochladen
 
     let senden = fertig;
     if (!tg.lokal && (await fs.stat(fertig)).size > 49 * MB) {
@@ -832,8 +848,8 @@ async function renderUndVorschau(id) {
     await tg.datei(auftrag.chatId, "sendVideo", "video", senden, {
       caption: cues.length ? "Vorschau" : "Vorschau – keine Sprache erkannt, daher ohne Untertitel",
       supports_streaming: "true",
-      width: String(auftrag.masse.breite),
-      height: String(auftrag.masse.hoehe),
+      width: String(masse.breite),
+      height: String(masse.hoehe),
     });
     auftrag = await storyAktualisieren(auftrag);
     await tg.aufruf("deleteMessage", { chat_id: auftrag.chatId, message_id: auftrag.statusNachricht }).catch(() => {});
@@ -841,7 +857,7 @@ async function renderUndVorschau(id) {
     await neuesMenue(auftrag);
   } catch (e) {
     console.error(e);
-    auftraege.aendern(id, { status: auftrag.menueNachricht ? "vorschau" : "fehler", statusNachricht: null });
+    auftraege.aendern(id, { status: auftrag.menueNachricht ? "vorschau" : "fehler", statusNachricht: null, videoFormatFehler: true });
     await schritt(auftrag, `❌ Fehler beim Rendern:\n<pre>${html(e.message)}</pre>`);
   }
 }
@@ -1119,8 +1135,9 @@ async function knopfGedrueckt(cq) {
       await antwort();
       return tg.senden(auftrag.chatId, `Zeit innerhalb des fertigen Videos schicken: Sekunden oder MM:SS, z. B. 3.5. Videolänge: ${masse.dauer.toFixed(1)} s. Mit „Covertext“ kannst du danach eine Überschrift ergänzen.`);
     }
+    case "thumbgrafik":
     case "thumbtext":
-      auftraege.aendern(id, { wartetAuf: "thumbnailText" });
+      auftraege.aendern(id, { wartetAuf: "thumbnailText", thumbnailTextModus: aktion === "thumbgrafik" ? "text" : null });
       await antwort();
       return tg.senden(auftrag.chatId, "Covertext schicken: erste Zeile Überschrift (max. 70 Zeichen), optional zweite Zeile Erklärung (max. 60). Der Text ist unabhängig von der Caption.\nVorschlag:\n<pre>" + html(auftrag.thumbnail?.text ?? kurzerTitel(grafikText(auftrag) ?? auftrag.caption, 60)) + "</pre>");
     case "thumbbild":
@@ -1129,9 +1146,13 @@ async function knopfGedrueckt(cq) {
       return tg.senden(auftrag.chatId, "Schick ein JPG oder PNG als Foto oder Datei (max. 12 MB). Es wird als Titelbild verwendet, kein neuer Foto-Beitrag. Mit „Covertext“ kannst du danach Text ergänzen.");
     case "thumbneu":
     case "thumbshort":
+    case "thumbquer":
+    case "thumbstil":
       if (!auftrag.thumbnail) return antwort("Bitte zuerst ein Titelbild auswählen.");
       await antwort();
       return thumbnailBauen(auftrag, { ...auftrag.thumbnail,
+        quer: aktion === "thumbquer" ? !auftrag.thumbnail.quer : auftrag.thumbnail.quer,
+        vorlage: aktion === "thumbstil" ? (auftrag.thumbnail.vorlage === "grafik" ? "foto" : "grafik") : auftrag.thumbnail.vorlage,
         youtubeShort: aktion === "thumbshort" ? !auftrag.thumbnail.youtubeShort : auftrag.thumbnail.youtubeShort });
     case "thumboff":
       auftraege.aendern(id, { thumbnail: null, plan: null });
@@ -1140,7 +1161,16 @@ async function knopfGedrueckt(cq) {
     case "thumbexport":
       if (!auftrag.thumbnail?.dateien) return antwort("Noch keine Cover vorhanden.");
       await antwort();
-      for (const [key, bild] of Object.entries(auftrag.thumbnail.dateien)) await tg.datei(auftrag.chatId, "sendDocument", "document", bild, { caption: `Cover – ${key}` });
+      {
+        const gezeigt = new Set();
+        for (const [key, bild] of Object.entries(auftrag.thumbnail.dateien)) {
+          const m = await untersuche(bild);
+          const groesse = `${m.breite}×${m.hoehe}`;
+          if (gezeigt.has(groesse)) continue;
+          gezeigt.add(groesse);
+          await tg.datei(auftrag.chatId, "sendDocument", "document", bild, { caption: `Cover – ${key} (${groesse})` });
+        }
+      }
       return;
     case "weiter":
       await antwort("Setze die fehlenden Teile fort …");
@@ -1519,6 +1549,18 @@ async function knopfGedrueckt(cq) {
         `Schick mir den Text, der direkt auf dem Story-Foto stehen soll (maximal 6 Zeilen).\n\n<b>Aktuell:</b> ${html(auftrag.storyText || "kein Text")}\n\nMit <code>-</code> entfernst du den Bildtext. Mit <code>abbrechen</code> kehrst du zurück.`);
       return antwort();
     }
+    case "quer": {
+      if (art(auftrag) !== "video" || auftrag.nurStory || !(auftrag.masse?.hoehe > auftrag.masse?.breite)) return antwort("16:9 ist hier für Hochkantvideos vorgesehen.", true);
+      const aktiv = !auftrag.quer;
+      auftrag = auftraege.aendern(id, { quer: aktiv, plan: null, hochgeladen: null,
+        hochkantVorQuer: aktiv ? auftrag.hochkant : auftrag.hochkantVorQuer,
+        hochkant: aktiv ? true : auftrag.hochkantVorQuer,
+        storyDatei: null, storyHochgeladen: null, videoFormatFehler: true, status: "arbeitet" });
+      await antwort(aktiv ? "Baue die 16:9-Fassung …" : "Stelle das ursprüngliche Format wieder her …");
+      await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
+      einreihen(() => renderUndVorschau(id));
+      return;
+    }
     case "hochkant": {
       auftrag = auftraege.aendern(id, { hochkant: !auftrag.hochkant });
       if (auftrag.hochkant && !auftrag.storyDatei) {
@@ -1533,7 +1575,7 @@ async function knopfGedrueckt(cq) {
       // Ohne Story wird die Fassung nicht mehr gebraucht
       if (!auftrag.hochkant && !auftrag.story) auftrag = auftraege.aendern(id, { storyDatei: null, storyHochgeladen: null });
       await zeigeMenue(auftrag);
-      return antwort(auftrag.hochkant ? "Instagram/TikTok bekommen die 9:16-Fassung" : "Alle Kanäle bekommen das Querformat");
+      return antwort(auftrag.hochkant ? "Instagram/TikTok bekommen die 9:16-Fassung" : "Alle Kanäle bekommen das Feed-Format");
     }
     case "story": {
       if (auftrag.nurStory) return antwort("Im Modus Nur Story bleibt Story aktiv.", true);
@@ -1611,7 +1653,8 @@ async function texteingabe(auftrag, text) {
     case "thumbnailText": {
       const textNeu = text.trim();
       if (!textNeu) return tg.senden(auftrag.chatId, "Bitte einen Covertext eingeben.");
-      const modus = auftrag.thumbnail?.modus ?? "text";
+      const modus = auftrag.thumbnailTextModus ?? auftrag.thumbnail?.modus ?? "text";
+      auftraege.aendern(auftrag.id, { thumbnailTextModus: null });
       return thumbnailBauen(auftrag, { ...auftrag.thumbnail, modus, text: textNeu, mitText: modus !== "text" });
     }
     case "quelle": {

@@ -7,6 +7,7 @@ import { setTimeout as pause } from "node:timers/promises";
 import { Auftraege } from "../../src/auftraege.mjs";
 import { Telegram } from "../../src/telegram.mjs";
 import { Postiz } from "../../src/postiz.mjs";
+import { ausgewogeneZeilen, logoFuerGrafik } from "../../src/grafik-text.mjs";
 
 const [datenDir, aktion, format] = process.argv.slice(2);
 Object.assign(process.env, {
@@ -25,6 +26,7 @@ speicher.aendern(auftrag.id, {
 const stand = () => JSON.parse(fs.readFileSync(path.join(datenDir, "auftraege.json"), "utf8"))[auftrag.id];
 let gerendert = false;
 mock.module("../../src/grafik-text.mjs", { namedExports: {
+  ausgewogeneZeilen, logoFuerGrafik,
   textGrafik: async () => { throw new Error("Unexpected thumbnail rendering"); },
   textAnimation: async ({ inhalt, format: ziel }) => {
     assert.equal(aktion, "anim");

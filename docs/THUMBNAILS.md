@@ -58,6 +58,37 @@ bei diesen Plattformen keine bestimmte automatisch ausgewählte Vorschau.
 
 ## Bedienung
 
+### Zusätzliches Quercover und Fotovorlage
+
+Nach der ersten Coverauswahl erzeugt **Quercover ergänzen** unabhängig von der Orientierung des
+Videos eine weitere Datei in **1920×1080 px (16:9)**. Sie wird exportiert; die automatische
+Plattformzuordnung bleibt bestehen (z. B. Hochkant für Instagram, eigenes YouTube-Profil für YouTube).
+Ein Quercover macht das veröffentlichte Video nicht automatisch zum Querformat. Gleich große
+Ausgaben von „original“ und „hochkant“ werden in Telegram-Vorschau und Download nur einmal gezeigt;
+intern bleiben beide Profilnamen für die Plattformzuordnung erhalten.
+
+Bei Bild oder Videoframe mit Covertext nutzt **Foto + Balken** ein großes, vollständig sichtbares
+Foto, das vorhandene Logo oben und orange Schrift auf einem dunklen Balken. Freie Flächen werden
+mit einem unscharfen Hintergrund gefüllt. **Vorlage** schaltet zur bisherigen Textgrafik zurück.
+Die reine Textgrafik bleibt ebenfalls verfügbar. Schon im Eingangsbild eingebrannte Logos und Texte
+werden nicht entfernt; für diese Vorlage möglichst einen unverzierten Frame oder ein Originalfoto
+verwenden. Die Frame-Auswahl greift im Bot auf das hochgeladene Originalvideo zurück, damit vom Bot
+hinzugefügte Logos, Untertitel und Bauchbinden nicht doppelt ins Cover eingebrannt werden.
+
+### Hochkantvideo als Querformat
+
+Bei Hochkantvideos bietet das Hauptmenü **Auch als 16:9**. Die Feed-Fassung wird aus dem
+unveränderten Original auf **1920×1080 px** mit vollständigem scharfem Bild in der Mitte und
+unscharfen Seitenflächen neu gerendert. Ton bleibt erhalten; Untertitel, Logo und Bauchbinde werden
+für die Ausgabe neu gesetzt. Gleichzeitig wird die 9:16-Zuordnung für die konfigurierten
+Hochkant-Netzwerke aktiviert (standardmäßig Instagram/TikTok). Dieser Schalter kann weiterhin
+separat abgewählt werden. Zusätzliche Storys verwenden ebenfalls die 9:16-Fassung.
+Ein erneuter Klick auf **16:9 ✓** stellt das ursprüngliche Feedformat und die vorherige
+Hochkant-Auswahl wieder her. Nach Formatänderungen vorhandene Cover neu erzeugen und die Vorschau
+prüfen. Eine fehlgeschlagene Formatberechnung blockiert die Veröffentlichung bis zum erfolgreichen
+erneuten Rendern. Der zusätzliche Renderdurchlauf läuft wie bisher in der seriellen Warteschlange
+des Pi; es ist keine generative KI beteiligt.
+
 Bei einem Feedvideo **Titelbild** öffnen. Zeit als Sekunden oder `MM:SS` wählen, eigenen kurzen Text
 für eine Grafik schicken oder ein JPG/PNG hochladen. Ein Bild während des Titelbild-Dialogs wird
 nicht als neuer Fotobeitrag angelegt. **Covertext** ergänzt auch auf einem Bild/Videoframe eine Überschrift.
