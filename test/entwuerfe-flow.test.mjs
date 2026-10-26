@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-for (const szenario of ["archiv", "teilfehler", "unklar"]) {
+for (const szenario of ["archiv", "teilfehler", "unklar", "thumbnail"]) {
   test(`Telegram: ${szenario} bleibt nach erneutem Öffnen sicher`, (t) => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "entwuerfe-flow-"));
     t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

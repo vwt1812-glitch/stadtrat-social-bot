@@ -71,8 +71,8 @@ export function ausgewogeneZeilen(text, maxBreite) {
 }
 
 // Die angenäherte Zeilenbreite wird mit FFmpeg an der echten Inter-Schrift nachgemessen.
-async function titelEinpassen(text, schrift, ordner, { maxBreite, maxZeilen, maxHoehe }) {
-  for (let groesse = 102; groesse >= 46; groesse -= 4) {
+async function titelEinpassen(text, schrift, ordner, { maxBreite, maxZeilen, maxHoehe, start = 102, minimum = 46 }) {
+  for (let groesse = start; groesse >= minimum; groesse -= 4) {
     const zeilenhoehe = Math.round(groesse * 1.24);
     const zeilen = ausgewogeneZeilen(text, maxBreite / (groesse * 0.56));
     if (!zeilen.length || zeilen.length > maxZeilen || zeilen.length * zeilenhoehe > maxHoehe) continue;
@@ -92,6 +92,23 @@ async function titelEinpassen(text, schrift, ordner, { maxBreite, maxZeilen, max
 
 // Testbare Abstände: Header, Logo und die App-Bedienelemente bleiben getrennt.
 export function grafikGeometrie({ format, titelHoehe, textHoehe, logoHoehe }) {
+  if (format === "cover-hochkant") {
+    // Alle wichtigen Inhalte im mittleren Quadrat: auch als kleine Kachel lesbar.
+    const oben = 460, unten = 1460;
+    const blockHoehe = titelHoehe + 48 + (textHoehe ? textHoehe + 48 : 0) + logoHoehe;
+    if (blockHoehe > unten - oben) return null;
+    const titelY = Math.round(oben + (unten - oben - blockHoehe) / 2);
+    return { oben, unten, blockHoehe, titelY,
+      logoY: titelY + blockHoehe - logoHoehe, logoUnten: titelY + blockHoehe };
+  }
+  if (format === "quer") {
+    const logoUnten = 570, logoY = logoUnten - logoHoehe;
+    const oben = 120, unten = logoY - 30;
+    const blockHoehe = titelHoehe + 20 + (textHoehe ? 30 + textHoehe : 0);
+    if (unten - oben < blockHoehe) return null;
+    return { labelY: 42, logoY, logoUnten, oben, unten, blockHoehe,
+      titelY: Math.round(oben + (unten - oben - blockHoehe) / 2) };
+  }
   const story = format === "story";
   const labelY = story ? 345 : 135;
   const logoUnten = story ? 1510 : 1230;
@@ -107,11 +124,14 @@ export function grafikGeometrie({ format, titelHoehe, textHoehe, logoHoehe }) {
   };
 }
 
-export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei", stufe = "voll", animation = false, dauer = 5 }) {
-  if (!["post", "story"].includes(format)) throw new Error("Ungültiges Grafikformat.");
+export async function textGrafik({ ausgabe, inhalt, layout, format = "post", stil = "dunkel", logoModus = "frei", stufe = "voll", animation = false, dauer = 5, hintergrund = null }) {
+  if (!["post", "story", "quer", "cover-hochkant"].includes(format)) throw new Error("Ungültiges Grafikformat.");
+  if (["quer", "cover-hochkant"].includes(format) && animation) throw new Error("Coverformat ist nur für Standbilder vorgesehen.");
   const palette = FARBEN[stil] ?? FARBEN.dunkel;
-  const story = format === "story";
-  const hoehe = story ? 1920 : 1350;
+  const cover = format === "cover-hochkant";
+  const story = format === "story" || cover;
+  const quer = format === "quer";
+  const hoehe = story ? 1920 : quer ? 608 : 1350;
   const breite = 1080;
   const ordner = path.dirname(ausgabe);
   const schrift = path.join(layout.schriftOrdner, "Inter-Bold.otf");
@@ -124,7 +144,7 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     logo = await logoGrafik({
       layout: {
         ...layout, logo: logoPfad,
-        logoBreite: Math.min(layout.logoBreite ?? 0.4, 0.4),
+        logoBreite: Math.min(layout.logoBreite ?? 0.4, quer ? 0.26 : 0.4),
         logoStil: logoModus === "karte" ? "karte" : "frei", logoPosition: "oben-links",
         karteFarbe: stil === "dunkel" ? "#1D1D1B" : "#F5F2ED",
       },
@@ -132,13 +152,14 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     });
   }
 
-  const body = inhalt.beschreibung ? textZeilen(inhalt.beschreibung, 34, story ? 6 : 5) : [];
-  const bodyZeile = 56;
+  const body = inhalt.beschreibung ? textZeilen(inhalt.beschreibung, cover ? 28 : quer ? 46 : 34, cover ? 3 : story ? 6 : quer ? 2 : 5) : [];
+  const bodyZeile = cover ? 68 : quer ? 34 : 56;
   const bodyHoehe = body.length * bodyZeile;
   const reserve = grafikGeometrie({ format, titelHoehe: 0, textHoehe: bodyHoehe, logoHoehe: logo?.sichtbar?.h ?? 0 });
-  const verfuegbar = reserve ? reserve.unten - reserve.oben - 40 - (bodyHoehe ? bodyHoehe + 54 : 0) : 0;
+  const verfuegbar = reserve ? reserve.unten - reserve.oben - (cover ? 48 + (logo?.sichtbar?.h ?? 0) : quer ? 20 : 40) - (bodyHoehe ? bodyHoehe + (cover ? 48 : quer ? 30 : 54) : 0) : 0;
   const titel = await titelEinpassen(inhalt.titel, schrift, ordner, {
-    maxBreite: 872, maxZeilen: story ? 6 : 5, maxHoehe: verfuegbar,
+    maxBreite: 872, maxZeilen: cover ? 4 : story ? 6 : quer ? 3 : 5, maxHoehe: verfuegbar,
+    ...(cover ? { start: 186, minimum: 118 } : {}),
   });
   const plan = grafikGeometrie({
     format, titelHoehe: titel.zeilen.length * titel.zeilenhoehe,
@@ -148,7 +169,7 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
 
   const titelY = plan.titelY;
   const linieY = titelY + titel.zeilen.length * titel.zeilenhoehe + 8;
-  const untertitelY = linieY + 94;
+  const untertitelY = linieY + (cover ? 24 : quer ? 45 : 94);
   // Das bestehende dreistufige Layout bleibt erhalten. Zusätzliche Zwischenstufen
   // zeigen erst einzelne Titelzeilen, dann eine von links wachsende Akzentlinie.
   const titelStufe = /^titel-(\d+)$/.exec(stufe);
@@ -181,15 +202,15 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     }
     filter.push(`drawtext=fontfile='${font}':textfile='${filename}':expansion=none:fontsize=${fontSize}:fontcolor=${farbe(fc)}:x=${posX}:y=${y}${alpha}`);
   };
-  await schreiben("label", inhalt.etikett, normal, 28, palette.akzent, 90, plan.labelY);
+  if (!cover) await schreiben("label", inhalt.etikett, normal, 28, palette.akzent, 90, plan.labelY);
   for (let i = 0; i < titelAnzahl; i++) {
     await schreiben(`titel-${i}`, titel.zeilen[i], schrift, titel.groesse, palette.text, 112, titelY + i * titel.zeilenhoehe);
   }
   for (let i = 0; i < (linienAnteil > 0 ? body.length : 0); i++) {
-    await schreiben(`text-${i}`, body[i], normal, 39, palette.sub, 112, untertitelY + i * bodyZeile);
+    await schreiben(`text-${i}`, body[i], normal, cover ? 52 : quer ? 26 : 39, palette.sub, 112, untertitelY + i * bodyZeile);
   }
-  const args = ["-y", "-v", "error", "-f", "lavfi", "-i",
-    `color=c=${farbe(palette.grund)}:s=${breite}x${hoehe}:r=25:d=${animation ? dauer : 1}`];
+  const args = hintergrund ? ["-y", "-v", "error", "-i", hintergrund]
+    : ["-y", "-v", "error", "-f", "lavfi", "-i", `color=c=${farbe(palette.grund)}:s=${breite}x${hoehe}:r=25:d=${animation ? dauer : 1}`];
   if (animation) {
     // Separate Mini-Ebene: Pixel werden anhand der Videozeit T aufgedeckt.
     // Anders als Zwischenbilder wächst die Linie bei jedem Frame.
@@ -200,7 +221,8 @@ export async function textGrafik({ ausgabe, inhalt, layout, format = "post", sti
     if (animation) args.push("-loop", "1", "-framerate", "25");
     args.push("-i", logo.datei);
   }
-  let graph = `[0:v]${filter.join(",")}[grund]`;
+  const bildFilter = hintergrund ? `scale=${breite}:${hoehe}:force_original_aspect_ratio=decrease,pad=${breite}:${hoehe}:(ow-iw)/2:(oh-ih)/2:color=0x1D1D1B,setsar=1,drawbox=x=0:y=0:w=iw:h=ih:color=black@0.6:t=fill,` : "";
+  let graph = `[0:v]${bildFilter}${filter.join(",")}[grund]`;
   let letzte = "grund";
   if (animation) {
     const w = body.length ? 700 : 430;
