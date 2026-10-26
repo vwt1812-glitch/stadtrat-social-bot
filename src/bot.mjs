@@ -1654,7 +1654,7 @@ async function texteingabe(auftrag, text) {
       const textNeu = text.trim();
       if (!textNeu) return tg.senden(auftrag.chatId, "Bitte einen Covertext eingeben.");
       const modus = auftrag.thumbnailTextModus ?? auftrag.thumbnail?.modus ?? "text";
-      auftraege.aendern(id, { thumbnailTextModus: null });
+      auftraege.aendern(auftrag.id, { thumbnailTextModus: null });
       return thumbnailBauen(auftrag, { ...auftrag.thumbnail, modus, text: textNeu, mitText: modus !== "text" });
     }
     case "quelle": {

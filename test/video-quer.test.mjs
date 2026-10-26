@@ -36,14 +36,16 @@ test("Hochkant bleibt vollständig auf der Querfläche; Ton und separate Coverfo
       "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { binaer: true });
     assert.ok(rgb[kanal] > rgb[2] + 40, [...rgb].join(","));
   }
-  const cover = await thumbnailsErstellen({ ordner: dir, video: original, layout: { schriftOrdner: path.resolve("assets/fonts") },
+  const cover = await thumbnailsErstellen({ ordner: dir, video: out, quelle: original, layout: { schriftOrdner: path.resolve("assets/fonts") },
     optionen: { modus: "frame", frameMs: 0, quer: true }, kanaele: [{ identifier: "instagram" }] });
   assert.deepEqual(Object.keys(cover.dateien).sort(), ["hochkant", "original", "quer"]);
   const q = await untersuche(cover.dateien.quer), h = await untersuche(cover.dateien.hochkant);
   assert.deepEqual([q.breite, q.hoehe, h.breite, h.hoehe], [1920, 1080, 1080, 1920]);
+  const frame = await untersuche(path.join(path.dirname(cover.dateien.original), "frame.jpg"));
+  assert.deepEqual([frame.breite, frame.hoehe], [180, 320]); // Frame aus unverziertem Original, nicht aus 16:9-Fassung.
   for (const quer of [false, true]) {
     const datei = path.join(dir, quer ? "foto-quer.jpg" : "foto-hoch.jpg");
-    await fotoCover({ ausgabe: datei, bild: cover.dateien.original, inhalt: { titel: "Mehr Transparenz", beschreibung: "Für Nürnberg" },
+    await fotoCover({ ausgabe: datei, bild: cover.dateien.hochkant, inhalt: { titel: "Mehr Transparenz", beschreibung: "Für Nürnberg" },
       layout: { schriftOrdner: path.resolve("assets/fonts"), logo: path.resolve("assets/logos/quer-hell.png") }, quer });
     const f = await untersuche(datei);
     assert.deepEqual([f.breite, f.hoehe], [1080, quer ? 608 : 1920]);
