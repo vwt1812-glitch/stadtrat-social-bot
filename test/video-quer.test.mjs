@@ -5,9 +5,25 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ausfuehren, rendern, untersuche } from "../src/video.mjs";
+import { ausfuehren, rendern, untersuche, querLayout, logoGrafik } from "../src/video.mjs";
 import { fotoCover, fotoCoverBereiche } from "../src/cover-foto.mjs";
 import { thumbnailsErstellen } from "../src/thumbnail.mjs";
+
+test("Querlayout reserviert die Seitenfläche und übernimmt keine automatische Hochkant-Position", () => {
+  const original = { breite: 1080, hoehe: 1920 }, masse = { breite: 1920, hoehe: 1080 };
+  const layout = { logo: "quer-hell.png", logoStil: "frei", logoBreite: 0.9,
+    logoPosition: "oben-links", lage: "oben", smartLogo: true, gesichter: [{ x: 0.3, y: 0.5, w: 0.2, h: 0.2 }] };
+  const vorher = structuredClone(layout);
+  const quer = querLayout(layout, original, masse, { lageAutomatisch: true });
+  assert.equal(quer.lage, null);
+  assert.equal(quer.logo, layout.logo);
+  assert.ok(quer.logoBreite * 1080 + 108 <= 656);
+  assert.equal(quer.smartLogo, false);
+  assert.deepEqual(layout, vorher);
+  const manuell = querLayout(layout, original, masse);
+  assert.equal(manuell.lage, "oben");
+  assert.equal(manuell.logoPosition, "unten-links");
+});
 
 test("Foto, Logo und Titel bleiben ohne Überdeckung in 4:5 und 3:4 sichtbar", () => {
   for (const balkenHoehe of [194, 324, 480]) {
@@ -40,6 +56,15 @@ test("Hochkant bleibt vollständig auf der Querfläche; Ton und separate Coverfo
     "color=c=blue:s=180x320:r=5:d=1,drawbox=x=0:y=0:w=iw:h=24:color=red:t=fill,drawbox=x=0:y=296:w=iw:h=24:color=green:t=fill",
     "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", original]);
   const vorher = await fs.readFile(original);
+  for (const logoStil of ["frei", "karte"]) {
+    for (const logoPosition of ["oben-links", "oben-rechts"]) {
+      const layout = querLayout({ logo: path.resolve("assets/logos/quer-hell.png"), logoBreite: 0.9,
+        logoStil, logoPosition, karteFarbe: "#1D1D1B" }, { breite: 180, hoehe: 320 }, { breite: 640, hoehe: 360 });
+      const logo = await logoGrafik({ layout, masse: { breite: 640, hoehe: 360 }, ordner: dir });
+      if (logoPosition.endsWith("links")) assert.ok(logo.sichtbar.x + logo.sichtbar.w <= 219);
+      else assert.ok(logo.sichtbar.x >= 421);
+    }
+  }
   await rendern({ eingabe: original, ausgabe: out, masse: { breite: 640, hoehe: 360, dauer: 1 }, layout: {},
     video: { encoder: "libx264", preset: "ultrafast", crf: "18" }, quer: true });
   const m = await untersuche(out);

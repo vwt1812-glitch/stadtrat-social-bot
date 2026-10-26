@@ -100,6 +100,15 @@ unscharfen Seitenflächen neu gerendert. Ton bleibt erhalten; Untertitel, Logo u
 für die Ausgabe neu gesetzt. Gleichzeitig wird die 9:16-Zuordnung für die konfigurierten
 Hochkant-Netzwerke aktiviert (standardmäßig Instagram/TikTok). Dieser Schalter kann weiterhin
 separat abgewählt werden. Zusätzliche Storys verwenden ebenfalls die 9:16-Fassung.
+Bereits als 9:16 angelieferte Videos behalten in der zusätzlichen Hochkantfassung ihr normales
+Layout: dieselbe Logo-Variante, Logogröße, Untertitelposition und Bauchbinde wie vor dem Umschalten.
+Sie durchlaufen nicht das umgestaltende Storylayout. Nur die Querfassung erhält ein eigenes Layout:
+Das Logo wird auf die verfügbare unscharfe Seitenfläche begrenzt. Eine automatisch für das
+Hochkantvideo gewählte obere Untertitelposition wird nicht auf Querformat übertragen; dort gilt
+die normale untere Position. Manuell gewählte Positionen bleiben wirksam. Bei manuellen oberen
+Untertiteln sitzt das Querlogo unten auf der Seitenfläche. Die Hochkant-Einstellungen des Auftrags
+werden dabei nicht verändert.
+
 Ein erneuter Klick auf **16:9 ✓** stellt das ursprüngliche Feedformat und die vorherige
 Hochkant-Auswahl wieder her. Nach Formatänderungen vorhandene Cover neu erzeugen und die Vorschau
 prüfen. Eine fehlgeschlagene Formatberechnung blockiert die Veröffentlichung bis zum erfolgreichen

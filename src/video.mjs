@@ -450,6 +450,24 @@ export function storyLayout(layout, original, masse = STORY_MASSE) {
   return ergebnis;
 }
 
+/** Eigene Gestaltung für ein Hochkantvideo auf der Querfläche. Original-Layout nicht verändern. */
+export function querLayout(layout, original, masse, { lageAutomatisch = false } = {}) {
+  const bild = bildRechteck(original, masse);
+  const kurz = Math.min(masse.breite, masse.hoehe);
+  const rand = Math.round(kurz * 0.05);
+  const lage = lageAutomatisch ? null : layout.lage;
+  const rechts = String(layout.logoPosition).includes("rechts");
+  const seite = rechts ? masse.breite - bild.rechts : bild.links;
+  // Karten benötigen zusätzlich Platz für Innenabstände und Schatten.
+  const zugabe = layout.logoStil === "frei" ? 0 : 108 * kurz / 1080;
+  const logoBreite = Math.min(layout.logoBreite ?? 0.48, Math.max(0.08, (seite - 2 * rand - zugabe) / kurz));
+  return { ...layout, lage, positionFest: undefined, logoBreite,
+    logoPosition: `${lage === "oben" ? "unten" : "oben"}-${rechts ? "rechts" : "links"}`,
+    // Die freie Seitenfläche ist fest reserviert; Gesichtskoordinaten des Originals gelten dort nicht.
+    smartLogo: false, bild: null, gesichter: [], layoutModus: "quer",
+  };
+}
+
 /** Fotos in der Story: höchstens 80 % der Höhe, damit das Logo des Fotos unter der Kopfzeile bleibt. */
 export const STORY_FOTO_HOEHE = 0.8;
 
