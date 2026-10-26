@@ -28,6 +28,8 @@ Videoformat-Schalter. Die Gestaltung wird als Status angezeigt, der Wechselbutto
 Zielvorlage. Er erscheint erst, wenn das Bild zusätzlichen Text hat. Der YouTube-Profilschalter
 erscheint nur, wenn ein YouTube-Kanal ausgewählt ist. **Titelbilder neu berechnen** aktualisiert
 die Bilder nach Video- oder Kanaländerungen; **Titelbilder herunterladen** liefert die Dateien.
+**Textposition im Hochkantbild** wählt bei Fotocovern Automatisch/Oben/Unten. Sie beeinflusst
+die Fotocover, nicht die Video-Untertitel und nicht die getrennte Textfläche der Quercover.
 
 ## Abschließende Bestätigung
 
