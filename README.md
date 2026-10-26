@@ -18,7 +18,7 @@ Der Redaktionsassistent funktioniert **ohne `ANTHROPIC_API_KEY` oder `OPENAI_API
 
 ### Titelbilder für Videos
 
-**🖼️ Titelbild** bietet einen Videoframe, eine Textgrafik im bestehenden Sharepic-Stil oder ein eigenes
+**🖼️ Video-Titelbild erstellen/bearbeiten** bietet einen Videoframe, eine Textgrafik im bestehenden Sharepic-Stil oder ein eigenes
 Bild. Covertext und Caption bleiben unabhängig. Der Bot erzeugt JPEGs unter 2 MiB in den passenden
 Größen: Instagram 1080×1920, YouTube 3840×2160, Shorts-Export 2160×3840. Auswählen, Vorschau prüfen,
 bei Bedarf Covertext ergänzen und als Datei herunterladen. Nach neuem Videorendern das Cover neu erzeugen.

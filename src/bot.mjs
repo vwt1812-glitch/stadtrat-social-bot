@@ -141,7 +141,7 @@ async function captionsInhalt(auftrag) {
   ]);
   if (config.caption.anbieter && liste.length) zeilen.push([knopf("🤖 Alle per KI anpassen", auftrag, "kia")]);
   if (liste.some((l) => l.zuLang)) zeilen.push([knopf("✂️ Zu lange automatisch kürzen", auftrag, "kka")]);
-  zeilen.push([knopf("✔️ Fertig", auftrag, "zurueck")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   return {
     text: "<b>Texte pro Kanal</b>\nOhne eigene Fassung gilt der Haupttext. ⚠️ = zu lang für das Netzwerk, ✂️ = eigene Fassung.\nAntippen zum Ansehen und Ändern.",
     reply_markup: { inline_keyboard: zeilen },
@@ -192,11 +192,11 @@ function bauchbindeMenue(auftrag) {
   const standard = standardBauchbinde();
   if (standard) zeilen.push([knopf(`👤 ${[standard.name, standard.funktion].filter(Boolean).join(" – ")}`, auftrag, "bb:std")]);
   zeilen.push([knopf("✏️ Anderer Name / Funktion", auftrag, "bb:text")]);
-  if (auftrag.bauchbinde) zeilen.push([knopf("🚫 Ohne Bauchbinde", auftrag, "bb:aus")]);
-  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  if (auftrag.bauchbinde) zeilen.push([knopf("🚫 Namenseinblendung entfernen", auftrag, "bb:aus")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   const jetzt = auftrag.bauchbinde ? `Jetzt: <b>${bauchbindeText(auftrag.bauchbinde)}</b>` : "Jetzt: keine";
   return {
-    text: `<b>Bauchbinde</b> – Name und Funktion, ${config.layout.bauchbindeStart} s nach Beginn für ${config.layout.bauchbindeDauer} s eingeblendet.\n${jetzt}`,
+    text: `<b>Name und Funktion im Video</b> (Bauchbinde)\n${config.layout.bauchbindeStart} s nach Beginn für ${config.layout.bauchbindeDauer} s eingeblendet.\n${jetzt}`,
     reply_markup: { inline_keyboard: zeilen },
   };
 }
@@ -208,7 +208,7 @@ const LAGE_TEXT = { oben: "⬆️ Oben", mitte: "↕️ Mitte", unten: "⬇️ U
 function lageMenue(auftrag) {
   const jetzt = auftrag.untertitelLage ?? "unten";
   const zeilen = Object.entries(LAGE_TEXT).map(([lage, text]) => [knopf(`${lage === jetzt ? "🔘" : "⚪"} ${text}`, auftrag, `pos:${lage}`)]);
-  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   return {
     text: "<b>Untertitel-Position</b> – „Unten“ liegt über Name und Caption von TikTok und Reels. Verdecken die Untertitel etwas Wichtiges (Gesicht, Schild), weiter nach oben schieben.",
     reply_markup: { inline_keyboard: zeilen },
@@ -271,11 +271,13 @@ function storyLayoutMenue(auftrag) {
     knopf(`${(auftrag.storyLogoPosition ?? "auto") === wert ? "🔘" : "⚪"} ${name}`, auftrag, `sl:${wert}`),
   ]);
   if (auftrag.storyText) {
-    zeilen.push([knopf("✏️ Bildtext-Position:", auftrag, "slmenu")]);
-    zeilen.push(["auto", "oben", "mitte", "unten"].map((wert) =>
-      knopf(`${(auftrag.storyTextPosition ?? "auto") === wert ? "🔘" : "⚪"} ${wert}`, auftrag, `stp:${wert}`)));
+    // Beschriftung steht im Text; kein wirkungsloser Überschriften-Button.
+    for (const wert of ["auto", "oben", "mitte", "unten"]) {
+      const name = { auto: "Automatisch", oben: "Oben", mitte: "Mitte", unten: "Unten" }[wert];
+      zeilen.push([knopf(`${(auftrag.storyTextPosition ?? "auto") === wert ? "🔘" : "⚪"} Bildtext: ${name}`, auftrag, `stp:${wert}`)]);
+    }
   }
-  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   return {
     text: "<b>Story-Layout</b>\nLogo bevorzugt auf freien unscharfen Flächen. Manuelle Positionen bleiben innerhalb der Instagram-/Facebook-Safe-Area und weichen bei Gesichtern gegebenenfalls aus. Nach einer Änderung kommt eine neue Vorschau.",
     reply_markup: { inline_keyboard: zeilen },
@@ -286,12 +288,14 @@ const datei = (auftrag, name) => path.join(auftrag.ordner, name);
 const HILFE = `<b>So funktioniert's</b>
 Schick mir
 • ein <b>Video</b> – am besten <b>als Datei</b> (📎 → Datei), dann bleibt die volle Qualität erhalten. Ich baue Logo und Untertitel ein.
-• ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zur Caption. Über <b>📱 Nur Story</b> und <b>✏️ Text ins Bild</b> kannst du eine reine Fotostory machen.
-• einfach <b>Text</b> – daraus wird ein Textbeitrag. Mit „🖼️ Grafik“ oder „📱 Storygrafik“ entsteht lokal eine fertige Grafik.
+• ein oder mehrere <b>Fotos</b> (als Album = Karussell). Ich setze das Logo drauf. Text in der Bildunterschrift wird zum Beitragstext. Über <b>📱 Ausschließlich als Story</b> und <b>✏️ Text auf Storyfoto ändern</b> kannst du eine reine Fotostory machen.
+• einfach <b>Text</b> – daraus wird ein Textbeitrag. Mit „🖼️ Beitragsgrafik“ oder „📱 Storygrafik“ entsteht lokal eine fertige Grafik.
 • eine <b>Sprachnachricht</b> – Whisper transkribiert sie lokal und du entscheidest über Textpost, Grafik oder Ideenspeicher.
 • einen <b>Antrag als PDF</b> – ich zeige dir Textauszüge für Posts und Sharepics, ohne unbelegte KI-Zusammenfassung.
 
-Danach kannst du Caption, Kunde, Kanäle, Collab-Partner, Reposts und Zeit anpassen und mit <b>Ja</b> posten.
+Danach kannst du Beitragstext, Kunde, Kanäle, Instagram-Mitautoren und Zeit anpassen.
+<b>Videoformat ändern</b> verändert das Video, <b>Video-Titelbild</b> nur dessen Vorschaubild.
+Veröffentlicht wird erst mit der abschließenden Bestätigung; bei einem Termin heißt sie <b>Termin bestätigen</b>.
 
 /idee Text – Gedanken für später speichern
 /ideen – deine gespeicherten Ideen wieder aufrufen
@@ -319,79 +323,99 @@ async function menueInhalt(auftrag) {
   }
   const quelle = {
     transkript: "\n<i>(einfacher Vorschlag aus dem Transkript)</i>",
-    hashtags: "\n<i>(noch ohne Text – über „Caption ändern“ ergänzen)</i>",
+    hashtags: "\n<i>(noch ohne Text – über „Beitragstext bearbeiten“ ergänzen)</i>",
   }[auftrag.captionQuelle] ?? "";
   const titel = auftrag.grafikAnimation ? (auftrag.nurStory ? "Story-Animation" : "Animierte Textgrafik") :
     auftrag.grafikModus ? (auftrag.nurStory ? "Storygrafik" : "Sharepic") :
     auftrag.antragVarianten?.length ? "Antrag – Textentwurf" :
-    auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Caption-Vorschlag";
+    auftrag.nurStory ? "Story-Vorschau" : art(auftrag) === "text" ? "Textbeitrag" : "Beitragstext-Vorschlag";
   const hinweise = [];
   try {
     const liste = auftrag.nurStory ? [] : laengen(auftrag, kanaele);
     const eigen = liste.filter((l) => l.eigen && !l.zuLang);
     if (eigen.length) hinweise.push(`✂️ Eigene Fassung: ${eigen.map((l) => `${html(l.kanal.name)} (${zahlText(l)})`).join(", ")}`);
     const zuLang = liste.filter((l) => l.zuLang);
-    if (zuLang.length) hinweise.push(`⚠️ Zu lang für ${zuLang.map((l) => `${html(l.kanal.name)} (${zahlText(l)})`).join(", ")} – unter „✂️ Pro Kanal“ anpassen`);
+    if (zuLang.length) hinweise.push(`⚠️ Zu lang für ${zuLang.map((l) => `${html(l.kanal.name)} (${zahlText(l)})`).join(", ")} – unter „✂️ Text je Kanal“ anpassen`);
   } catch (e) {
     hinweise.push(`⚠️ ${html(e.message)}`);
   }
   const text = [
-    auftrag.nurStory ? `<b>${titel}</b>\nDie Story erhält keine Feed-Caption. Text kannst du direkt aufs Foto setzen.`
+    auftrag.nurStory ? `<b>${titel}</b>\nDie Story erhält keine Beitragstext. Text kannst du direkt aufs Foto setzen.`
       : `<b>${titel}</b>${quelle}\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`,
     ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise,
   ].join("\n");
   const extra = {
-    video: auftrag.grafikAnimation ? [] : [knopf("📝 Untertitel", auftrag, "untertitel"), knopf("📍 Position", auftrag, "pos"), knopf(auftrag.bauchbinde ? "🪪 Bauchbinde ✓" : "🪪 Bauchbinde", auftrag, "bb")],
-    foto: auftrag.grafikModus ? [] : [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo drauf", auftrag, "logo")],
+    video: auftrag.grafikAnimation ? [] : [knopf("📝 Untertitel bearbeiten", auftrag, "untertitel"), knopf("📍 Untertitelposition", auftrag, "pos"), knopf("🪪 Name / Funktion im Video", auftrag, "bb")],
+    foto: auftrag.grafikModus ? [] : [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
   const zeilen = [
-    [knopf("✅ Jetzt posten", auftrag, "jetzt"), knopf("🕐 Planen", auftrag, "planen")],
+    [knopf("✅ Jetzt veröffentlichen", auftrag, "jetzt"), knopf("🕐 Termin wählen", auftrag, "planen")],
     ...(!auftrag.grafikModus && art(auftrag) === "text" ? [
-      [knopf("🖼️ Sharepic erstellen", auftrag, "grafik:post"), knopf("📱 Storygrafik", auftrag, "grafik:story")],
-      [knopf("🎞️ Animation", auftrag, "anim:post"), knopf("🎞️ Story-Animation", auftrag, "anim:story")],
+      [knopf("🖼️ Beitragsgrafik", auftrag, "grafik:post"), knopf("📱 Storygrafik", auftrag, "grafik:story")],
+      [knopf("🎞️ Beitragsanimation", auftrag, "anim:post"), knopf("🎞️ Storyanimation", auftrag, "anim:story")],
     ] : []),
     ...(auftrag.grafikModus ? [
-      [knopf(auftrag.grafikAnimation ? "🖼️ Zum Standbild" : "🎞️ Animieren",
+      [knopf(auftrag.grafikAnimation ? "🖼️ Animation ausschalten" : "🎞️ Grafik animieren",
         auftrag, `${auftrag.grafikAnimation ? "grafik" : "anim"}:${auftrag.nurStory ? "story" : "post"}`)],
-      [knopf(auftrag.nurStory ? "🖼️ Als Sharepic" : "📱 Als Story", auftrag,
-        `${auftrag.grafikAnimation ? "anim" : "grafik"}:${auftrag.nurStory ? "post" : "story"}`),
-        knopf("✏️ Grafiktext", auftrag, "grafiktext")],
+      [knopf(auftrag.nurStory ? "🖼️ Beitragsformat verwenden" : "📱 Storyformat verwenden", auftrag,
+        `${auftrag.grafikAnimation ? "anim" : "grafik"}:${auftrag.nurStory ? "post" : "story"}`)],
+      [knopf("✏️ Text in Grafik ändern", auftrag, "grafiktext")],
       [knopf("↩️ Zurück zum Text", auftrag, "grafik:text")],
     ] : []),
     ...(auftrag.antragVarianten?.length ? [[knopf("📄 Andere Antragspassage", auftrag, "antragmenu")]] : []),
-    [knopf("💾 Idee speichern", auftrag, "idee")],
-    [knopf("📚 Quelle / Stand", auftrag, "quelle"), ...(auftrag.versionen?.length ? [knopf("↶ Text zurück", auftrag, "undo")] : [])],
-    ...(art(auftrag) === "video" && !auftrag.nurStory ? [[knopf(auftrag.thumbnail ? "🖼️ Titelbild ✓" : "🖼️ Titelbild", auftrag, "thumb")]] : []),
-    ...(!auftrag.nurStory ? [[knopf(art(auftrag) === "text" ? "✏️ Text ändern" : "✏️ Caption ändern", auftrag, "caption"), ...(config.caption.anbieter ? [knopf("🔄 Neu formulieren", auftrag, "neu")] : [])]] : []),
-    ...(extra.length ? [extra] : []),
-    [knopf("📺 Kanäle", auftrag, "kanaele"), ...(!auftrag.nurStory && kanaele.length ? [knopf("✂️ Pro Kanal", auftrag, "pk")] : [])],
+    [knopf("💾 Als Idee speichern", auftrag, "idee"), knopf("📚 Quelle und Stand", auftrag, "quelle")],
+    ...(auftrag.versionen?.length ? [[knopf("↶ Letzte Textänderung zurück", auftrag, "undo")]] : []),
+    ...(art(auftrag) === "video" && !auftrag.nurStory ? [[knopf(auftrag.thumbnail ? "🖼️ Video-Titelbild bearbeiten" : "🖼️ Video-Titelbild erstellen", auftrag, "thumb")]] : []),
+    ...(!auftrag.nurStory ? [[knopf("✏️ Beitragstext bearbeiten", auftrag, "caption")], ...(config.caption.anbieter ? [[knopf("🤖 Beitragstext neu formulieren", auftrag, "neu")]] : [])] : []),
+    ...extra.map((taste) => [taste]),
+    [knopf("📺 Kanäle auswählen", auftrag, "kanaele"), ...(!auftrag.nurStory && kanaele.length ? [knopf("✂️ Text je Kanal", auftrag, "pk")] : [])],
   ];
   const optionen = [];
-  if (kundenAus(alle).length) optionen.push(knopf("👤 Kunde", auftrag, "kunde"));
-  if (!auftrag.nurStory && art(auftrag) !== "text" && kanaele.some((k) => k.identifier.startsWith("instagram"))) optionen.push(knopf("🤝 Collab", auftrag, "collab"));
-  if (!auftrag.nurStory && repostKandidaten(alle, kanaele).length) optionen.push(knopf("🔁 Repost", auftrag, "repost"));
-  if (art(auftrag) !== "text" && !auftrag.nurStory && kanaele.some((k) => STORY[k.identifier])) optionen.push(knopf(auftrag.story ? "📱 Story ✓" : "📱 Story", auftrag, "story"));
-  if (art(auftrag) !== "text" && alle.some((k) => STORY[k.identifier] && (auftrag.kunde == null || k.customer?.id === auftrag.kunde))) {
-    optionen.push(knopf(auftrag.nurStory ? "📱 Nur Story ✓" : "📱 Nur Story", auftrag, "nurst"));
+  if (kundenAus(alle).length) optionen.push(knopf("👤 Kunde auswählen", auftrag, "kunde"));
+  if (!auftrag.nurStory && art(auftrag) !== "text" && kanaele.some((k) => k.identifier.startsWith("instagram"))) optionen.push(knopf("🤝 Instagram-Mitautoren", auftrag, "collab"));
+  if (!auftrag.nurStory && repostKandidaten(alle, kanaele).length) optionen.push(knopf("🔁 Teilen durch andere Konten", auftrag, "repost"));
+  if (art(auftrag) !== "text" && !auftrag.nurStory && kanaele.some((k) => STORY[k.identifier])) optionen.push(knopf(auftrag.story ? "📱 Zusätzliche Story entfernen" : "📱 Zusätzliche Story hinzufügen", auftrag, "story"));
+  if (art(auftrag) !== "text" && !auftrag.grafikModus && alle.some((k) => STORY[k.identifier] && (auftrag.kunde == null || k.customer?.id === auftrag.kunde))) {
+    optionen.push(knopf(auftrag.nurStory ? "🖼️ Zurück zum Beitragsmodus" : "📱 Ausschließlich als Story", auftrag, "nurst"));
   }
   if (art(auftrag) === "foto" && auftrag.story && !auftrag.grafikModus) {
-    optionen.push(knopf(auftrag.storyText ? "✏️ Bildtext ✓" : "✏️ Text ins Bild", auftrag, "storytext"));
-    optionen.push(knopf("🖼️ Story-Layout", auftrag, "slmenu"));
+    optionen.push(knopf("✏️ Text auf Storyfoto ändern", auftrag, "storytext"));
+    optionen.push(knopf("🖼️ Logo- und Textposition", auftrag, "slmenu"));
   }
-  if (!auftrag.nurStory && hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))) {
-    optionen.push(knopf(auftrag.hochkant ? "📲 9:16 ✓" : "📲 9:16 für Insta", auftrag, "hochkant"));
+  if (!auftrag.nurStory && art(auftrag) === "video" && !auftrag.grafikAnimation &&
+      (auftrag.masse?.hoehe > auftrag.masse?.breite || (hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))))) {
+    optionen.push(knopf("📐 Videoformat ändern", auftrag, "videoformat"));
   }
-  if (!auftrag.nurStory && art(auftrag) === "video" && auftrag.masse?.hoehe > auftrag.masse?.breite) {
-    optionen.push(knopf(auftrag.quer ? "🖥️ 16:9 ✓" : "🖥️ Auch als 16:9", auftrag, "quer"));
-  }
-  if (optionen.length) zeilen.push(optionen);
-  zeilen.push([knopf("🗃️ Archivieren", auftrag, "archiv"), knopf("🗑️ Verwerfen", auftrag, "verwerfen")]);
+  for (const taste of optionen) zeilen.push([taste]);
+  zeilen.push([knopf("🗃️ Entwurf archivieren", auftrag, "archiv"), knopf("🗑️ Entwurf verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
 }
 
 function coverVideo(a) {
   return a.medien?.[0] ?? datei(a, "fertig.mp4");
+}
+
+async function videoFormatMenue(a) {
+  const kanaele = await gewaehlteKanaele(a);
+  const ziele = kanaele.filter((k) => config.hochkant.netze.includes(k.identifier));
+  const masse = feedMasse(a);
+  const zeilen = [];
+  if (a.masse?.hoehe > a.masse?.breite) {
+    zeilen.push([knopf(querAn(a) ? "↩️ Feed im Originalformat" : "🖥️ Feed auf Querformat umstellen", a, "quer")]);
+  }
+  if (hochkantMoeglich(a) && ziele.length) {
+    zeilen.push([knopf(hochkantAn(a) ? "📺 Überall Feedformat nutzen" : "📱 Zusätzlich Hochkant nutzen", a, "hochkant")]);
+  }
+  zeilen.push([knopf("↩️ Zur Vorschau", a, "zurueck")]);
+  return {
+    text: "<b>Videoformat</b>\n" +
+      `Feed: ${querAn(a) ? "Querformat (16:9)" : "Originalformat"}${masse ? ` · ${masse.breite}×${masse.hoehe} Pixel` : ""}\n` +
+      (hochkantAn(a) && ziele.length ? `Zusätzlich Hochkant (9:16) für: ${ziele.map((k) => html(k.name)).join(", ")}\n` : "Keine zusätzliche Hochkant-Zuordnung aktiv.\n") +
+      "\nEine Formatänderung erzeugt eine neue Videovorschau. Ein vorhandenes Titelbild danach neu berechnen.\n" +
+      "Das Vorschaubild des Videos bearbeitest du separat unter „Video-Titelbild“.",
+    reply_markup: { inline_keyboard: zeilen },
+  };
 }
 
 async function thumbnailMenue(a) {
@@ -400,23 +424,28 @@ async function thumbnailMenue(a) {
   const infos = kanaele.map((k) => {
     const z = thumbnailZiel(k, t, config.postiz.mastodonThumbnails);
     const profil = z.profil === "original" ? null : THUMBNAIL_PROFILE[z.profil];
-    return `• ${html(k.name)}: ${z.hinweis ? html(z.hinweis) : "Cover wird übertragen."}` + (profil ? ` (${profil.breite}×${profil.hoehe})` : "");
+    return `• ${html(k.name)}: ${z.hinweis ? html(z.hinweis) : "Eigenes Titelbild wird übertragen."}` + (profil ? ` (${profil.breite}×${profil.hoehe})` : "");
   });
   return {
-    text: "<b>Titelbild für Videos</b>\n" + (t ? `Gewählt: ${html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` : "Noch kein eigenes Titelbild.\n") +
-      "Foto + Balken: großes Foto, Logo oben, orange Überschrift auf dunklem Balken. Bild und Caption werden getrennt bearbeitet. Ein zusätzliches Quercover ändert das Videoformat nicht.\n" + infos.join("\n") +
+    text: "<b>Video-Titelbild</b>\n" + (t ? `Quelle: ${{ text: "Nur Text", frame: "Bild aus dem Video", bild: "Hochgeladenes Foto" }[t.modus] ?? html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` +
+      `Gestaltung: ${t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Textbalken"}\n` +
+      `Zusätzliche Querdatei zum Download: ${t.quer ? "ja" : "nein"}\n` : "Noch kein eigenes Titelbild.\n") +
+      "Foto mit Textbalken: Foto, Logo und Überschrift. Titelbildtext und Beitragstext werden getrennt bearbeitet. Die zusätzliche Querdatei dient nur dem Download und ändert das Videoformat nicht.\n" + infos.join("\n") +
       "\nJPEG-Ausgaben: höchstens 2 MiB. Kanäle ohne Cover-Unterstützung erhalten kein zusätzliches Feedbild. Shorts-Cover werden für Studio exportiert.",
     reply_markup: { inline_keyboard: [
-      [knopf("🎞️ Frame auswählen", a, "thumbframe"), knopf("📝 Textgrafik", a, "thumbgrafik")],
-      [knopf("📷 Eigenes Bild", a, "thumbbild")],
+      [knopf("🎞️ Bild aus Video auswählen", a, "thumbframe")],
+      [knopf("📝 Titelbild nur aus Text", a, "thumbgrafik")],
+      [knopf("📷 Foto als Titelbild hochladen", a, "thumbbild")],
       ...(t ? [
-        [knopf("✏️ Covertext / Bildtext", a, "thumbtext"), knopf("🔄 Neu erzeugen", a, "thumbneu")],
-        [knopf(t.quer ? "🖥️ Quercover 1920×1080 ✓" : "🖥️ Quercover ergänzen", a, "thumbquer")],
-        ...(t.modus !== "text" ? [[knopf(t.vorlage === "grafik" ? "Vorlage: Textgrafik" : "Vorlage: Foto + Balken", a, "thumbstil")]] : []),
-        [knopf(t.youtubeShort ? "YouTube: Shorts (Export)" : "YouTube: normales Video", a, "thumbshort")],
-        [knopf("📎 Cover herunterladen", a, "thumbexport"), knopf("🗑️ Titelbild entfernen", a, "thumboff")],
+        [knopf("✏️ Text im Titelbild ändern", a, "thumbtext")],
+        [knopf("🔄 Titelbilder neu berechnen", a, "thumbneu")],
+        [knopf(t.quer ? "🖥️ Zusätzliche Querdatei entfernen" : "🖥️ Querdatei zusätzlich erstellen", a, "thumbquer")],
+        ...(t.modus !== "text" && t.mitText ? [[knopf(t.vorlage === "grafik" ? "🖼️ Zu Foto mit Textbalken wechseln" : "📝 Zur Textgrafik wechseln", a, "thumbstil")]] : []),
+        ...(kanaele.some((k) => k.identifier === "youtube") ? [[knopf(t.youtubeShort ? "YouTube: zu normalem Video wechseln" : "YouTube: zu Shorts-Export wechseln", a, "thumbshort")]] : []),
+        [knopf("📎 Titelbilder herunterladen", a, "thumbexport")],
+        [knopf("🗑️ Eigenes Titelbild entfernen", a, "thumboff")],
       ] : []),
-      [knopf("↩️ Zurück", a, "zurueck")],
+      [knopf("↩️ Zur Vorschau", a, "zurueck")],
     ] },
   };
 }
@@ -453,17 +482,17 @@ async function thumbnailPruefen(a, kanaele) {
   if (!a.thumbnail || a.nurStory || art(a) !== "video" || a.postiz?.post) return null;
   const t = a.thumbnail;
   try {
-    if (JSON.stringify(await videoStand(coverVideo(a))) !== JSON.stringify(t.videoStand)) return "Das Video wurde geändert. Bitte unter Titelbild → Neu erzeugen die Vorschau aktualisieren.";
+    if (JSON.stringify(await videoStand(coverVideo(a))) !== JSON.stringify(t.videoStand)) return "Das Video wurde geändert. Bitte unter Video-Titelbild → Titelbilder neu berechnen die Vorschau aktualisieren.";
     for (const k of kanaele) {
       const z = thumbnailZiel(k, t, config.postiz.mastodonThumbnails);
-      if ((z.bild || z.zeit) && !t.dateien?.[z.profil]) return "Für die geänderte Kanalauswahl fehlt eine Covergröße. Bitte unter Titelbild → Neu erzeugen ergänzen.";
+      if ((z.bild || z.zeit) && !t.dateien?.[z.profil]) return "Für die geänderte Kanalauswahl fehlt eine Covergröße. Bitte unter Video-Titelbild → Titelbilder neu berechnen ergänzen.";
       if (z.bild) {
         const profil = z.profil === "original" ? originalProfil(await untersuche(coverVideo(a))) : THUMBNAIL_PROFILE[z.profil];
         const stat = await fs.stat(t.dateien[z.profil]);
         if (stat.size > profil.maxBytes) return "Ein Cover überschreitet das Dateilimit. Bitte neu erzeugen.";
       }
     }
-  } catch { return "Eine Titelbild-Datei fehlt. Bitte unter Titelbild → Neu erzeugen aktualisieren."; }
+  } catch { return "Eine Titelbild-Datei fehlt. Bitte unter Video-Titelbild → Titelbilder neu berechnen aktualisieren."; }
   return null;
 }
 
@@ -543,7 +572,7 @@ function quellenInhalt(a) {
     text: "<b>Quelle und Verfahrensstand</b>\n" + (zeilen.length ? zeilen.map(html).join("\n") : "Noch keine Quelle hinterlegt.") +
       (passage ? `\n\nOriginalauszug:\n<blockquote>${html(passage.text)}</blockquote>` : "") +
       "\n\nDer Stand wird manuell belegt; der Bot prüft keine Beschlüsse. Die Quellenkarte wird nicht automatisch in Caption oder Grafik übernommen.",
-    reply_markup: { inline_keyboard: [[knopf("✏️ Quelle bearbeiten", a, "quelltext"), knopf("↩️ Zurück", a, "zurueck")]] },
+    reply_markup: { inline_keyboard: [[knopf("✏️ Quelle bearbeiten", a, "quelltext"), knopf("↩️ Zur Vorschau", a, "zurueck")]] },
   };
 }
 
@@ -567,7 +596,7 @@ async function zeitMenue(auftrag) {
   const zeilen = vorschlaege().map(([text, d]) => [knopf(text, auftrag, `z:${Math.floor(d / 1000)}`)]);
   zeilen.push([knopf("🧭 Nächster freier Slot", auftrag, "slot")]);
   zeilen.push([knopf("⌨️ Andere Zeit eingeben", auftrag, "eigen")]);
-  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   await zeigeMenue(auftrag, { text: "<b>Wann soll der Beitrag erscheinen?</b>", reply_markup: { inline_keyboard: zeilen } });
 }
 
@@ -580,7 +609,7 @@ async function kanalMenue(auftrag) {
     ? [[knopf(`${auftrag.kanaele.includes(k.id) ? "✅" : "⬜"} ${k.name} (${k.identifier})`, auftrag, `k:${i}`)]]
     : []);
   const kunde = kundenAus(alle).find((k) => k.id === auftrag.kunde);
-  const unten = [knopf("✔️ Fertig", auftrag, "zurueck")];
+  const unten = [knopf("↩️ Zur Vorschau", auftrag, "zurueck")];
   if (kundenAus(alle).length) unten.unshift(knopf("👤 Kunde wechseln", auftrag, "kunde"));
   zeilen.push(unten);
   const titel = auftrag.nurStory ? "<b>Story-Kanäle (Instagram/Facebook)</b>" : kunde ? `<b>Kanäle von ${html(kunde.name)}</b>` : "<b>Auf welchen Kanälen posten?</b>";
@@ -591,7 +620,7 @@ async function kundeMenue(auftrag) {
   const kunden = kundenAus(await alleKanaele());
   const zeilen = kunden.map((k, i) => [knopf(`${auftrag.kunde === k.id ? "🔘" : "⚪"} ${k.name}`, auftrag, `ku:${i}`)]);
   zeilen.push([knopf(`${auftrag.kunde ? "⚪" : "🔘"} Alle Kanäle`, auftrag, "ku:alle")]);
-  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   await zeigeMenue(auftrag, {
     text: "<b>Für welchen Kunden?</b>\nDanach sind dessen Kanäle vorausgewählt.",
     reply_markup: { inline_keyboard: zeilen },
@@ -606,7 +635,7 @@ async function repostMenue(auftrag) {
     knopf(`${repost.kanaele.includes(k.id) ? "✅" : "⬜"} ${k.name} (${k.identifier})`, auftrag, `rp:${alle.indexOf(k)}`),
   ]);
   zeilen.push([knopf(`⏱️ Repost ${verzoegerungText(repost.verzoegerung)}`, auftrag, "rv")]);
-  zeilen.push([knopf("✔️ Fertig", auftrag, "zurueck")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   await zeigeMenue(auftrag, {
     text: "<b>Welche Konten sollen den Beitrag reposten?</b>\nGeht bei Postiz nur auf X und LinkedIn: Die gewählten Konten teilen den Beitrag, nachdem er erschienen ist. Ein Konto repostet sich nicht selbst.",
     reply_markup: { inline_keyboard: zeilen },
@@ -630,7 +659,7 @@ async function bestaetigung(auftrag, typ, zeit) {
   if (typ === "schedule" && zeit.getTime() < Date.now() + 60e3) return { fehler: "Die Zeit liegt in der Vergangenheit." };
   const liste = auftrag.nurStory ? [] : laengen(auftrag, kanaele);
   const zuLang = liste.filter((l) => l.zuLang);
-  if (zuLang.length) return { fehler: `Zu lang für ${zuLang.map((l) => `${l.kanal.name} (${zahlText(l)})`).join(", ")} – bitte unter „✂️ Pro Kanal“ anpassen.` };
+  if (zuLang.length) return { fehler: `Zu lang für ${zuLang.map((l) => `${l.kanal.name} (${zahlText(l)})`).join(", ")} – bitte unter „✂️ Text je Kanal“ anpassen.` };
   const eigen = liste.filter((l) => l.eigen).map((l) => html(l.kanal.name));
   const limit = limitFehler(auftrag, kanaele);
   if (limit) return { fehler: limit };
@@ -644,10 +673,10 @@ async function bestaetigung(auftrag, typ, zeit) {
         const z = thumbnailZiel(k, auftrag.thumbnail, config.postiz.mastodonThumbnails);
         return z.hinweis ? `🖼️ ${html(k.name)}: ${html(z.hinweis)}` : `🖼️ ${html(k.name)}: eigenes Titelbild`;
       }) : []),
-      ...(eigen.length ? [`✂️ Eigene Fassung für ${eigen.join(", ")} (über „Zurück → Pro Kanal“ ansehen)`] : []),
+      ...(eigen.length ? [`✂️ Eigene Fassung für ${eigen.join(", ")} (über „Weiter bearbeiten → Text je Kanal“ ansehen)`] : []),
       ...(!auftrag.nurStory ? [`<blockquote expandable>${html(auftrag.caption)}</blockquote>`] : []),
     ].join("\n"),
-    reply_markup: { inline_keyboard: [[knopf("✅ Ja, posten", auftrag, "ja"), knopf("↩️ Zurück", auftrag, "zurueck")]] },
+    reply_markup: { inline_keyboard: [[knopf(typ === "now" ? "✅ Jetzt veröffentlichen" : "✅ Termin bestätigen", auftrag, "ja")], [knopf("✏️ Weiter bearbeiten", auftrag, "zurueck")]] },
   };
 }
 
@@ -706,7 +735,7 @@ async function verarbeiten(id, fileId) {
     }
     await fs.writeFile(datei(auftrag, "untertitel.srt"), formatSrt(cues));
 
-    await schritt(auftrag, "✍️ Schreibe Caption-Vorschlag …");
+    await schritt(auftrag, "✍️ Schreibe Beitragstext-Vorschlag …");
     const vorschlag = await captionVorschlag({ art: "video", transkript: volltext(cues) }, config.caption);
     if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ KI nicht erreichbar (${html(vorschlag.fehler)}) – einfacher Vorschlag stattdessen.`);
     auftraege.aendern(id, { caption: vorschlag.text, captionQuelle: vorschlag.quelle });
@@ -920,7 +949,7 @@ async function verarbeiteFotos(id) {
     // Eigener Text in der Bildunterschrift hat Vorrang vor einem Vorschlag
     let vorschlag = einfacherVorschlag({ notizen: auftrag.notizen }, config.caption.hashtags);
     if (vorschlag.quelle !== "eigene" && config.caption.anbieter) {
-      await schritt(auftrag, "✍️ Schreibe Caption-Vorschlag …");
+      await schritt(auftrag, "✍️ Schreibe Beitragstext-Vorschlag …");
       vorschlag = await captionVorschlag({ art: "foto", bilder: fuerKi }, config.caption);
       if (vorschlag.fehler) await tg.senden(auftrag.chatId, `⚠️ KI nicht erreichbar (${html(vorschlag.fehler)}).`);
     }
@@ -994,7 +1023,7 @@ async function textZuGrafik(auftrag, format = "post", quelle = null) {
 function antragMenue(auftrag) {
   const zeilen = auftrag.antragVarianten.map((v, i) =>
     [knopf(`${i === (auftrag.antragIndex ?? 0) ? "🔘" : "⚪"} ${v.titel.slice(0, 48)}`, auftrag, `av:${i}`)]);
-  zeilen.push([knopf("↩️ Zurück", auftrag, "zurueck")]);
+  zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   return {
     text: "<b>Textstellen aus deinem Antrag</b>\nKeine KI-Zusammenfassung: Die Texte werden aus dem PDF übernommen, längere Stellen mit […] gekennzeichnet. Bitte den Wortlaut und den Kontext prüfen.",
     reply_markup: { inline_keyboard: zeilen },
@@ -1131,6 +1160,10 @@ async function knopfGedrueckt(cq) {
   };
 
   switch (aktion) {
+    case "videoformat":
+      if (art(auftrag) !== "video" || auftrag.nurStory || auftrag.grafikAnimation) return antwort("Videoformate sind hier nicht verfügbar.", true);
+      await zeigeMenue(auftrag, await videoFormatMenue(auftrag));
+      return antwort();
     case "thumb":
       if (art(auftrag) !== "video" || auftrag.nurStory) return antwort("Titelbilder sind für Feed-Videos vorgesehen.", true);
       await zeigeMenue(auftrag, await thumbnailMenue(auftrag));
@@ -1140,7 +1173,7 @@ async function knopfGedrueckt(cq) {
       const masse = await untersuche(coverVideo(auftrag));
       auftraege.aendern(id, { wartetAuf: "thumbnailFrame" });
       await antwort();
-      return tg.senden(auftrag.chatId, `Zeit innerhalb des fertigen Videos schicken: Sekunden oder MM:SS, z. B. 3.5. Videolänge: ${masse.dauer.toFixed(1)} s. Mit „Covertext“ kannst du danach eine Überschrift ergänzen.`);
+      return tg.senden(auftrag.chatId, `Zeit innerhalb des fertigen Videos schicken: Sekunden oder MM:SS, z. B. 3.5. Videolänge: ${masse.dauer.toFixed(1)} s. Mit „Text im Titelbild ändern“ kannst du danach eine Überschrift ergänzen.`);
     }
     case "thumbgrafik":
     case "thumbtext":
@@ -1150,7 +1183,7 @@ async function knopfGedrueckt(cq) {
     case "thumbbild":
       auftraege.aendern(id, { wartetAuf: "thumbnailBild" });
       await antwort();
-      return tg.senden(auftrag.chatId, "Schick ein JPG oder PNG als Foto oder Datei (max. 12 MB). Es wird als Titelbild verwendet, kein neuer Foto-Beitrag. Mit „Covertext“ kannst du danach Text ergänzen.");
+      return tg.senden(auftrag.chatId, "Schick ein JPG oder PNG als Foto oder Datei (max. 12 MB). Es wird als Titelbild verwendet, kein neuer Foto-Beitrag. Mit „Text im Titelbild ändern“ kannst du danach Text ergänzen.");
     case "thumbneu":
     case "thumbshort":
     case "thumbquer":
@@ -1208,7 +1241,7 @@ async function knopfGedrueckt(cq) {
       const a = auftraege.rueckgaengig(id);
       if (!a) return antwort("Keine frühere Textfassung vorhanden.");
       await neuesMenue(a);
-      return antwort("Caption, Kanaltexte und Quelle zurückgesetzt. Bildtext und gerenderte Medien bleiben separat.", true);
+      return antwort("Beitragstext, Kanaltexte und Quelle zurückgesetzt. Bildtext und gerenderte Medien bleiben separat.", true);
     }
     case "quelle":
       await zeigeMenue(auftrag, quellenInhalt(auftrag));
