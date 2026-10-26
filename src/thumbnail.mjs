@@ -8,16 +8,16 @@ import { grafikInhalt } from "./redaktion.mjs";
 // Feste Ausgabeprofile sind unsere Defaults, nicht die Mindestgrößen aller Plattformen.
 // Unter 2 MiB hält die JPEGs auch für konservativ konfigurierte Uploads klein.
 export const THUMBNAIL_PROFILE = {
-  hochkant: { breite: 1080, hoehe: 1920, maxBytes: 2 * 1024 ** 2, format: "story" },
+  hochkant: { breite: 1080, hoehe: 1920, maxBytes: 2 * 1024 ** 2, format: "cover-hochkant" },
   youtube: { breite: 3840, hoehe: 2160, maxBytes: 2 * 1024 ** 2, format: "quer" },
-  "youtube-short": { breite: 2160, hoehe: 3840, maxBytes: 2 * 1024 ** 2, format: "story" },
+  "youtube-short": { breite: 2160, hoehe: 3840, maxBytes: 2 * 1024 ** 2, format: "cover-hochkant" },
 };
 
 export function originalProfil(masse) {
   const faktor = 1920 / Math.max(masse.breite, masse.hoehe);
   return { breite: Math.max(2, Math.round(masse.breite * faktor / 2) * 2),
     hoehe: Math.max(2, Math.round(masse.hoehe * faktor / 2) * 2), maxBytes: 2 * 1024 ** 2,
-    format: masse.breite > masse.hoehe ? "quer" : "story" };
+    format: masse.breite > masse.hoehe ? "quer" : masse.breite === masse.hoehe ? "story" : "cover-hochkant" };
 }
 
 export function thumbnailZiel(kanal, { modus, youtubeShort = false } = {}, mastodonPatch = false) {

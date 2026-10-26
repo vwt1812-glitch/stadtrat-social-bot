@@ -8,6 +8,20 @@ import { THUMBNAIL_PROFILE, originalProfil, thumbnailZiel, frameZeit, coverBedar
 import { untersuche, ausfuehren } from "../src/video.mjs";
 import { Postiz } from "../src/postiz.mjs";
 import { ladeConfig } from "../src/config.mjs";
+import { grafikGeometrie } from "../src/grafik-text.mjs";
+
+test("Mobile Cover behalten Titel und Logo auch im mittigen Quadrat", () => {
+  assert.equal(THUMBNAIL_PROFILE.hochkant.format, "cover-hochkant");
+  assert.equal(THUMBNAIL_PROFILE["youtube-short"].format, "cover-hochkant");
+  assert.equal(originalProfil({ breite: 1080, hoehe: 1920 }).format, "cover-hochkant");
+  for (const titelHoehe of [230, 460, 600]) {
+    const p = grafikGeometrie({ format: "cover-hochkant", titelHoehe, textHoehe: 136, logoHoehe: 92 });
+    assert.ok(p.titelY >= 420);
+    assert.ok(p.logoUnten <= 1500);
+    assert.ok(p.logoY > p.titelY + titelHoehe + 136);
+  }
+  assert.equal(grafikGeometrie({ format: "cover-hochkant", titelHoehe: 900, textHoehe: 136, logoHoehe: 92 }), null);
+});
 
 test("Mastodon bleibt trotz alter Direkt-Tokens standardmäßig bei Postiz", (t) => {
   const werte = { TELEGRAM_BOT_TOKEN: "test", POSTIZ_URL: "https://postiz.invalid", POSTIZ_API_KEY: "test",

@@ -26,8 +26,24 @@ Die eigene 2-MiB-Grenze ist bewusst konservativer. Shorts-Cover sind laut Hilfe 
 verfügbar; die Anzeige kann je Oberfläche variieren. Der Bot behauptet dafür keine bestätigte API-Übernahme.
 
 **Instagram:** Die API unterstützt Reelcover per Bildadresse oder Framezeit. Die 1080×1920-Ausgabe
-ist unser 9:16-Arbeitsprofil. Wichtige Texte bleiben im zentralen Bereich des Storylayouts, weil Raster
-und Feed anders zuschneiden können. Die 2-MiB-Grenze ist ein eigener Arbeitswert, kein behauptetes API-Maximum.
+ist unser 9:16-Arbeitsprofil, keine vorgeschriebene Mindestauflösung. Metas Consumer-Hilfe nennt
+für Cover außerdem 420×654 px; diese Angabe ist nicht mit einer festen API-Uploadgröße gleichzusetzen.
+Die Meta-Seiten waren beim erneuten Abruf am 25.10.2026 mit HTTP 429 gesperrt; die dortigen
+Detailangaben konnten deshalb nicht erneut direkt bestätigt werden.
+Die 2-MiB-Grenze ist ein eigener Arbeitswert, kein behauptetes API-Maximum.
+
+### Hochkant-Cover auf dem Handy
+
+Hochkant-Cover verwenden eine eigene Standbildvorlage, nicht mehr die Storygrafik. Die Titelgröße
+liegt bei 118–186 px auf dem 1080-px-Arbeitsmotiv statt bisher höchstens 102 px. Ist der Titel zu lang,
+wird eine Kürzung verlangt statt ihn für das Handy unlesbar klein zu setzen. Die kleinteilige Kopfzeile
+entfällt, Erklärungstext hat höchstens drei Zeilen. Text und Logo liegen zusammen innerhalb von
+y=460 bis y=1460: Damit bleiben sie auch in einem mittigen quadratischen Ausschnitt (y=420 bis 1500)
+erhalten. Das ist unsere defensive Gestaltung, keine Zusage über jede Plattformansicht oder einen
+manuell verschobenen Zuschnitt. Bei 3:4 und 4:5 bleibt dieser Bereich ebenfalls sichtbar.
+Die Ausgabe bleibt 1080×1920 px; YouTube Shorts erhält denselben Aufbau mit 2160×3840 px.
+Mehr Pixel ändern die Schriftgröße in einer kleinen Handy-Kachel nicht. Entscheidend sind große
+Schrift und kurze Aussagen. Quercover und reguläre Storygrafiken behalten ihre bisherigen Vorlagen.
 
 **Mastodon:** Es gibt keine universelle vorgeschriebene Thumbnail-Pixelgröße. Instanzgrenzen und Verarbeitung
 bleiben maßgeblich; das API-Feld ist `thumbnail` als Multipart-Datei. Der untersuchte Postiz-Provider lädt
@@ -84,6 +100,8 @@ auf der konkreten Instanz. Das Flag ohne angepassten Provider würde weiterhin i
 - YouTube-API: https://developers.google.com/youtube/data/reference/rest/v3/thumbnails/set
 - Postiz YouTube: https://docs.postiz.com/public-api/providers/youtube
 - Meta-Beispiel, Reelcover: https://github.com/fbsamples/reels_publishing_apis/blob/main/insta_reels_publishing_api_sample/README.md
+- Instagram Consumer-Hilfe: https://help.instagram.com/1038071743007909
+- Meta Media-Referenz: https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media/
 - Postiz Medienfelder: https://docs.postiz.com/public-api/posts/create#video-cover-frame-thumbnailtimestamp
 - Mastodon Upload: https://docs.joinmastodon.org/methods/media/
 - Mastodon Instanzgrenzen: https://docs.joinmastodon.org/entities/Instance/
