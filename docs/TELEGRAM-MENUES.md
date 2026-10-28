@@ -14,6 +14,14 @@ Aktionen stehen allein in einer Zeile, statt neben mehreren anderen Schaltern ge
 
 ## Videoformat
 
+**Logo entfernen/hinzufügen** gibt es bei Fotos und Videos, auch im reinen Storymodus.
+Bei Videos wird nach jedem Umschalten das Original erneut auf Gesichter geprüft und die
+Untertitelposition automatisch neu gewählt. Ohne Logo ist zusätzlich der ehemalige Logobereich
+unterhalb der oberen Bedienleiste verfügbar. Eine zusätzliche 9:16-Fassung wird ebenfalls neu
+erstellt und mit den umgerechneten Gesichtspositionen geprüft. Die Untertiteltexte bleiben erhalten.
+Ohne verfügbare Gesichtserkennung gilt die Standardposition; anschließend lässt sich die Position
+weiterhin manuell ändern. Die Auswahl gilt für die Videoeinblendung, nicht für eigene Titelbilder.
+
 **Videoformat ändern** öffnet eine Übersicht mit aktuellen Feedmaßen und der zusätzlichen
 Hochkant-Zuordnung. **Feed auf Querformat umstellen** beziehungsweise **Feed im Originalformat**
 ersetzt den unklaren Schalter „16:9 ✓“. **Zusätzlich Hochkant nutzen** beziehungsweise
