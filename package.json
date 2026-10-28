@@ -12,6 +12,6 @@
   "dependencies": {
     "@anthropic-ai/sdk": "1.0.0",
     "openai": "7.41.0",
-    "twitter-text": "3.1.0"
+    "@ambassify/twitter-text": "4.0.0"
   }
 }

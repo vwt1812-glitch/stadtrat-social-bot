@@ -86,6 +86,23 @@ test("Zeichen zählen wie Postiz", () => {
   assert.equal(zeichenZahl("Grüße 🚲 https://example.org/lang/lang/lang", "mastodon-direkt"), 31);
 });
 
+test("X-Zeichenzählung bleibt nach dem Bibliothekswechsel kompatibel", () => {
+  // Referenzwerte von twitter-text 3.1.0 vor dem Wechsel: insbesondere
+  // Unicode-Normalisierung, zusammengesetzte Emojis und URL-Grenzen erhalten.
+  const faelle = [
+    ["", 0], ["Grüße aus Nürnberg!", 19], ["Gru\u0308ße", 5],
+    ["🚲", 2], ["👨‍👩‍👧‍👦", 2], ["👍🏽", 2], ["🇩🇪", 2], ["中文", 4],
+    ["Mehr: https://example.org/ein/sehr/langer/pfad?mit=parametern", 29],
+    ["Schau auf example.com vorbei.", 41], ["Mail: lukas@example.com", 23],
+    ["(https://example.org/test).", 26],
+    ["https://example.org/a https://example.org/b", 47],
+    ["https://münchen.de/straße", 23], ["@stadtrat #Nürnberg", 19],
+    ["a".repeat(280), 280], ["a".repeat(281), 281],
+    ["🚲".repeat(140), 280], ["🚲".repeat(141), 282],
+  ];
+  for (const [text, erwartet] of faelle) assert.equal(zeichenZahl(text, "x"), erwartet, text);
+});
+
 test("Postiz-Adresse mit oder ohne /api", () => {
   assert.equal(apiBasis("https://postiz.example.org"), "https://postiz.example.org/api/public/v1");
   assert.equal(apiBasis("http://localhost:5000/api/"), "http://localhost:5000/api/public/v1");
