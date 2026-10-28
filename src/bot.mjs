@@ -203,11 +203,14 @@ function bauchbindeMenue(auftrag) {
 
 // ---------- Lage der Untertitel ----------
 
-const LAGE_TEXT = { oben: "⬆️ Oben", mitte: "↕️ Mitte", unten: "⬇️ Unten (Standard)" };
+const LAGE_TEXT = { oben: "⬆️ Oben", mitte: "↕️ Mitte", unten: "⬇️ Unten (Standard)", logobereich: "⬆️ Im freien Logobereich" };
+
+// Ältere Videoentwürfe haben kein mitLogo-Feld und behalten ihr bisheriges Logo.
+const videoMitLogo = (auftrag) => auftrag.mitLogo !== false;
 
 function lageMenue(auftrag) {
   const jetzt = auftrag.untertitelLage ?? "unten";
-  const zeilen = Object.entries(LAGE_TEXT).map(([lage, text]) => [knopf(`${lage === jetzt ? "🔘" : "⚪"} ${text}`, auftrag, `pos:${lage}`)]);
+  const zeilen = Object.entries(LAGE_TEXT).filter(([lage]) => lage !== "logobereich" || !videoMitLogo(auftrag)).map(([lage, text]) => [knopf(`${lage === jetzt ? "🔘" : "⚪"} ${text}`, auftrag, `pos:${lage}`)]);
   zeilen.push([knopf("↩️ Zur Vorschau", auftrag, "zurueck")]);
   return {
     text: "<b>Untertitel-Position</b> – „Unten“ liegt über Name und Caption von TikTok und Reels. Verdecken die Untertitel etwas Wichtiges (Gesicht, Schild), weiter nach oben schieben.",
@@ -218,6 +221,7 @@ function lageMenue(auftrag) {
 /** Layout für diesen Auftrag: Einstellungen aus der .env plus gewählte Lage der Untertitel. */
 const layoutFuer = (auftrag) => ({
   ...config.layout,
+  logo: videoMitLogo(auftrag) ? config.layout.logo : null,
   lage: auftrag.untertitelLage ?? null,
   gesichter: auftrag.gesichter ?? [],
   // Reguläre Beiträge behalten ihr Layout; für Hochkantvideos vermeiden wir zusätzlich Gesichter.
@@ -345,7 +349,7 @@ async function menueInhalt(auftrag) {
     ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise,
   ].join("\n");
   const extra = {
-    video: auftrag.grafikAnimation ? [] : [knopf("📝 Untertitel bearbeiten", auftrag, "untertitel"), knopf("📍 Untertitelposition", auftrag, "pos"), knopf("🪪 Name / Funktion im Video", auftrag, "bb")],
+    video: auftrag.grafikAnimation ? [] : [knopf(videoMitLogo(auftrag) ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo"), knopf("📝 Untertitel bearbeiten", auftrag, "untertitel"), knopf("📍 Untertitelposition", auftrag, "pos"), knopf("🪪 Name / Funktion im Video", auftrag, "bb")],
     foto: auftrag.grafikModus ? [] : [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
@@ -716,7 +720,7 @@ async function verarbeiten(id, fileId) {
     // am Gesicht vorbeisetzen. Für Untertitel bleibt die bisherige Hochkant-Logik.
     await schritt(auftrag, "🙂 Prüfe die Gesichtsposition …");
     const funde = await gesichtSuchen(original, config.gesicht);
-    const zuverlaessig = funde?.gesichter?.length >= Math.max(2, funde.bilder * 0.4);
+    const zuverlaessig = funde?.gesichter?.length >= Math.max(2, (funde?.bilder ?? 0) * 0.4);
     auftrag = auftraege.aendern(id, { gesichter: zuverlaessig ? funde.gesichter : [] });
     if (masse.hoehe > masse.breite && funde) {
       const wahl = lageWaehlen(funde, { masse, layout: config.layout });
@@ -803,7 +807,11 @@ async function storyFassung(auftrag) {
   // einschließlich Logo-Variante und Untertitelposition. Kein Story-Logo-Wechsel.
   const nativ = querAn(auftrag) && istStoryFormat(auftrag.masse);
   const masse = nativ ? auftrag.masse : { ...STORY_MASSE, dauer: auftrag.masse.dauer };
-  const layout = nativ ? layoutFuer(auftrag) : storyLayout(layoutFuer(auftrag), auftrag.masse, masse);
+  let layout = nativ ? layoutFuer(auftrag) : storyLayout(layoutFuer(auftrag), auftrag.masse, masse);
+  if (!nativ && auftrag.untertitelAuto) {
+    const wahl = lageWaehlen({ bilder: auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
+    layout = { ...layout, lage: wahl.lage === "unten" ? null : wahl.lage };
+  }
   const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
   let ass = null;
   if (cues.length) {
@@ -850,13 +858,25 @@ async function storyAktualisieren(auftrag) {
   return auftrag;
 }
 
-async function renderUndVorschau(id) {
+async function renderUndVorschau(id, { gesichtNeu = false } = {}) {
   let auftrag = auftraege.aendern(id, { status: "arbeitet" });
   if (!auftrag.statusNachricht) {
     const status = await tg.senden(auftrag.chatId, "🎬 …");
     auftrag = auftraege.aendern(id, { statusNachricht: status.message_id });
   }
   try {
+    if (gesichtNeu) {
+      await schritt(auftrag, "🙂 Prüfe die Gesichtsposition und setze die Untertitel neu …");
+      const funde = await gesichtSuchen(auftrag.original, config.gesicht);
+      const zuverlaessig = funde?.gesichter?.length >= Math.max(2, (funde?.bilder ?? 0) * 0.4);
+      const wahl = lageWaehlen(funde, { masse: auftrag.masse, layout: layoutFuer(auftrag) });
+      auftrag = auftraege.aendern(id, {
+        gesichter: zuverlaessig ? funde.gesichter : [],
+        gesichtBilder: funde?.bilder ?? 0, untertitelAuto: true,
+        untertitelLage: wahl.lage === "unten" ? null : wahl.lage,
+        lageAutomatisch: wahl.lage !== "unten", gesichtHinweise: wahl.hinweise,
+      });
+    }
     await schritt(auftrag, "🎬 Baue Logo und Untertitel ein …");
     const masse = feedMasse(auftrag);
     const layout = querAn(auftrag)
@@ -1409,6 +1429,14 @@ async function knopfGedrueckt(cq) {
       });
       return antwort();
     case "logo":
+      if (auftrag.grafikModus || !["foto", "video"].includes(art(auftrag))) return antwort("Logo ist hier nicht umschaltbar.", true);
+      if (art(auftrag) === "video") {
+        auftrag = auftraege.aendern(id, { mitLogo: !videoMitLogo(auftrag), status: "arbeitet",
+          statusNachricht: null, plan: null, hochgeladen: null, storyHochgeladen: null, videoFormatFehler: true });
+        await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
+        einreihen(() => renderUndVorschau(id, { gesichtNeu: true }));
+        return antwort("Logo wird geändert und Untertitel werden neu platziert …");
+      }
       auftrag = auftraege.aendern(id, { mitLogo: !auftrag.mitLogo, statusNachricht: null });
       await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
       einreihen(() => fotosRendernUndVorschau(id));
@@ -1526,13 +1554,13 @@ async function knopfGedrueckt(cq) {
         return antwort();
       }
       const lage = arg === "unten" ? null : arg;
-      if (!LAGE_TEXT[arg] || lage === (auftrag.untertitelLage ?? null)) {
+      if (!LAGE_TEXT[arg] || (arg === "logobereich" && videoMitLogo(auftrag)) || lage === (auftrag.untertitelLage ?? null)) {
         await zeigeMenue(auftrag);
         return antwort("Bleibt, wie es ist.");
       }
       await antwort();
-      const info = { oben: "Untertitel kommen nach oben.", mitte: "Untertitel kommen in die Mitte.", unten: "Untertitel kommen wieder nach unten." }[arg];
-      return neuRendern(auftraege.aendern(id, { untertitelLage: lage, lageAutomatisch: false }), info);
+      const info = { oben: "Untertitel kommen nach oben.", mitte: "Untertitel kommen in die Mitte.", unten: "Untertitel kommen wieder nach unten.", logobereich: "Untertitel kommen in den freien Logobereich." }[arg];
+      return neuRendern(auftraege.aendern(id, { untertitelLage: lage, lageAutomatisch: false, untertitelAuto: false }), info);
     }
     case "nurst": {
       const alle = await alleKanaele();

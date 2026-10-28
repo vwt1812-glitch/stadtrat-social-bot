@@ -218,7 +218,7 @@ export function untertitelGroesse({ breite, hoehe }) {
 }
 
 /** Wählbare Lagen pro Video; „unten“ ist die Einstellung aus der .env. */
-export const UNTERTITEL_LAGEN = { oben: { hochkant: 0.62, quer: 0.8 }, mitte: { hochkant: 0.47, quer: 0.42 } };
+export const UNTERTITEL_LAGEN = { oben: { hochkant: 0.62, quer: 0.8 }, mitte: { hochkant: 0.47, quer: 0.42 }, logobereich: { hochkant: 0.80, quer: 0.8 } };
 
 /**
  * Abstand der Untertitel vom unteren Rand (Anteil der Bildhöhe) nach Format und gewählter Lage.
@@ -226,6 +226,10 @@ export const UNTERTITEL_LAGEN = { oben: { hochkant: 0.62, quer: 0.8 }, mitte: { 
  */
 export function untertitelPosition(o) {
   const hochkant = o.hoehe > o.breite;
+  if (o.lage === "logobereich" && hochkant) {
+    // Den ganzen Block unter der oberen UI-Leiste halten, auch bei zwei Zeilen.
+    return 1 - 0.15 - untertitelGroesse(o) * 1.3 * (o.zeilen === 1 ? 1 : 2) / o.hoehe;
+  }
   const lage = UNTERTITEL_LAGEN[o.lage]?.[hochkant ? "hochkant" : "quer"];
   // positionFest: von der Story-Fassung vorgegeben (direkt unter dem Bild); 📍 Position geht vor
   return lage ?? o.positionFest ?? (hochkant ? o.position : (o.positionQuer ?? 0.08));

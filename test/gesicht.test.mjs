@@ -52,3 +52,24 @@ test("Ohne OpenCV bleibt die Gesichtssuche einfach aus", async () => {
   assert.equal(await gesichtSuchen("egal.mp4", { python: "/gibt/es/nicht/python" }), null);
   assert.equal(await gesichtSuchen("egal.mp4", { python: "" }), null);
 });
+
+test("Ohne Logo wird der freie obere Bereich gegen Gesichter geprüft", () => {
+  const gross = funde(0.28, 0.44);
+  const ohneLogo = { ...LAYOUT, logo: null };
+  assert.equal(lageWaehlen(gross, { masse: MASSE, layout: ohneLogo }).lage, "logobereich");
+  assert.equal(lageWaehlen(gross, { masse: MASSE, layout: ohneLogo }).frei, true);
+  assert.notEqual(lageWaehlen(gross, { masse: MASSE, layout: LAYOUT }).lage, "logobereich");
+  assert.equal(lageWaehlen(funde(0.12, 0.2), { masse: MASSE, layout: ohneLogo }).lage, "unten");
+  const voll = lageWaehlen(funde(0.08, 0.85), { masse: MASSE, layout: ohneLogo });
+  assert.equal(voll.frei, false);
+});
+
+test("Freier Logobereich lässt die obere Bedienleiste bei einer und zwei Zeilen frei", () => {
+  for (const masse of [MASSE, { breite: 1080, hoehe: 1200 }]) {
+    for (const zeilen of [1, 2]) {
+      const b = untertitelBereich("logobereich", { masse, layout: { ...LAYOUT, zeilen, logo: null } });
+      assert.ok(b.oben >= 0.1499);
+      assert.ok(b.unten < 0.35);
+    }
+  }
+});

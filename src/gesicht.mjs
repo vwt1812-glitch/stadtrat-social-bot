@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { ausfuehren } from "./video.mjs";
-import { UNTERTITEL_LAGEN, untertitelGroesse } from "./untertitel.mjs";
+import { untertitelPosition, untertitelGroesse } from "./untertitel.mjs";
 
 const SKRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), "gesicht.py");
 
@@ -30,7 +30,7 @@ export async function gesichtSuchen(video, { python }, bilder = 12) {
 
 /** Bereich der Untertitel (Anteile der Höhe, oben/unten) für eine Lage. */
 export function untertitelBereich(lage, { masse, layout }) {
-  const position = UNTERTITEL_LAGEN[lage]?.hochkant ?? layout.position;
+  const position = untertitelPosition({ ...masse, ...layout, lage });
   const zeilen = layout.zeilen === 1 ? 1 : 2;
   const hoehe = (untertitelGroesse(masse) * 1.3 * zeilen) / masse.hoehe;
   return { oben: 1 - position - hoehe, unten: 1 - position };
@@ -53,12 +53,14 @@ export function lageWaehlen(funde, { masse, layout }) {
     const b = untertitelBereich(lage, { masse, layout });
     return felder.filter((f) => f.oben < b.unten && f.unten > b.oben).length / felder.length;
   };
-  const anteile = Object.fromEntries(LAGE_REIHENFOLGE.map((lage) => [lage, verdeckt(lage)]));
-  const frei = LAGE_REIHENFOLGE.find((lage) => anteile[lage] <= 0.2);
+  // Der frühere Logobereich wird erst ohne Logo freigegeben.
+  const lagen = layout.logo ? LAGE_REIHENFOLGE : ["unten", "oben", "logobereich", "mitte"];
+  const anteile = Object.fromEntries(lagen.map((lage) => [lage, verdeckt(lage)]));
+  const frei = lagen.find((lage) => anteile[lage] <= 0.2);
   if (frei) {
     ergebnis.lage = frei;
   } else {
-    ergebnis.lage = LAGE_REIHENFOLGE.reduce((beste, lage) => (anteile[lage] < anteile[beste] ? lage : beste));
+    ergebnis.lage = lagen.reduce((beste, lage) => (anteile[lage] < anteile[beste] ? lage : beste));
     ergebnis.frei = false;
     ergebnis.hinweise.push("Dein Gesicht füllt viel vom Bild – die Untertitel verdecken es überall ein Stück. Nächstes Mal einen Schritt zurück oder das Handy weiter weg halten.");
   }
