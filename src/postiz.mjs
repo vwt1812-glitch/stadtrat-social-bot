@@ -4,7 +4,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import twitter from "twitter-text";
+import twitter from "@ambassify/twitter-text";
 
 /** Netzwerke, die ohne Bild oder Video nichts annehmen. */
 export const BRAUCHT_MEDIEN = ["instagram", "instagram-standalone", "tiktok", "tiktok-business", "youtube", "pinterest"];
