@@ -8,7 +8,7 @@ import { ladeConfig } from "./config.mjs";
 import { Telegram, html } from "./telegram.mjs";
 import {
   Postiz, passendeKanaele, BRAUCHT_MEDIEN, NUR_VIDEO, kundenAus, findeKunde, kanaeleVonKunde,
-  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG, zeichenLimit, zeichenZahl, AnfragenZaehler, STORY, passtZu,
+  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG, zeichenLimit, zeichenZahl, AnfragenZaehler, STORY, INSTAGRAM_STORY, passtZu,
 } from "./postiz.mjs";
 import { Mastodon, DIREKT, mastodonMedien } from "./mastodon.mjs";
 import { erwartetePosts, faelligeKontrollen, abfragezeitraum, auswerten } from "./kontrolle.mjs";
@@ -69,6 +69,7 @@ function limitFehler(auftrag, kanaele) {
   const postizKanaele = kanaele.filter((k) => k.id !== DIREKT);
   if (!postizKanaele.length) return null;
   const medien = (auftrag.medien ?? [datei(auftrag, "fertig.mp4")]).length;
+  const instagramStory = auftrag.story && art(auftrag) === "video" && postizKanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier));
   const bedarf = Postiz.bedarf({
     medien: auftrag.nurStory ? 1 : medien,
     hochgeladen: Boolean(auftrag.hochgeladen), story: auftrag.story, nurStory: Boolean(auftrag.nurStory), kanaele: postizKanaele,
@@ -76,8 +77,8 @@ function limitFehler(auftrag, kanaele) {
     storyBereit: Boolean(auftrag.storyDatei ? auftrag.storyHochgeladen : auftrag.hochgeladen),
     hochkant: hochkantAn(auftrag), hochkantNetze: config.hochkant.netze,
     fortschritt: auftrag.postiz,
-    storyAnzahl: art(auftrag) === "video" && auftrag.story ? storyAnzahl(auftrag.masse?.dauer) : 1,
-    storyUploads: art(auftrag) === "video" && auftrag.story && storyAnzahl(auftrag.masse?.dauer) > 1
+    storyAnzahl: instagramStory ? storyAnzahl(auftrag.masse?.dauer) : 1,
+    storyUploads: instagramStory && storyAnzahl(auftrag.masse?.dauer) > 1
       ? storyAnzahl(auftrag.masse?.dauer) - (auftrag.storyClips?.hochgeladen?.filter(Boolean).length ?? 0) : 0,
     coverUploads: art(auftrag) === "video" && !auftrag.nurStory ? coverBedarf(auftrag.thumbnail, postizKanaele, config.postiz.mastodonThumbnails) : 0,
   });
@@ -246,8 +247,9 @@ function details(auftrag, alle) {
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
   if (auftrag.nurStory) zeilen.push("📱 Ausschließlich als Story – kein Feed-Beitrag");
   else if (auftrag.story && art(auftrag) !== "text") zeilen.push(`📱 Zusätzlich als Story auf Instagram/Facebook${auftrag.storyDatei ? " (eigene 9:16-Fassung)" : ""}`);
-  if (auftrag.story && art(auftrag) === "video" && storyAnzahl(auftrag.masse?.dauer) > 1) {
-    zeilen.push(`📱 ${storyAnzahl(auftrag.masse.dauer)} Story-Teile à höchstens 59 Sekunden; weitere Teile im Abstand von zwei Minuten geplant.`);
+  if (auftrag.story && art(auftrag) === "video" && storyAnzahl(auftrag.masse?.dauer) > 1 &&
+      alle.some((k) => INSTAGRAM_STORY.includes(k.identifier) && (!auftrag.kanaele || auftrag.kanaele.includes(k.id)))) {
+    zeilen.push(`📱 ${storyAnzahl(auftrag.masse.dauer)} Instagram-Story-Teile à höchstens 59 Sekunden; weitere Teile im Abstand von zwei Minuten geplant.`);
   }
   if (auftrag.storyText && art(auftrag) === "foto" && auftrag.story) zeilen.push(`✏️ Bildtext: ${html(auftrag.storyText)}`);
   if (auftrag.story && art(auftrag) === "foto" && auftrag.storyLogoPosition && auftrag.storyLogoPosition !== "auto") {
@@ -1080,17 +1082,18 @@ async function veroeffentlichen(auftrag) {
       // wenn es eine gerenderte 9:16-Fassung gibt, wird nur diese hochgeladen.
       let storyMedien = null;
       let clips = null;
-      const storyAktiv = auftrag.story && art(auftrag) === "video" && postizKanaele.some((k) => STORY[k.identifier]);
+      const storyAktiv = auftrag.story && art(auftrag) === "video" && postizKanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier));
+      const facebookStory = auftrag.story && postizKanaele.some((k) => k.identifier === "facebook");
       const speichern = async (storyClips) => { auftrag = auftraege.aendern(auftrag.id, { storyClips }); };
       if (storyAktiv) {
         await zeigeMenue(auftrag, { text: "📱 Bereite Story-Video vor …", reply_markup: { inline_keyboard: [] } });
         clips = await storyClipsVorbereiten(auftrag.storyDatei ?? medien[0], auftrag.storyClips, speichern);
         if (clips) {
-          await zeigeMenue(auftrag, { text: `⏫ Lade ${clips.dateien.length} Story-Teile hoch (je höchstens 59 Sekunden) …`, reply_markup: { inline_keyboard: [] } });
+          await zeigeMenue(auftrag, { text: `⏫ Lade ${clips.dateien.length} Instagram-Story-Teile hoch (je höchstens 59 Sekunden) …`, reply_markup: { inline_keyboard: [] } });
           storyMedien = await storyClipsHochladen(clips, (d) => postiz.hochladen(d), speichern);
         }
       }
-      const normaleMedien = auftrag.nurStory ? (auftrag.storyDatei || clips ? [] : medien.slice(0, 1)) : medien;
+      const normaleMedien = auftrag.nurStory ? (auftrag.storyDatei || (clips && !facebookStory) ? [] : medien.slice(0, 1)) : medien;
       if (normaleMedien.length && !auftrag.hochgeladen) {
         await zeigeMenue(auftrag, { text: `⏫ Lade ${normaleMedien.length === 1 ? "Datei" : `${normaleMedien.length} Dateien`} zu Postiz hoch …`, reply_markup: { inline_keyboard: [] } });
         const hochgeladen = [];
@@ -1099,7 +1102,7 @@ async function veroeffentlichen(auftrag) {
       }
       const story = auftrag.story && art(auftrag) !== "text";
       const hochkant = hochkantAn(auftrag) && postizKanaele.some((k) => config.hochkant.netze.includes(k.identifier));
-      const fassungGebraucht = (story && !clips && postizKanaele.some((k) => STORY[k.identifier])) || hochkant;
+      const fassungGebraucht = (story && (!clips || facebookStory) && postizKanaele.some((k) => STORY[k.identifier])) || hochkant;
       if (fassungGebraucht && auftrag.storyDatei && !auftrag.storyHochgeladen) {
         await zeigeMenue(auftrag, { text: "⏫ Lade die 9:16-Fassung zu Postiz hoch …", reply_markup: { inline_keyboard: [] } });
         auftrag = auftraege.aendern(auftrag.id, { storyHochgeladen: await postiz.hochladen(auftrag.storyDatei) });
@@ -1157,8 +1160,8 @@ async function veroeffentlichen(auftrag) {
     const text = typ === "now"
       ? `✅ <b>Wird jetzt ${auftrag.nurStory ? "als Story" : "gepostet"}</b> auf ${namen}.`
       : `📅 <b>${auftrag.nurStory ? "Story geplant" : "Geplant"} für ${zeitText(zeit)}</b> auf ${namen}.\nÄndern oder löschen kannst du den Eintrag im Postiz-Kalender${auftrag.mastodon ? " (Mastodon: in den geplanten Beiträgen dort)" : ""}.`;
-    const teileHinweis = auftrag.storyClips?.dateien.length > 1
-      ? `\n📱 ${auftrag.storyClips.dateien.length} Story-Teile, höchstens 59 Sekunden je Teil. Weitere Teile sind im Abstand von zwei Minuten geplant; Verzögerungen bei Postiz/Instagram können die Reihenfolge beeinflussen.` : "";
+    const teileHinweis = auftrag.story && kanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier)) && auftrag.storyClips?.dateien.length > 1
+      ? `\n📱 ${auftrag.storyClips.dateien.length} Instagram-Story-Teile, höchstens 59 Sekunden je Teil. Weitere Teile sind im Abstand von zwei Minuten geplant; Verzögerungen bei Postiz/Instagram können die Reihenfolge beeinflussen.` : "";
     const kontrolle = postizKanaele.length ? "\nPostiz hat den Auftrag angenommen. Etwa 15 Minuten nach dem Termin prüfe ich den Veröffentlichungsstatus und melde Erfolg oder Probleme." : "";
     await zeigeMenue(auftrag, {
       text: `${text}${teileHinweis}${kontrolle}${auftrag.nurStory ? "" : `\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`}`,

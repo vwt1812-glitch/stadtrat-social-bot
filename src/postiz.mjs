@@ -120,6 +120,7 @@ export class AnfragenZaehler {
 export const HOCHKANT = ["instagram", "instagram-standalone", "tiktok", "tiktok-business"];
 
 /** Netzwerke mit Stories und die Einstellung dafür. */
+export const INSTAGRAM_STORY = ["instagram", "instagram-standalone"];
 export const STORY = {
   instagram: { post_type: "story", collaborators: [] },
   "instagram-standalone": { post_type: "story", collaborators: [] },
@@ -315,7 +316,7 @@ export class Postiz {
    * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
    * @param {boolean} [o.story] Story auf Instagram/Facebook (erstes Bild/Video)
    * @param {boolean} [o.nurStory] keinen normalen Feed-Beitrag anlegen
-   * @param {{id:string,path:string}[]} [o.storyMedien] aufeinanderfolgende Story-Clips
+   * @param {{id:string,path:string}[]} [o.storyMedien] aufeinanderfolgende Instagram-Story-Clips (Facebook nutzt storyMedium/medien[0])
    * @param {{id:string,path:string}} [o.storyMedium] eigene Story-Fassung (9:16), sonst das erste Medium
    * @param {{id:string,path:string}} [o.hochkantMedium] 9:16-Fassung für die Hochformat-Netzwerke statt `medien`
    * @param {string[]} [o.hochkantNetze] welche Netzwerke die 9:16-Fassung bekommen
@@ -365,6 +366,10 @@ export class Postiz {
     if (nurStory && (!story || storyKanaele.length !== kanaele.length || !storyKanaele.length || (!storyMedien?.length && !storyMedium && !medien.length))) {
       throw new Error("Nur Story braucht mindestens einen Instagram-/Facebook-Kanal und ein Foto oder Video.");
     }
+    const facebookMedium = storyMedium ?? medien[0];
+    if (story && storyMedien?.length && storyKanaele.some((k) => k.identifier === "facebook") && !facebookMedium) {
+      throw new Error("Für die Facebook-Story fehlt das vollständige Video.");
+    }
     const ergebnis = { ...fortschritt };
     const anlegen = async (teil, daten) => {
       await vorAnlegen(teil);
@@ -384,7 +389,7 @@ export class Postiz {
     };
     if (nurStory) ergebnis.post = [];
     else if (!Object.hasOwn(ergebnis, "post")) await anlegen("post", body);
-    const clips = storyMedien ?? (storyMedium || medien.length ? [storyMedium ?? medien[0]] : []);
+    const clips = (storyKanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier)) ? storyMedien : null) ?? (storyMedium || medien.length ? [storyMedium ?? medien[0]] : []);
     if (story && clips.length && storyKanaele.length) {
       for (const [index, medium] of clips.entries()) {
         const teil = index === 0 ? "story" : `story${index + 1}`;
@@ -395,9 +400,9 @@ export class Postiz {
         await anlegen(teil, {
           ...body,
           ...(index ? { type: "schedule", date: termin.toISOString() } : {}),
-          posts: storyKanaele.map((k) => ({
+          posts: storyKanaele.filter((k) => index === 0 || INSTAGRAM_STORY.includes(k.identifier)).map((k) => ({
             integration: { id: k.id },
-            value: [{ content: "", image: [medium] }],
+            value: [{ content: "", image: [k.identifier === "facebook" ? facebookMedium : medium] }],
             settings: { __type: k.identifier, ...STORY[k.identifier] },
           })),
         });
@@ -413,11 +418,12 @@ export class Postiz {
   static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT, fortschritt = {}, coverUploads = 0, storyAnzahl = 1, storyUploads = 0 }) {
     const offeneStorys = Array.from({ length: storyAnzahl }, (_, i) => i ? `story${i + 1}` : "story")
       .filter((teil) => !Object.hasOwn(fortschritt, teil)).length;
-    if (storyUploads || storyAnzahl > 1) {
+    if ((storyUploads || storyAnzahl > 1) && story && kanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier))) {
       const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
+      const mitFacebook = kanaele.some((k) => k.identifier === "facebook");
       const mitHochkant = hochkant && kanaele.some((k) => hochkantNetze.includes(k.identifier));
-      return (nurStory ? 0 : (hochgeladen ? 0 : medien) + (fortschritt.post ? 0 : 1) +
-        (storyUpload && mitHochkant ? 1 : 0) + (fortschritt.post ? 0 : coverUploads)) +
+      return (nurStory ? (mitFacebook ? (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1) : 0) : (hochgeladen ? 0 : medien) + (fortschritt.post ? 0 : 1) +
+        (storyUpload && (mitHochkant || mitFacebook) ? 1 : 0) + (fortschritt.post ? 0 : coverUploads)) +
         (mitStory ? offeneStorys + storyUploads : 0);
     }
     if (nurStory) return (fortschritt.story ? 0 : 1) + (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1);

@@ -5,7 +5,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-for (const modus of ["nur", "feed"]) {
+for (const modus of ["nur", "feed", "facebook", "facebook-fassung", "gemischt", "gemischt-fassung"]) {
   test(`Telegram veröffentlicht lange Story mit allen Clips (${modus})`, async (t) => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "story-flow-"));
     t.after(() => fs.rm(dir, { recursive: true, force: true }));
