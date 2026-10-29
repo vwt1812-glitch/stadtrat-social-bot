@@ -113,7 +113,15 @@ Emojis 4), alle anderen in JavaScript-Zeichen (ein Emoji meist 2).
 
 ### Nach dem Posten
 
-Feed und zusätzliche Story werden einzeln bestätigt und ihre Post-IDs sofort gespeichert.
+Story-Videos über 60 Sekunden werden automatisch vollständig in Clips von höchstens **59 Sekunden**
+aufgeteilt, einschließlich Ton, Logo und Untertiteln. Zum Beispiel entstehen aus 125 Sekunden drei Teile:
+59, 59 und 7 Sekunden. Das gilt für zusätzliche Storys und **Nur Story**, auf Instagram und Facebook.
+Fotos und Videos bis 60 Sekunden bleiben unverändert; Feed/Reels behalten das vollständige Video.
+Der erste Teil nutzt den gewählten Termin, weitere Teile werden mit jeweils zwei Minuten Abstand geplant.
+Postiz und Meta verarbeiten asynchron: Bei Verzögerungen ist die tatsächliche Reihenfolge nicht garantiert.
+
+Feed und jeder Story-Teil werden einzeln bestätigt und ihre Post-IDs sofort gespeichert.
+Auch erfolgreiche Clip-Uploads werden gespeichert und nach einem Neustart weiterverwendet.
 Scheitert danach die Story, bietet der Bot **Fehlende Teile erneut versuchen** an und lässt den Feed aus.
 Während einer begonnenen Veröffentlichung sind Änderungen an Inhalt und Kanälen gesperrt.
 Bestätigte Teilbeiträge werden auch bei einem noch offenen Auftrag auf Veröffentlichung kontrolliert.
@@ -134,7 +142,8 @@ meldet sich **einmal pro Post oder Story auch bei Erfolg**, sobald Postiz den St
 Hängen alle Posts: `docker exec postiz pm2 list`, im Zweifel `docker restart postiz`.
 
 Postiz erlaubt standardmäßig **30 API-Anfragen pro Stunde** (`API_LIMIT` in der Postiz-Konfiguration). Ein Beitrag
-braucht eine Anfrage pro Datei plus eine für den Post (plus eine für die Story). Der Bot zählt mit
+braucht eine Anfrage pro Datei plus eine für den Post; bei geteilten Storys je eine für jeden Clip-Upload
+und jeden Story-Teil (gebündelt für die Story-Kanäle). Der Bot zählt mit
 (`POSTIZ_MAX_ANFRAGEN`, Standard 28) und sagt vor dem Posten, ab wann es wieder geht.
 
 ### Mastodon direkt
@@ -288,8 +297,8 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   Bauchbinden bleiben möglichst im Bild. Die eigene Story-Fassung wird beim Posten extra hochgeladen.
 - **Querformat für Instagram/TikTok:** Ein Querformat-Video erscheint in Reels und TikTok sonst klein mit Balken.
   Mit **📲 9:16 für Insta** bekommen die Netzwerke aus `HOCHKANT_NETZE` (Standard Instagram und TikTok) die
-  9:16-Fassung, alle anderen weiter das Querformat. Story und Reel teilen sich die Datei – ein Upload mehr, nicht
-  zwei. `HOCHKANT_STANDARD=ja` schaltet das für jedes Querformat-Video gleich ein.
+  9:16-Fassung, alle anderen weiter das Querformat. Story und Reel teilen sich bei Videos bis 60 Sekunden die Datei. Längere Story-Videos
+  bekommen eigene Clip-Uploads; das Reel bleibt vollständig. `HOCHKANT_STANDARD=ja` schaltet das für jedes Querformat-Video gleich ein.
 - **Glossar:** `glossar.txt` – Namen, die Whisper richtig schreiben soll, und automatische Ersetzungen.
 - **Netzwerk-Einstellungen:** `kanaele.example.json` nach `kanaele.json` kopieren. Schlüssel ist der Netzwerk-Typ
   (`instagram`, `tiktok`, `youtube`, …) oder eine Kanal-ID aus `/kanaele`. Die Werte gehen als `settings` an Postiz.
@@ -319,3 +328,4 @@ Tests: `npm test`
 
 Kontrolle nach dem Posten, Mastodon direkt, Zählweise, Kanalauswahl per Name, Anfragenlimit und die
 Pi-Skripte stammen aus [eu-piraten-abstimmungen](https://github.com/vwt1812-glitch/eu-piraten-abstimmungen).
+

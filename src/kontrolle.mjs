@@ -13,10 +13,14 @@ export function erwartetePosts(auftraege) {
   const ids = new Map();
   for (const a of auftraege) {
     if (!["geplant", "gepostet", "vorschau", "postet", "extern"].includes(a.status) || !a.postiz) continue;
-    for (const [art, posts] of [["Beitrag", a.postiz.post ?? []], ["Story", a.postiz.story ?? []]]) {
+    for (const [teil, posts] of Object.entries(a.postiz)) {
+      if (teil !== "post" && !/^story(?:[2-9]|[1-9]\d+)?$/.test(teil)) continue;
+      const art = teil === "post" ? "Beitrag" : teil === "story" ? "Story" : `Story-Teil ${teil.slice(5)}`;
       for (const p of posts) {
         if (p?.postId) ids.set(p.postId, {
-          auftrag: a.id, chatId: a.chatId, zeitpunkt: a.plan?.zeit ?? a.erstellt, art,
+          auftrag: a.id, chatId: a.chatId, zeitpunkt: teil.startsWith("story") && teil !== "story"
+            ? new Date(Date.parse(a.plan?.zeit ?? a.erstellt) + (Number(teil.slice(5)) - 1) * 120e3).toISOString()
+            : a.plan?.zeit ?? a.erstellt, art,
         });
       }
     }
@@ -100,3 +104,4 @@ export function auswerten(posts, faellig, kontrolle, jetzt = new Date(), karenz 
   }
   return ergebnis;
 }
+
