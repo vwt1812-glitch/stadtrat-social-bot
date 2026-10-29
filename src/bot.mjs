@@ -8,7 +8,7 @@ import { ladeConfig } from "./config.mjs";
 import { Telegram, html } from "./telegram.mjs";
 import {
   Postiz, passendeKanaele, BRAUCHT_MEDIEN, NUR_VIDEO, kundenAus, findeKunde, kanaeleVonKunde,
-  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG, zeichenLimit, zeichenZahl, AnfragenZaehler, STORY, passtZu,
+  repostKandidaten, parseCollabs, REPOST_VERZOEGERUNG, zeichenLimit, zeichenZahl, AnfragenZaehler, STORY, INSTAGRAM_STORY, passtZu,
 } from "./postiz.mjs";
 import { Mastodon, DIREKT, mastodonMedien } from "./mastodon.mjs";
 import { erwartetePosts, faelligeKontrollen, abfragezeitraum, auswerten } from "./kontrolle.mjs";
@@ -26,6 +26,8 @@ import { textGrafiken, textAnimation } from "./grafik-text.mjs";
 import { IdeenSpeicher, antragVorschlaege, grafikText, kurzerTitel } from "./redaktion.mjs";
 import { quellenVorlage, quellenBearbeiten, quellenZeilen } from "./quellen.mjs";
 import { thumbnailsErstellen, thumbnailZiel, videoStand, frameZeit, coverBedarf, THUMBNAIL_PROFILE, originalProfil } from "./thumbnail.mjs";
+
+import { storyAnzahl, storyClipsVorbereiten, storyClipsHochladen } from "./story-video.mjs";
 
 const config = ladeConfig();
 const tg = new Telegram(config.telegram);
@@ -67,6 +69,7 @@ function limitFehler(auftrag, kanaele) {
   const postizKanaele = kanaele.filter((k) => k.id !== DIREKT);
   if (!postizKanaele.length) return null;
   const medien = (auftrag.medien ?? [datei(auftrag, "fertig.mp4")]).length;
+  const instagramStory = auftrag.story && art(auftrag) === "video" && postizKanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier));
   const bedarf = Postiz.bedarf({
     medien: auftrag.nurStory ? 1 : medien,
     hochgeladen: Boolean(auftrag.hochgeladen), story: auftrag.story, nurStory: Boolean(auftrag.nurStory), kanaele: postizKanaele,
@@ -74,6 +77,9 @@ function limitFehler(auftrag, kanaele) {
     storyBereit: Boolean(auftrag.storyDatei ? auftrag.storyHochgeladen : auftrag.hochgeladen),
     hochkant: hochkantAn(auftrag), hochkantNetze: config.hochkant.netze,
     fortschritt: auftrag.postiz,
+    storyAnzahl: instagramStory ? storyAnzahl(auftrag.masse?.dauer) : 1,
+    storyUploads: instagramStory && storyAnzahl(auftrag.masse?.dauer) > 1
+      ? storyAnzahl(auftrag.masse?.dauer) - (auftrag.storyClips?.hochgeladen?.filter(Boolean).length ?? 0) : 0,
     coverUploads: art(auftrag) === "video" && !auftrag.nurStory ? coverBedarf(auftrag.thumbnail, postizKanaele, config.postiz.mastodonThumbnails) : 0,
   });
   const frei = postiz.zaehler.wiederFrei(bedarf);
@@ -241,6 +247,10 @@ function details(auftrag, alle) {
   if (reposter.length) zeilen.push(`🔁 Repost ${verzoegerungText(auftrag.repost.verzoegerung)}: ${reposter.map((k) => html(k.name)).join(", ")}`);
   if (auftrag.nurStory) zeilen.push("📱 Ausschließlich als Story – kein Feed-Beitrag");
   else if (auftrag.story && art(auftrag) !== "text") zeilen.push(`📱 Zusätzlich als Story auf Instagram/Facebook${auftrag.storyDatei ? " (eigene 9:16-Fassung)" : ""}`);
+  if (auftrag.story && art(auftrag) === "video" && storyAnzahl(auftrag.masse?.dauer) > 1 &&
+      alle.some((k) => INSTAGRAM_STORY.includes(k.identifier) && (!auftrag.kanaele || auftrag.kanaele.includes(k.id)))) {
+    zeilen.push(`📱 ${storyAnzahl(auftrag.masse.dauer)} Instagram-Story-Teile à höchstens 59 Sekunden; weitere Teile im Abstand von zwei Minuten geplant.`);
+  }
   if (auftrag.storyText && art(auftrag) === "foto" && auftrag.story) zeilen.push(`✏️ Bildtext: ${html(auftrag.storyText)}`);
   if (auftrag.story && art(auftrag) === "foto" && auftrag.storyLogoPosition && auftrag.storyLogoPosition !== "auto") {
     zeilen.push(`🏷️ Story-Logo: ${html(auftrag.storyLogoPosition)}`);
@@ -503,11 +513,11 @@ async function thumbnailPruefen(a, kanaele) {
 
 function fortsetzenMenue(a) {
   const bestaetigt = Object.entries(a.postiz ?? {}).filter(([, ids]) => ids.length)
-    .map(([teil, ids]) => `${teil === "post" ? "Feed" : "Story"}: ${ids.map((p) => p.postId).join(", ")}`);
+    .map(([teil, ids]) => `${teil === "post" ? "Feed" : teil === "story" ? "Story" : `Story-Teil ${teil.slice(5)}`}: ${ids.map((p) => p.postId).join(", ")}`);
   const unklar = a.postizUnklar;
   return {
     text: ["<b>Veröffentlichung fortsetzen</b>", ...bestaetigt.map(html),
-      unklar ? `⚠️ Für ${unklar === "post" ? "Feed" : "Story"} fehlt eine sichere Bestätigung. Bitte zuerst im Postiz-Kalender prüfen. Keine automatische Wiederholung.`
+      unklar ? `⚠️ Für ${unklar === "post" ? "Feed" : unklar === "story" ? "Story" : `Story-Teil ${unklar.slice(5)}`} fehlt eine sichere Bestätigung. Bitte zuerst im Postiz-Kalender prüfen. Keine automatische Wiederholung.`
         : "Bereits bestätigte Beiträge werden übersprungen. Inhalt und Kanalauswahl bleiben bis zum Abschluss gesperrt.",
       a.plan?.typ === "schedule" ? `Ursprünglicher Termin: ${html(zeitText(new Date(a.plan.zeit)))}` : "Veröffentlichung: sofort",
     ].join("\n"),
@@ -838,7 +848,7 @@ async function storyAktualisieren(auftrag) {
     if (auftrag.storyText?.trim() || (querAn(auftrag) && hochkantAn(auftrag))) throw e;
     await tg.senden(auftrag.chatId, `⚠️ Story-Fassung ging nicht, die Story nimmt dann das normale Medium:\n<pre>${html(e.message)}</pre>`);
   }
-  auftrag = auftraege.aendern(auftrag.id, { storyDatei, storyHochgeladen: null });
+  auftrag = auftraege.aendern(auftrag.id, { storyDatei, storyHochgeladen: null, storyClips: null });
   if (!storyDatei) return auftrag;
   if (art(auftrag) === "foto") {
     await tg.fotos(auftrag.chatId, [storyDatei], "Story-Vorschau");
@@ -1030,7 +1040,7 @@ async function textZuGrafik(auftrag, format = "post", quelle = null) {
   auftrag = auftraege.aendern(auftrag.id, {
     art: "foto", grafikModus: format, grafikAnimation: false, grafikQuelleText: text,
     grafikStoryDatei: vorlage.story, medien: [vorlage.post], originale: [vorlage.post],
-    storyDatei: vorlage.story, storyHochgeladen: null,
+    storyDatei: vorlage.story, storyHochgeladen: null, storyClips: null,
     mitLogo: false, hochgeladen: null, captions: {},
     story, nurStory: story, kanaele: null, status: "vorschau",
   });
@@ -1070,7 +1080,20 @@ async function veroeffentlichen(auftrag) {
       if (limit) throw new Error(limit);
       // Bei reinen Storys weder Karussellbilder noch den normalen Feed-Beitrag hochladen:
       // wenn es eine gerenderte 9:16-Fassung gibt, wird nur diese hochgeladen.
-      const normaleMedien = auftrag.nurStory ? (auftrag.storyDatei ? [] : medien.slice(0, 1)) : medien;
+      let storyMedien = null;
+      let clips = null;
+      const storyAktiv = auftrag.story && art(auftrag) === "video" && postizKanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier));
+      const facebookStory = auftrag.story && postizKanaele.some((k) => k.identifier === "facebook");
+      const speichern = async (storyClips) => { auftrag = auftraege.aendern(auftrag.id, { storyClips }); };
+      if (storyAktiv) {
+        await zeigeMenue(auftrag, { text: "📱 Bereite Story-Video vor …", reply_markup: { inline_keyboard: [] } });
+        clips = await storyClipsVorbereiten(auftrag.storyDatei ?? medien[0], auftrag.storyClips, speichern);
+        if (clips) {
+          await zeigeMenue(auftrag, { text: `⏫ Lade ${clips.dateien.length} Instagram-Story-Teile hoch (je höchstens 59 Sekunden) …`, reply_markup: { inline_keyboard: [] } });
+          storyMedien = await storyClipsHochladen(clips, (d) => postiz.hochladen(d), speichern);
+        }
+      }
+      const normaleMedien = auftrag.nurStory ? (auftrag.storyDatei || (clips && !facebookStory) ? [] : medien.slice(0, 1)) : medien;
       if (normaleMedien.length && !auftrag.hochgeladen) {
         await zeigeMenue(auftrag, { text: `⏫ Lade ${normaleMedien.length === 1 ? "Datei" : `${normaleMedien.length} Dateien`} zu Postiz hoch …`, reply_markup: { inline_keyboard: [] } });
         const hochgeladen = [];
@@ -1079,7 +1102,7 @@ async function veroeffentlichen(auftrag) {
       }
       const story = auftrag.story && art(auftrag) !== "text";
       const hochkant = hochkantAn(auftrag) && postizKanaele.some((k) => config.hochkant.netze.includes(k.identifier));
-      const fassungGebraucht = (story && postizKanaele.some((k) => STORY[k.identifier])) || hochkant;
+      const fassungGebraucht = (story && (!clips || facebookStory) && postizKanaele.some((k) => STORY[k.identifier])) || hochkant;
       if (fassungGebraucht && auftrag.storyDatei && !auftrag.storyHochgeladen) {
         await zeigeMenue(auftrag, { text: "⏫ Lade die 9:16-Fassung zu Postiz hoch …", reply_markup: { inline_keyboard: [] } });
         auftrag = auftraege.aendern(auftrag.id, { storyHochgeladen: await postiz.hochladen(auftrag.storyDatei) });
@@ -1104,6 +1127,7 @@ async function veroeffentlichen(auftrag) {
         typ, zeit, caption: auftrag.caption, captions: auftrag.captions, medien: auftrag.hochgeladen ?? [], kanaele: postizKanaele,
         collabs: art(auftrag) === "text" || auftrag.nurStory ? [] : auftrag.collabs,
         repost: auftrag.nurStory ? null : auftrag.repost, story, nurStory: Boolean(auftrag.nurStory),
+        storyMedien,
         storyMedium: story && auftrag.storyDatei ? auftrag.storyHochgeladen : null,
         hochkantMedium: hochkant && auftrag.storyDatei ? auftrag.storyHochgeladen : null, hochkantNetze: config.hochkant.netze,
         fortschritt: auftrag.postiz ?? {},
@@ -1136,9 +1160,11 @@ async function veroeffentlichen(auftrag) {
     const text = typ === "now"
       ? `✅ <b>Wird jetzt ${auftrag.nurStory ? "als Story" : "gepostet"}</b> auf ${namen}.`
       : `📅 <b>${auftrag.nurStory ? "Story geplant" : "Geplant"} für ${zeitText(zeit)}</b> auf ${namen}.\nÄndern oder löschen kannst du den Eintrag im Postiz-Kalender${auftrag.mastodon ? " (Mastodon: in den geplanten Beiträgen dort)" : ""}.`;
+    const teileHinweis = auftrag.story && kanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier)) && auftrag.storyClips?.dateien.length > 1
+      ? `\n📱 ${auftrag.storyClips.dateien.length} Instagram-Story-Teile, höchstens 59 Sekunden je Teil. Weitere Teile sind im Abstand von zwei Minuten geplant; Verzögerungen bei Postiz/Instagram können die Reihenfolge beeinflussen.` : "";
     const kontrolle = postizKanaele.length ? "\nPostiz hat den Auftrag angenommen. Etwa 15 Minuten nach dem Termin prüfe ich den Veröffentlichungsstatus und melde Erfolg oder Probleme." : "";
     await zeigeMenue(auftrag, {
-      text: `${text}${kontrolle}${auftrag.nurStory ? "" : `\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`}`,
+      text: `${text}${teileHinweis}${kontrolle}${auftrag.nurStory ? "" : `\n<blockquote expandable>${html(auftrag.caption)}</blockquote>`}`,
       reply_markup: { inline_keyboard: [] },
     });
     if (hinweise.length) await tg.senden(auftrag.chatId, html(hinweise.join("\n")));
@@ -1306,7 +1332,7 @@ async function knopfGedrueckt(cq) {
       // Auf eine neue, überprüfbare Dokumentpassage zurückgehen, nicht blind ein altes Sharepic behalten.
       auftrag = auftraege.aendern(id, {
         art: "text", grafikModus: null, grafikStoryDatei: null, grafikQuelleText: null,
-        medien: [], story: false, nurStory: false, storyDatei: null, storyHochgeladen: null,
+        medien: [], story: false, nurStory: false, storyDatei: null, storyHochgeladen: null, storyClips: null,
         hochgeladen: null, caption: v.text, notizen: v.text, captionQuelle: "dokument",
         antragIndex: index, kanaele: null, captions: {},
       });
@@ -1332,7 +1358,7 @@ async function knopfGedrueckt(cq) {
             grafikQuelleText: text, medien: [ausgabe], originale: [ausgabe],
             masse: { breite: 1080, hoehe: story ? 1920 : 1350, dauer: 5, hatTon: false },
             story, nurStory: story, storyDatei: null, grafikStoryDatei: null,
-            hochgeladen: null, storyHochgeladen: null, captions: {}, kanaele: null,
+            hochgeladen: null, storyHochgeladen: null, storyClips: null, captions: {}, kanaele: null,
             status: "vorschau",
           });
           await tg.datei(a.chatId, "sendVideo", "video", ausgabe, { caption: "🎞️ Animierte Textgrafik – Vorschau" });
@@ -1351,7 +1377,7 @@ async function knopfGedrueckt(cq) {
         auftrag = auftraege.aendern(id, {
           art: "text", grafikModus: null, grafikAnimation: false, medien: [], originale: null,
           grafikStoryDatei: null, story: false, nurStory: false, storyDatei: null,
-          storyHochgeladen: null, hochgeladen: null, kanaele: null, captions: {},
+          storyHochgeladen: null, storyClips: null, hochgeladen: null, kanaele: null, captions: {},
         });
         await neuesMenue(auftrag);
         return antwort("Wieder Textbeitrag.");
@@ -1432,7 +1458,7 @@ async function knopfGedrueckt(cq) {
       if (auftrag.grafikModus || !["foto", "video"].includes(art(auftrag))) return antwort("Logo ist hier nicht umschaltbar.", true);
       if (art(auftrag) === "video") {
         auftrag = auftraege.aendern(id, { mitLogo: !videoMitLogo(auftrag), status: "arbeitet",
-          statusNachricht: null, plan: null, hochgeladen: null, storyHochgeladen: null, videoFormatFehler: true });
+          statusNachricht: null, plan: null, hochgeladen: null, storyHochgeladen: null, storyClips: null, videoFormatFehler: true });
         await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
         einreihen(() => renderUndVorschau(id, { gesichtNeu: true }));
         return antwort("Logo wird geändert und Untertitel werden neu platziert …");
@@ -1612,7 +1638,7 @@ async function knopfGedrueckt(cq) {
         await zeigeMenue(auftrag, storyLayoutMenue(auftrag));
         return antwort("Bleibt unverändert.");
       }
-      auftrag = auftraege.aendern(id, { [feld]: arg, status: "arbeitet", storyHochgeladen: null });
+      auftrag = auftraege.aendern(id, { [feld]: arg, status: "arbeitet", storyHochgeladen: null, storyClips: null });
       await antwort("Erstelle die Story-Vorschau neu …");
       await tg.aufruf("editMessageReplyMarkup", {
         chat_id: auftrag.chatId, message_id: auftrag.menueNachricht,
@@ -1621,7 +1647,7 @@ async function knopfGedrueckt(cq) {
         try { await storyAktualisieren(auftraege.get(id)); }
         catch (e) {
           console.error(e);
-          auftraege.aendern(id, { storyDatei: null, storyHochgeladen: null });
+          auftraege.aendern(id, { storyDatei: null, storyHochgeladen: null, storyClips: null });
           await tg.senden(auftrag.chatId, `❌ Story-Layout fehlgeschlagen: <pre>${html(e.message)}</pre>`);
         }
         await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
@@ -1641,7 +1667,7 @@ async function knopfGedrueckt(cq) {
       auftrag = auftraege.aendern(id, { quer: aktiv, plan: null, hochgeladen: null,
         hochkantVorQuer: aktiv ? auftrag.hochkant : auftrag.hochkantVorQuer,
         hochkant: aktiv ? true : auftrag.hochkantVorQuer,
-        storyDatei: null, storyHochgeladen: null, videoFormatFehler: true, status: "arbeitet" });
+        storyDatei: null, storyHochgeladen: null, storyClips: null, videoFormatFehler: true, status: "arbeitet" });
       await antwort(aktiv ? "Baue die 16:9-Fassung …" : "Stelle das ursprüngliche Format wieder her …");
       await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
       einreihen(() => renderUndVorschau(id));
@@ -1659,7 +1685,7 @@ async function knopfGedrueckt(cq) {
         return antwort("Baue die 9:16-Fassung für Instagram/TikTok …");
       }
       // Ohne Story wird die Fassung nicht mehr gebraucht
-      if (!auftrag.hochkant && !auftrag.story) auftrag = auftraege.aendern(id, { storyDatei: null, storyHochgeladen: null });
+      if (!auftrag.hochkant && !auftrag.story) auftrag = auftraege.aendern(id, { storyDatei: null, storyHochgeladen: null, storyClips: null });
       await zeigeMenue(auftrag);
       return antwort(auftrag.hochkant ? "Instagram/TikTok bekommen die 9:16-Fassung" : "Alle Kanäle bekommen das Feed-Format");
     }
@@ -1777,7 +1803,7 @@ async function texteingabe(auftrag, text) {
         try { await storyAktualisieren(auftraege.get(auftrag.id)); }
         catch (e) {
           console.error(e);
-          auftraege.aendern(auftrag.id, { storyDatei: null, storyHochgeladen: null });
+          auftraege.aendern(auftrag.id, { storyDatei: null, storyHochgeladen: null, storyClips: null });
           await tg.senden(auftrag.chatId, `❌ Bildtext fehlgeschlagen: <pre>${html(e.message)}</pre>`);
         }
         await neuesMenue(auftraege.aendern(auftrag.id, { status: "vorschau" }));
@@ -2112,3 +2138,4 @@ main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+

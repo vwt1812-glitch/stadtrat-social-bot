@@ -120,6 +120,7 @@ export class AnfragenZaehler {
 export const HOCHKANT = ["instagram", "instagram-standalone", "tiktok", "tiktok-business"];
 
 /** Netzwerke mit Stories und die Einstellung dafür. */
+export const INSTAGRAM_STORY = ["instagram", "instagram-standalone"];
 export const STORY = {
   instagram: { post_type: "story", collaborators: [] },
   "instagram-standalone": { post_type: "story", collaborators: [] },
@@ -315,6 +316,7 @@ export class Postiz {
    * @param {{kanaele:string[], verzoegerung:number}} [o.repost]
    * @param {boolean} [o.story] Story auf Instagram/Facebook (erstes Bild/Video)
    * @param {boolean} [o.nurStory] keinen normalen Feed-Beitrag anlegen
+   * @param {{id:string,path:string}[]} [o.storyMedien] aufeinanderfolgende Instagram-Story-Clips (Facebook nutzt storyMedium/medien[0])
    * @param {{id:string,path:string}} [o.storyMedium] eigene Story-Fassung (9:16), sonst das erste Medium
    * @param {{id:string,path:string}} [o.hochkantMedium] 9:16-Fassung für die Hochformat-Netzwerke statt `medien`
    * @param {string[]} [o.hochkantNetze] welche Netzwerke die 9:16-Fassung bekommen
@@ -328,7 +330,7 @@ export class Postiz {
    * @returns {Promise<{post: {postId:string}[], story?: {postId:string}[]}>} IDs für die Kontrolle
    */
   async beitrag({
-    typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, nurStory = false, storyMedium = null,
+    typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, nurStory = false, storyMedium = null, storyMedien = null,
     hochkantMedium = null, hochkantNetze = HOCHKANT,
     fortschritt = {}, vorAnlegen = async () => {}, nachAnlegen = async () => {}, beiAblehnung = async () => {},
     thumbnails = {}, thumbnailTimestamp = null, mastodonThumbnails = false,
@@ -361,8 +363,12 @@ export class Postiz {
       posts: kanaele.map(feedPost),
     };
     const storyKanaele = kanaele.filter((k) => STORY[k.identifier]);
-    if (nurStory && (!story || storyKanaele.length !== kanaele.length || !storyKanaele.length || (!storyMedium && !medien.length))) {
+    if (nurStory && (!story || storyKanaele.length !== kanaele.length || !storyKanaele.length || (!storyMedien?.length && !storyMedium && !medien.length))) {
       throw new Error("Nur Story braucht mindestens einen Instagram-/Facebook-Kanal und ein Foto oder Video.");
+    }
+    const facebookMedium = storyMedium ?? medien[0];
+    if (story && storyMedien?.length && storyKanaele.some((k) => k.identifier === "facebook") && !facebookMedium) {
+      throw new Error("Für die Facebook-Story fehlt das vollständige Video.");
     }
     const ergebnis = { ...fortschritt };
     const anlegen = async (teil, daten) => {
@@ -383,15 +389,24 @@ export class Postiz {
     };
     if (nurStory) ergebnis.post = [];
     else if (!Object.hasOwn(ergebnis, "post")) await anlegen("post", body);
-    if (story && (medien.length || storyMedium) && storyKanaele.length && !Object.hasOwn(ergebnis, "story")) {
-      await anlegen("story", {
-        ...body,
-        posts: storyKanaele.map((k) => ({
-          integration: { id: k.id },
-          value: [{ content: "", image: [storyMedium ?? medien[0]] }],
-          settings: { __type: k.identifier, ...STORY[k.identifier] },
-        })),
-      });
+    const clips = (storyKanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier)) ? storyMedien : null) ?? (storyMedium || medien.length ? [storyMedium ?? medien[0]] : []);
+    if (story && clips.length && storyKanaele.length) {
+      for (const [index, medium] of clips.entries()) {
+        const teil = index === 0 ? "story" : `story${index + 1}`;
+        if (Object.hasOwn(ergebnis, teil)) continue;
+        // Postiz verarbeitet Posts asynchron. Versetzte Termine geben den Teilen
+        // Zeit zum Veröffentlichen. Meta/Postiz können die Reihenfolge dennoch verzögern.
+        const termin = new Date(Math.max(zeit.getTime(), Date.now()) + index * 120e3);
+        await anlegen(teil, {
+          ...body,
+          ...(index ? { type: "schedule", date: termin.toISOString() } : {}),
+          posts: storyKanaele.filter((k) => index === 0 || INSTAGRAM_STORY.includes(k.identifier)).map((k) => ({
+            integration: { id: k.id },
+            value: [{ content: "", image: [k.identifier === "facebook" ? facebookMedium : medium] }],
+            settings: { __type: k.identifier, ...STORY[k.identifier] },
+          })),
+        });
+      }
     }
     return ergebnis;
   }
@@ -400,10 +415,21 @@ export class Postiz {
    * So viele Anfragen braucht ein Beitrag: Uploads + Post, ggf. Story-Post, und der Upload der
    * eigenen 9:16-Fassung (`storyUpload`), wenn Story oder Hochformat-Netzwerke sie brauchen.
    */
-  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT, fortschritt = {}, coverUploads = 0 }) {
+  static bedarf({ medien, hochgeladen, story, kanaele, storyUpload = false, storyBereit = false, nurStory = false, hochkant = false, hochkantNetze = HOCHKANT, fortschritt = {}, coverUploads = 0, storyAnzahl = 1, storyUploads = 0 }) {
+    const offeneStorys = Array.from({ length: storyAnzahl }, (_, i) => i ? `story${i + 1}` : "story")
+      .filter((teil) => !Object.hasOwn(fortschritt, teil)).length;
+    if ((storyUploads || storyAnzahl > 1) && story && kanaele.some((k) => INSTAGRAM_STORY.includes(k.identifier))) {
+      const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
+      const mitFacebook = kanaele.some((k) => k.identifier === "facebook");
+      const mitHochkant = hochkant && kanaele.some((k) => hochkantNetze.includes(k.identifier));
+      return (nurStory ? (mitFacebook ? (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1) : 0) : (hochgeladen ? 0 : medien) + (fortschritt.post ? 0 : 1) +
+        (storyUpload && (mitHochkant || mitFacebook) ? 1 : 0) + (fortschritt.post ? 0 : coverUploads)) +
+        (mitStory ? offeneStorys + storyUploads : 0);
+    }
     if (nurStory) return (fortschritt.story ? 0 : 1) + (storyUpload ? 1 : storyBereit || hochgeladen ? 0 : 1);
     const mitStory = story && medien && kanaele.some((k) => STORY[k.identifier]);
     const mitHochkant = hochkant && medien && kanaele.some((k) => hochkantNetze.includes(k.identifier));
     return (hochgeladen ? 0 : medien) + (fortschritt.post ? 0 : 1) + (mitStory && !fortschritt.story ? 1 : 0) + (storyUpload && (mitStory || mitHochkant) ? 1 : 0) + (fortschritt.post ? 0 : coverUploads);
   }
 }
+
