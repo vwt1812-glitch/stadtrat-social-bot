@@ -45,7 +45,7 @@ mock.module("../../src/grafik-text.mjs", { namedExports: {
     return { post: "post.jpg", story: "story.jpg", gekuerzt: false };
   },
 } });
-mock.method(Postiz.prototype, "kanaele", async () => []);
+mock.method(Postiz.prototype, "kanaele", async () => [{ id: "test", name: "Test", identifier: "facebook" }]);
 mock.method(Telegram.prototype, "datei", async () => ({}));
 mock.method(Telegram.prototype, "fotos", async () => ({}));
 let schritt = 0;
@@ -74,13 +74,12 @@ mock.method(Telegram.prototype, "aufruf", async (methode) => {
       assert.equal(a.nurStory, format === "story");
       assert.equal(a.grafikAnimation, aktion === "anim");
       assert.equal(a.mitLogo, false);
-      speicher.aendern(auftrag.id, { kanaele: ["test"], captions: { test: "Eigener Kanaltext" } });
       update = callback("logo");
     }
     if (schritt === 4 && a.status === "vorschau") {
       assert.equal(a.mitLogo, true);
       assert.deepEqual(a.kanaele, ["test"]);
-      assert.deepEqual(a.captions, { test: "Eigener Kanaltext" });
+      assert.deepEqual(a.captions, {});
       assert.equal(a.caption, bearbeitet);
       update = callback("logo");
     }
