@@ -73,3 +73,27 @@ test("Freier Logobereich lässt die obere Bedienleiste bei einer und zwei Zeilen
     }
   }
 });
+
+test("Kurzes Selfie: ohne Logo freien Logobereich vor normaler oberer Position wählen", () => {
+  // Gemessene Gesichtsrechtecke aus dem gemeldeten 720x1280-Video.
+  const werte = [[.4172,.2094],[.4203,.2188],[.4141,.2172],[.4078,.2172],
+    [.4109,.2172],[.4031,.2016],[.3953,.2047],[.4031,.2031],
+    [.4141,.1984],[.4125,.2141],[.4062,.2188],[.4062,.2156]];
+  const fund = { bilder: 12, gesichter: werte.map(([y,h]) => ({ x:.3, y, w:.38, h })) };
+  const masse = { breite: 720, hoehe: 1280 };
+  const layout = { ...LAYOUT, position: .33 };
+  assert.equal(lageWaehlen(fund, { masse, layout }).lage, "oben");
+  assert.deepEqual(lageWaehlen(fund, { masse, layout: { ...layout, logo: null } }),
+    { lage: "logobereich", frei: true, hinweise: [] });
+});
+
+test("Ohne Logo bleibt unten bevorzugt; belegter Logobereich wird übersprungen", () => {
+  const layout = { ...LAYOUT, logo: null };
+  assert.equal(lageWaehlen(funde(.24, .2), { masse: MASSE, layout }).lage, "unten");
+  // Unten in 9/12 Bildern belegt, Logobereich in 3/12; normale obere Lage frei.
+  const fund = { bilder:12, gesichter: [
+    ...funde(.42,.28,9).gesichter,
+    ...funde(.16,.04,3).gesichter,
+  ] };
+  assert.equal(lageWaehlen(fund, { masse: MASSE, layout }).lage, "oben");
+});

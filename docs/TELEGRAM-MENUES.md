@@ -20,7 +20,8 @@ heißt der Knopf **Logo entfernen**. Formatwechsel behalten die Auswahl bei.
 Bereits vorhandene Foto-/Videoentwürfe behalten ihre gespeicherte Einstellung.
 Bei Videos wird nach jedem Umschalten das Original erneut auf Gesichter geprüft und die
 Untertitelposition automatisch neu gewählt. Ohne Logo ist zusätzlich der ehemalige Logobereich
-unterhalb der oberen Bedienleiste verfügbar. Eine zusätzliche 9:16-Fassung wird ebenfalls neu
+unterhalb der oberen Bedienleiste verfügbar. Ist unten das Gesicht im Weg, wird ohne Logo
+zuerst dieser freie Logobereich geprüft, danach die normale obere Lage und die Mitte. Eine zusätzliche 9:16-Fassung wird ebenfalls neu
 erstellt und mit den umgerechneten Gesichtspositionen geprüft. Die Untertiteltexte bleiben erhalten.
 Ohne verfügbare Gesichtserkennung gilt die Standardposition; anschließend lässt sich die Position
 weiterhin manuell ändern. Neu berechnete Titelbilder übernehmen die aktuelle Logoauswahl. Bereits erzeugte Titelbilder

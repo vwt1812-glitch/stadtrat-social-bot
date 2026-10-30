@@ -53,8 +53,9 @@ export function lageWaehlen(funde, { masse, layout }) {
     const b = untertitelBereich(lage, { masse, layout });
     return felder.filter((f) => f.oben < b.unten && f.unten > b.oben).length / felder.length;
   };
-  // Der frühere Logobereich wird erst ohne Logo freigegeben.
-  const lagen = layout.logo ? LAGE_REIHENFOLGE : ["unten", "oben", "logobereich", "mitte"];
+  // Ohne Logo die freie Fläche oberhalb des Kopfes vor der tieferen Lage „oben“
+  // prüfen. Sonst gewinnt „oben“ bereits und der freie Logobereich kommt nie dran.
+  const lagen = layout.logo ? LAGE_REIHENFOLGE : ["unten", "logobereich", "oben", "mitte"];
   const anteile = Object.fromEntries(lagen.map((lage) => [lage, verdeckt(lage)]));
   const frei = lagen.find((lage) => anteile[lage] <= 0.2);
   if (frei) {
