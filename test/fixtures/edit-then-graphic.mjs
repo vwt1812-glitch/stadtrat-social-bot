@@ -28,13 +28,17 @@ let gerendert = false;
 mock.module("../../src/grafik-text.mjs", { namedExports: {
   ausgewogeneZeilen, logoFuerGrafik,
   textGrafik: async () => { throw new Error("Unexpected thumbnail rendering"); },
-  textAnimation: async ({ inhalt, format: ziel }) => {
+  textAnimation: async ({ inhalt, format: ziel, layout }) => {
+    if (stand().mitLogo) assert.ok(layout.logo);
+    else assert.equal(layout.logo, null);
     assert.equal(aktion, "anim");
     assert.equal(ziel, format);
     assert.equal(inhalt.titel, bearbeitet);
     gerendert = true;
   },
-  textGrafiken: async ({ text }) => {
+  textGrafiken: async ({ text, layout }) => {
+    if (stand().mitLogo) assert.ok(layout.logo);
+    else assert.equal(layout.logo, null);
     assert.equal(aktion, "grafik");
     assert.equal(text, bearbeitet);
     gerendert = true;
@@ -69,6 +73,19 @@ mock.method(Telegram.prototype, "aufruf", async (methode) => {
       assert.equal(a.notizen, original);
       assert.equal(a.nurStory, format === "story");
       assert.equal(a.grafikAnimation, aktion === "anim");
+      assert.equal(a.mitLogo, false);
+      speicher.aendern(auftrag.id, { kanaele: ["test"], captions: { test: "Eigener Kanaltext" } });
+      update = callback("logo");
+    }
+    if (schritt === 4 && a.status === "vorschau") {
+      assert.equal(a.mitLogo, true);
+      assert.deepEqual(a.kanaele, ["test"]);
+      assert.deepEqual(a.captions, { test: "Eigener Kanaltext" });
+      assert.equal(a.caption, bearbeitet);
+      update = callback("logo");
+    }
+    if (schritt === 5 && a.status === "vorschau") {
+      assert.equal(a.mitLogo, false);
       process.exit(0);
     }
     if (schritt === 3 && aktion === "idee") {

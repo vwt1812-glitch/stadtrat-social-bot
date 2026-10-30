@@ -14,13 +14,17 @@ Aktionen stehen allein in einer Zeile, statt neben mehreren anderen Schaltern ge
 
 ## Videoformat
 
-**Logo entfernen/hinzufügen** gibt es bei Fotos und Videos, auch im reinen Storymodus.
+**Neue Beiträge starten ohne Logo.** Das gilt für Videos, Fotos/Alben, Storys, Sharepics
+und animierte Textgrafiken. **Logo hinzufügen** schaltet es für diesen Entwurf ein; danach
+heißt der Knopf **Logo entfernen**. Formatwechsel behalten die Auswahl bei.
+Bereits vorhandene Foto-/Videoentwürfe behalten ihre gespeicherte Einstellung.
 Bei Videos wird nach jedem Umschalten das Original erneut auf Gesichter geprüft und die
 Untertitelposition automatisch neu gewählt. Ohne Logo ist zusätzlich der ehemalige Logobereich
 unterhalb der oberen Bedienleiste verfügbar. Eine zusätzliche 9:16-Fassung wird ebenfalls neu
 erstellt und mit den umgerechneten Gesichtspositionen geprüft. Die Untertiteltexte bleiben erhalten.
 Ohne verfügbare Gesichtserkennung gilt die Standardposition; anschließend lässt sich die Position
-weiterhin manuell ändern. Die Auswahl gilt für die Videoeinblendung, nicht für eigene Titelbilder.
+weiterhin manuell ändern. Neu berechnete Titelbilder übernehmen die aktuelle Logoauswahl. Bereits erzeugte Titelbilder
+müssen nach einer Änderung neu berechnet werden.
 
 **Videoformat ändern** öffnet eine Übersicht mit aktuellen Feedmaßen und der zusätzlichen
 Hochkant-Zuordnung. **Feed auf Querformat umstellen** beziehungsweise **Feed im Originalformat**
@@ -46,3 +50,10 @@ bei Sofortposts **Jetzt veröffentlichen**, bei geplanten Posts **Termin bestät
 **Weiter bearbeiten** führt ohne Veröffentlichung zurück. Normale Untermenüs benennen ihr
 Rücksprungziel als **Zur Vorschau**. Callback-Kennungen der bisherigen Aktionen bleiben erhalten,
 damit bereits versandte Menüs weiterhin funktionieren.
+
+## Geschwindigkeit
+
+Fertige Videos enthalten Schnittpunkte alle 59 Sekunden. Instagram-Story-Teile werden
+verlustfrei kopiert, sofern die Schnittpunkte passen; sonst wird exakt neu codiert.
+Die Clips werden auf Länge und Gesamtdauer geprüft. Ton, Untertitel und Bild bleiben erhalten.
+Externe Verarbeitungsschritte ab zwei Sekunden protokollieren ihre Laufzeit im Dienstjournal.

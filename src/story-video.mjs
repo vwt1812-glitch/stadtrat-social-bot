@@ -7,7 +7,8 @@ export const STORY_CLIP_SEKUNDEN = 59;
 export const storyAnzahl = (dauer) => dauer > 60 ? Math.ceil(dauer / STORY_CLIP_SEKUNDEN) : 1;
 
 /** Fertige Fassung teilen: Logo, Untertitel und Ton sind bereits enthalten.
- * Jeden Clip neu codieren, damit Schnitte nicht von Keyframes abhängen.
+ * Vorbereitete Keyframes erlauben verlustfreies Kopieren; alte Videos fallen bei
+ * ungeeigneten Schnittpunkten auf exaktes Neucodieren zurück.
  * Cache und einzelne Uploads werden sofort persistiert (auch vor einem Neustart).
  */
 export async function storyClipsVorbereiten(eingabe, cache, speichern) {
@@ -21,6 +22,38 @@ export async function storyClipsVorbereiten(eingabe, cache, speichern) {
       await Promise.all(cache.dateien.map((datei) => fs.access(datei)));
       return cache;
     } catch { /* Fehlende Clips neu erzeugen. */ }
+  }
+  // Das Rendern setzt alle 59 Sekunden einen Keyframe. Nur umverpacken,
+  // statt den fertigen Film auf dem Pi ein zweites Mal zu komprimieren.
+  const tmp = await fs.mkdtemp(path.join(path.dirname(eingabe), "story-schnitt-"));
+  try {
+    const anzahl = storyAnzahl(dauer);
+    const grenzen = Array.from({ length: anzahl - 1 }, (_, i) => (i + 1) * STORY_CLIP_SEKUNDEN);
+    await ausfuehren("ffmpeg", ["-y", "-v", "error", "-i", eingabe,
+      "-map", "0:v:0", "-map", "0:a?", "-c", "copy", "-f", "segment",
+      "-segment_times", grenzen.join(","), "-reset_timestamps", "1",
+      "-segment_format_options", "movflags=+faststart", path.join(tmp, "%03d.mp4")]);
+    const namen = (await fs.readdir(tmp)).filter((n) => n.endsWith(".mp4")).sort();
+    const clips = await Promise.all(namen.map((n) => untersuche(path.join(tmp, n))));
+    // Kurze Abweichungen durch Audio-Pakete sind normal; große Abweichungen
+    // oder zu lange Clips bedeuten ungeeignete Keyframes in einer alten Fassung.
+    if (namen.length === anzahl && clips.every((c) => c.dauer > 0 && c.dauer <= 60) &&
+        Math.abs(clips.reduce((sum, c) => sum + c.dauer, 0) - dauer) < 0.5 &&
+        clips.slice(0, -1).every((c) => Math.abs(c.dauer - STORY_CLIP_SEKUNDEN) < 0.15)) {
+      const dateien = [];
+      for (const [i, name] of namen.entries()) {
+        const ziel = path.join(path.dirname(eingabe), `story-teil-${i + 1}.mp4`);
+        await fs.rename(path.join(tmp, name), ziel);
+        dateien.push(ziel);
+      }
+      const neu = { quelle, dateien, hochgeladen: [] };
+      await speichern(neu);
+      return neu;
+    }
+  } catch (e) {
+    console.info("Story-Schnellaufteilung nicht möglich; verwende exakte Schnitte.");
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
   }
   const dateien = [];
   for (let i = 0; i < storyAnzahl(dauer); i++) {

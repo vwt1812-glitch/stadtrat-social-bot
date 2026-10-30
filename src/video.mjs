@@ -9,6 +9,7 @@ import { bildRechteck, gesichterUebertragen, logoPlatzierung } from "./story-lay
 
 export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
+    const beginn = Date.now();
     const p = spawn(befehl, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
     const out = [];
     let err = "";
@@ -17,6 +18,8 @@ export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
     p.on("error", (e) => reject(new Error(`${befehl} nicht gefunden oder nicht startbar: ${e.message}`)));
     p.on("close", (code) => {
       if (code !== 0) return reject(new Error(`${befehl} ist fehlgeschlagen (Code ${code}):\n${err.trim().split("\n").slice(-6).join("\n")}`));
+      const sekunden = (Date.now() - beginn) / 1000;
+      if (sekunden >= 2) console.info(`[Verarbeitung] ${path.basename(befehl)}: ${sekunden.toFixed(1)} s`);
       const daten = Buffer.concat(out);
       resolve(binaer ? daten : daten.toString());
     });
@@ -378,7 +381,8 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
   );
   if (video.encoder === "libx264") args.push("-preset", video.preset, "-crf", video.crf, "-profile:v", "high");
   else args.push("-b:v", "8M");
-  args.push("-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", ausgabe);
+  args.push("-force_key_frames", "expr:gte(t,n_forced*59)",
+    "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", ausgabe);
 
   await ausfuehren("ffmpeg", args, { cwd: ordner });
 }

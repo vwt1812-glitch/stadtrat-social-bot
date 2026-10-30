@@ -14,3 +14,13 @@ for (const modus of ["nativ", "story", "quer", "ohne-opencv", "fehler"]) {
     { timeout: 22000, stdio: "pipe" });
   });
 }
+
+for (const modus of ["video", "foto", "album"]) {
+  test(`Telegram: neuer Beitrag startet ohne Logo und kann es hinzufügen (${modus})`, async (t) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "logo-standard-"));
+    t.after(() => fs.rm(dir, { recursive: true, force: true }));
+    execFileSync(process.execPath, ["--experimental-test-module-mocks",
+      fileURLToPath(new URL("./fixtures/logo-default-flow.mjs", import.meta.url)), dir, modus],
+    { timeout: 25000, stdio: "pipe" });
+  });
+}
