@@ -213,6 +213,7 @@ const LAGE_TEXT = { oben: "⬆️ Oben", mitte: "↕️ Mitte", unten: "⬇️ U
 
 // Ältere Videoentwürfe haben kein mitLogo-Feld und behalten ihr bisheriges Logo.
 const videoMitLogo = (auftrag) => auftrag.mitLogo !== false;
+const grafikLayout = (auftrag) => ({ ...config.layout, logo: auftrag.mitLogo === true ? config.layout.logo : null });
 
 function lageMenue(auftrag) {
   const jetzt = auftrag.untertitelLage ?? "unten";
@@ -359,8 +360,8 @@ async function menueInhalt(auftrag) {
     ...details(auftrag, alle), `📺 ${kanalText}`, ...hinweise,
   ].join("\n");
   const extra = {
-    video: auftrag.grafikAnimation ? [] : [knopf(videoMitLogo(auftrag) ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo"), knopf("📝 Untertitel bearbeiten", auftrag, "untertitel"), knopf("📍 Untertitelposition", auftrag, "pos"), knopf("🪪 Name / Funktion im Video", auftrag, "bb")],
-    foto: auftrag.grafikModus ? [] : [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo")],
+    video: auftrag.grafikAnimation ? [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo")] : [knopf(videoMitLogo(auftrag) ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo"), knopf("📝 Untertitel bearbeiten", auftrag, "untertitel"), knopf("📍 Untertitelposition", auftrag, "pos"), knopf("🪪 Name / Funktion im Video", auftrag, "bb")],
+    foto: [knopf(auftrag.mitLogo ? "🏷️ Logo entfernen" : "🏷️ Logo hinzufügen", auftrag, "logo")],
     text: [],
   }[art(auftrag)];
   const zeilen = [
@@ -471,7 +472,7 @@ async function thumbnailBauen(a, optionen) {
   await tg.senden(a.chatId, "🖼️ Erstelle die Titelbilder in den passenden Größen …");
   einreihen(async () => {
     try {
-      const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), quelle: a.original ?? coverVideo(a), layout: config.layout,
+      const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), quelle: a.original ?? coverVideo(a), layout: a.grafikModus ? grafikLayout(a) : layoutFuer(a),
         optionen, kanaele, mastodonPatch: config.postiz.mastodonThumbnails, gesicht: config.gesicht });
       // Nur nach vollständigem Rendern übernehmen; eine misslungene Änderung lässt das bisherige Cover intakt.
       auftraege.aendern(a.id, { thumbnail });
@@ -706,7 +707,7 @@ async function neuesVideo(msg, video) {
   const auftrag = auftraege.neu(chatId);
   const status = await tg.senden(chatId, "📥 Video erhalten – kommt gleich dran …", { reply_to_message_id: msg.message_id });
   auftraege.aendern(auftrag.id, {
-    art: "video", statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4",
+    art: "video", mitLogo: false, statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4",
     bauchbinde: config.bauchbinde.standard ? standardBauchbinde() : null,
     hochkant: config.hochkant.standard,
   });
@@ -733,7 +734,7 @@ async function verarbeiten(id, fileId) {
     const zuverlaessig = funde?.gesichter?.length >= Math.max(2, (funde?.bilder ?? 0) * 0.4);
     auftrag = auftraege.aendern(id, { gesichter: zuverlaessig ? funde.gesichter : [] });
     if (masse.hoehe > masse.breite && funde) {
-      const wahl = lageWaehlen(funde, { masse, layout: config.layout });
+      const wahl = lageWaehlen(funde, { masse, layout: layoutFuer(auftrag) });
       auftrag = auftraege.aendern(id, {
         untertitelLage: wahl.lage === "unten" ? null : wahl.lage,
         lageAutomatisch: wahl.lage !== "unten", gesichtHinweise: wahl.hinweise,
@@ -887,7 +888,7 @@ async function renderUndVorschau(id, { gesichtNeu = false } = {}) {
         lageAutomatisch: wahl.lage !== "unten", gesichtHinweise: wahl.hinweise,
       });
     }
-    await schritt(auftrag, "🎬 Baue Logo und Untertitel ein …");
+    await schritt(auftrag, videoMitLogo(auftrag) ? "🎬 Baue Logo und Untertitel ein …" : "🎬 Baue Untertitel ein …");
     const masse = feedMasse(auftrag);
     const layout = querAn(auftrag)
       ? querLayout(layoutFuer(auftrag), auftrag.masse, masse, { lageAutomatisch: auftrag.lageAutomatisch })
@@ -956,7 +957,7 @@ async function neueFotos(chatId, teile) {
   const notizen = teile.map(({ msg }) => msg.caption).find(Boolean) ?? "";
   const auftrag = auftraege.neu(chatId);
   const status = await tg.senden(chatId, `🖼️ ${fotos.length === 1 ? "Foto" : `${fotos.length} Fotos`} erhalten – kommt gleich dran …`, { reply_to_message_id: teile[0].msg.message_id });
-  auftraege.aendern(auftrag.id, { art: "foto", fotos, notizen, mitLogo: config.layout.logoAufFotos, statusNachricht: status.message_id });
+  auftraege.aendern(auftrag.id, { art: "foto", fotos, notizen, mitLogo: false, statusNachricht: status.message_id });
   einreihen(() => verarbeiteFotos(auftrag.id));
 }
 
@@ -1030,10 +1031,10 @@ async function textBeitrag(chatId, text, zusaetze = {}) {
 }
 
 /** Bestehenden Textauftrag in eine echte Postiz-Bild- oder Storyveröffentlichung umwandeln. */
-async function textZuGrafik(auftrag, format = "post", quelle = null) {
+async function textZuGrafik(auftrag, format = "post", quelle = null, auswahlBehalten = false) {
   const text = grafikText(auftrag, quelle);
   const vorlage = await textGrafiken({
-    ordner: auftrag.ordner, text, layout: config.layout,
+    ordner: auftrag.ordner, text, layout: grafikLayout(auftrag),
     ausAntrag: Boolean(auftrag.antragVarianten?.length),
   });
   const story = format === "story";
@@ -1041,14 +1042,37 @@ async function textZuGrafik(auftrag, format = "post", quelle = null) {
     art: "foto", grafikModus: format, grafikAnimation: false, grafikQuelleText: text,
     grafikStoryDatei: vorlage.story, medien: [vorlage.post], originale: [vorlage.post],
     storyDatei: vorlage.story, storyHochgeladen: null, storyClips: null,
-    mitLogo: false, hochgeladen: null, captions: {},
+    mitLogo: auftrag.mitLogo === true, hochgeladen: null, captions: {},
     story, nurStory: story, kanaele: null, status: "vorschau",
+    ...(auswahlBehalten ? { kanaele: auftrag.kanaele, captions: auftrag.captions, story: auftrag.story, nurStory: auftrag.nurStory } : {}),
   });
   await tg.fotos(auftrag.chatId, [story ? vorlage.story : vorlage.post],
     story ? "Storygrafik – Vorschau" : "Sharepic – Vorschau");
   if (vorlage.gekuerzt) await tg.senden(auftrag.chatId,
     "ℹ️ Der Text wurde für die Grafik gekürzt. Bitte die Vorschau prüfen und gegebenenfalls „✏️ Grafiktext“ nutzen.");
   return auftrag;
+}
+
+async function grafikAnimieren(id, format, auswahlBehalten = false) {
+  let a = auftraege.get(id);
+  const text = grafikText(a);
+  const story = format === "story";
+  const ausgabe = datei(a, `redaktion-animation-${format}.mp4`);
+  await textAnimation({
+    ausgabe, inhalt: (await import("./redaktion.mjs")).grafikInhalt(text, { ausAntrag: Boolean(a.antragVarianten?.length) }),
+    layout: grafikLayout(a), format,
+  });
+  a = auftraege.aendern(id, {
+    art: "video", mitLogo: a.mitLogo === true, grafikAnimation: true, grafikModus: format,
+    grafikQuelleText: text, medien: [ausgabe], originale: [ausgabe],
+    masse: { breite: 1080, hoehe: story ? 1920 : 1350, dauer: 5, hatTon: false },
+    story, nurStory: story, storyDatei: null, grafikStoryDatei: null,
+    hochgeladen: null, storyHochgeladen: null, storyClips: null, captions: {}, kanaele: null,
+    status: "vorschau",
+    ...(auswahlBehalten ? { kanaele: a.kanaele, captions: a.captions, story: a.story, nurStory: a.nurStory } : {}),
+  });
+  await tg.datei(a.chatId, "sendVideo", "video", ausgabe, { caption: "🎞️ Animierte Textgrafik – Vorschau" });
+  await neuesMenue(a);
 }
 
 function antragMenue(auftrag) {
@@ -1345,24 +1369,7 @@ async function knopfGedrueckt(cq) {
       auftrag = auftraege.aendern(id, { status: "arbeitet" });
       einreihen(async () => {
         try {
-          let a = auftraege.get(id);
-          const text = grafikText(a);
-          const story = arg === "story";
-          const ausgabe = datei(a, `redaktion-animation-${arg}.mp4`);
-          await textAnimation({
-            ausgabe, inhalt: (await import("./redaktion.mjs")).grafikInhalt(text, { ausAntrag: Boolean(a.antragVarianten?.length) }),
-            layout: config.layout, format: arg,
-          });
-          a = auftraege.aendern(id, {
-            art: "video", grafikAnimation: true, grafikModus: arg,
-            grafikQuelleText: text, medien: [ausgabe], originale: [ausgabe],
-            masse: { breite: 1080, hoehe: story ? 1920 : 1350, dauer: 5, hatTon: false },
-            story, nurStory: story, storyDatei: null, grafikStoryDatei: null,
-            hochgeladen: null, storyHochgeladen: null, storyClips: null, captions: {}, kanaele: null,
-            status: "vorschau",
-          });
-          await tg.datei(a.chatId, "sendVideo", "video", ausgabe, { caption: "🎞️ Animierte Textgrafik – Vorschau" });
-          await neuesMenue(a);
+          await grafikAnimieren(id, arg);
         } catch (e) {
           console.error(e);
           await tg.senden(auftrag.chatId, `❌ Animation fehlgeschlagen: <pre>${html(e.message)}</pre>`);
@@ -1455,7 +1462,22 @@ async function knopfGedrueckt(cq) {
       });
       return antwort();
     case "logo":
-      if (auftrag.grafikModus || !["foto", "video"].includes(art(auftrag))) return antwort("Logo ist hier nicht umschaltbar.", true);
+      if (!["foto", "video"].includes(art(auftrag))) return antwort("Logo ist hier nicht umschaltbar.", true);
+      if (auftrag.grafikModus) {
+        auftrag = auftraege.aendern(id, { mitLogo: !auftrag.mitLogo, status: "arbeitet", plan: null,
+          hochgeladen: null, storyHochgeladen: null, storyClips: null });
+        await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
+        einreihen(async () => {
+          try {
+            if (auftrag.grafikAnimation) await grafikAnimieren(id, auftrag.grafikModus, true);
+            else await neuesMenue(await textZuGrafik(auftraege.get(id), auftrag.grafikModus, null, true));
+          } catch (e) {
+            auftraege.aendern(id, { status: "fehler" });
+            await tg.senden(auftrag.chatId, `❌ Grafik fehlgeschlagen: <pre>${html(e.message)}</pre>`);
+          }
+        });
+        return antwort("Logo wird geändert …");
+      }
       if (art(auftrag) === "video") {
         auftrag = auftraege.aendern(id, { mitLogo: !videoMitLogo(auftrag), status: "arbeitet",
           statusNachricht: null, plan: null, hochgeladen: null, storyHochgeladen: null, storyClips: null, videoFormatFehler: true });

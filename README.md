@@ -1,5 +1,8 @@
 # Stadtrat Social-Media-Bot
 
+Neue Beiträge starten **ohne Logo**; „Logo hinzufügen“ ist für Fotos, Videos, Storys,
+Sharepics und Animationen verfügbar.
+
 Telegram-Bot für den Raspberry Pi: Video, Fotos oder Text reinschicken → Vorschau mit Logo, Untertiteln und
 Caption-Vorschlag zurück → anpassen → mit **Ja** sofort oder zu einer bestimmten Zeit über [Postiz](https://postiz.com) posten.
 Alles läuft lokal, Postiz ist selbst gehostet. Nur wenn ein KI-Schlüssel eingetragen ist (Claude oder OpenAI),

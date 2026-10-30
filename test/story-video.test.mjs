@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { ausfuehren, untersuche } from "../src/video.mjs";
+import { ausfuehren, untersuche, rendern } from "../src/video.mjs";
 import { storyAnzahl, storyClipsVorbereiten, storyClipsHochladen } from "../src/story-video.mjs";
 
 test("Story-Grenzen: bis 60 Sekunden unverändert, darüber vollständige Aufteilung", () => {
@@ -56,3 +56,25 @@ test("Upload-Abbruch: bestätigte Clips bleiben gespeichert, Fortsetzen lädt nu
   assert.deepEqual(aufrufe, ["zwei", "drei"]);
   assert.equal(uploads.length, 3);
 });
+
+for (const ton of [true, false]) {
+  test(`FFmpeg: vorbereitete Schnittpunkte kopieren alle Videopakete unverändert (Ton: ${ton})`, async (t) => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "story-copy-"));
+    t.after(() => fs.rm(dir, { recursive: true, force: true }));
+    const original = path.join(dir, "original.mp4"), fertig = path.join(dir, "fertig.mp4");
+    await ausfuehren("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc2=s=64x96:r=15:d=125",
+      ...(ton ? ["-f", "lavfi", "-i", "sine=frequency=440:duration=125"] : []),
+      "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", original]);
+    await rendern({ eingabe: original, ausgabe: fertig, ass: null, masse: { breite: 64, hoehe: 96, dauer: 125 },
+      layout: {}, video: { encoder: "libx264", preset: "veryfast", crf: "21" } });
+    const cache = await storyClipsVorbereiten(fertig, null, async () => {});
+    assert.equal(cache.dateien.length, 3);
+    const pakete = async (datei) => JSON.parse(await ausfuehren("ffprobe", ["-v", "error", "-select_streams", "v:0",
+      "-show_packets", "-show_data_hash", "sha256", "-show_entries", "packet=data_hash", "-of", "json", datei])).packets.map((p) => p.data_hash);
+    const kopiert = (await Promise.all(cache.dateien.map(pakete))).flat();
+    assert.deepEqual(kopiert, await pakete(fertig));
+    const clips = await Promise.all(cache.dateien.map(untersuche));
+    assert.ok(clips.every((c) => c.dauer <= 60 && c.hatTon === ton));
+    assert.ok(Math.abs(clips.reduce((sum, c) => sum + c.dauer, 0) - 125) < 0.5);
+  });
+}
