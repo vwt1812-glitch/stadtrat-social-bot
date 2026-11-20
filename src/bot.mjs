@@ -18,6 +18,7 @@ import {
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
+import { hochkantAusschnitt } from "./hochkant-ausschnitt.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
@@ -398,8 +399,9 @@ async function menueInhalt(auftrag) {
     optionen.push(knopf("✏️ Text auf Storyfoto ändern", auftrag, "storytext"));
     optionen.push(knopf("🖼️ Logo- und Textposition", auftrag, "slmenu"));
   }
-  if (!auftrag.nurStory && art(auftrag) === "video" && !auftrag.grafikAnimation &&
-      (auftrag.masse?.hoehe > auftrag.masse?.breite || (hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))))) {
+  if (art(auftrag) === "video" && !auftrag.grafikAnimation &&
+      (auftrag.masse?.breite > auftrag.masse?.hoehe || (!auftrag.nurStory && auftrag.masse?.hoehe > auftrag.masse?.breite) ||
+        (hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))))) {
     optionen.push(knopf("📐 Videoformat ändern", auftrag, "videoformat"));
   }
   for (const taste of optionen) zeilen.push([taste]);
@@ -421,6 +423,9 @@ async function videoFormatMenue(a) {
   }
   if (hochkantMoeglich(a) && ziele.length) {
     zeilen.push([knopf(hochkantAn(a) ? "📺 Überall Feedformat nutzen" : "📱 Zusätzlich Hochkant nutzen", a, "hochkant")]);
+  }
+  if (a.masse?.breite > a.masse?.hoehe) {
+    zeilen.push([knopf(a.hochkantGanzesBild ? "✂️ Sinnvollen Ausschnitt automatisch prüfen" : "🖼️ Hochkant mit vollständigem Bild", a, "ausschnitt")]);
   }
   zeilen.push([knopf("↩️ Zur Vorschau", a, "zurueck")]);
   return {
@@ -818,9 +823,22 @@ async function storyFassung(auftrag) {
   // einschließlich Logo-Variante und Untertitelposition. Kein Story-Logo-Wechsel.
   const nativ = querAn(auftrag) && istStoryFormat(auftrag.masse);
   const masse = nativ ? auftrag.masse : { ...STORY_MASSE, dauer: auftrag.masse.dauer };
-  let layout = nativ ? layoutFuer(auftrag) : storyLayout(layoutFuer(auftrag), auftrag.masse, masse);
+  let ausschnitt = null;
+  let gesichter = auftrag.gesichter ?? [];
+  if (!nativ && !auftrag.hochkantGanzesBild && auftrag.masse.breite > auftrag.masse.hoehe) {
+    // Eigene Prüfung: ältere Funde enthalten nur das größte Gesicht pro Bild.
+    let funde = auftrag.hochkantFunde;
+    if (funde === undefined) {
+      funde = await gesichtSuchen(auftrag.original, { ...config.gesicht, alleGesichter: true }, 24);
+      auftraege.aendern(auftrag.id, { hochkantFunde: funde });
+    }
+    ausschnitt = hochkantAusschnitt(auftrag.masse, funde);
+    if (ausschnitt) gesichter = funde.gesichter;
+  }
+  auftraege.aendern(auftrag.id, { hochkantAusschnitt: ausschnitt });
+  let layout = nativ ? layoutFuer(auftrag) : storyLayout({ ...layoutFuer(auftrag), gesichter }, auftrag.masse, masse, ausschnitt);
   if (!nativ && auftrag.untertitelAuto) {
-    const wahl = lageWaehlen({ bilder: auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
+    const wahl = lageWaehlen({ bilder: ausschnitt ? 24 : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
     layout = { ...layout, lage: wahl.lage === "unten" ? null : wahl.lage };
   }
   const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
@@ -863,7 +881,8 @@ async function storyAktualisieren(auftrag) {
   const wofuer = [hochkantAn(auftrag) && "Instagram/TikTok", auftrag.story && "Story"].filter(Boolean).join(" und ");
   const vorschauMasse = querAn(auftrag) && istStoryFormat(auftrag.masse) ? auftrag.masse : STORY_MASSE;
   await tg.datei(auftrag.chatId, "sendVideo", "video", senden, {
-    caption: `9:16-Fassung für ${wofuer}`, supports_streaming: "true",
+    caption: `9:16-Fassung für ${wofuer}${auftrag.masse.breite > auftrag.masse.hoehe
+      ? (auftrag.hochkantAusschnitt ? " · automatischer Ausschnitt" : " · vollständiges Bild mit unscharfem Hintergrund") : ""}`, supports_streaming: "true",
     width: String(vorschauMasse.breite), height: String(vorschauMasse.hoehe),
   });
   return auftrag;
@@ -1693,6 +1712,18 @@ async function knopfGedrueckt(cq) {
       await antwort(aktiv ? "Baue die 16:9-Fassung …" : "Stelle das ursprüngliche Format wieder her …");
       await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
       einreihen(() => renderUndVorschau(id));
+      return;
+    }
+    case "ausschnitt": {
+      if (art(auftrag) !== "video" || !(auftrag.masse?.breite > auftrag.masse?.hoehe)) return antwort("Nur für Querformatvideos verfügbar.", true);
+      auftrag = auftraege.aendern(id, { hochkantGanzesBild: !auftrag.hochkantGanzesBild,
+        storyDatei: null, storyHochgeladen: null, storyClips: null, plan: null, status: "arbeitet" });
+      await antwort("Prüfe die Hochkantfassung neu …");
+      await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
+      einreihen(async () => {
+        await storyAktualisieren(auftraege.get(id)).catch((e) => console.error(e));
+        await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
+      });
       return;
     }
     case "hochkant": {

@@ -289,14 +289,24 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
 - **Storys:** Instagram und Facebook zeigen oben Fortschrittsbalken und Profil, unten Antworten/Interaktionen.
   Der Bot nutzt dafür konservative Sicherheitsbereiche (oben 14 %, unten 20 %); für Reels/TikTok oben 14 %,
   unten 35 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
-  Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung mit unscharfem Hintergrund.
+  Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung. Bei Querformatvideos prüft er
+  zuerst lokal mit OpenCV in 24 Bildern einschließlich Anfang und Ende, ob ein fester 9:16-Ausschnitt
+  passt. Dafür müssen in mindestens 90 % der Probebilder Gesichter erkannt werden und alle erkannten
+  Köpfe samt seitlichem Abstand für Schultern in denselben Ausschnitt passen. Es gibt keine bewegte
+  Kameranachführung. Bei unsicherer Erkennung, zu starker Bewegung oder weit getrennten Personen bleibt
+  das vollständige Bild mit unscharfem Hintergrund sichtbar; ebenso ohne eingerichtetes OpenCV.
+  Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
+  Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
+  abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.
+  Die Vorschau nennt die verwendete Darstellung. Story und zusätzliche Hochkantfassung nutzen dieselbe
+  Auswahl. Fotos behalten ihren unscharfen Hintergrund.
   Fotos werden **direkt aus dem Original** bearbeitet: erst Hintergrund und scharfes Bild, dann das Logo,
   damit es nicht in den unscharfen Hintergrund eingebrannt ist. Das Logo landet bevorzugt auf einer ausreichend
   großen freien unscharfen Fläche; falls keine passt, in einer freien Ecke innerhalb der Sicherheitsbereiche.
   **🖼️ Story-Layout** erlaubt bei Fotos die Positionen automatisch, oben/unten links, mittig oder rechts und
   eine Position für Bildtext. Text wird bevorzugt auf freien Flächen platziert, ohne das Logo zu überdecken.
   In Videos können erkannte Gesichter die Logoposition beeinflussen (auch nach Umrechnung eines Querformats
-  auf 9:16). Bei einem Querformatvideo stehen Untertitel nach Möglichkeit unter dem scharfen Bild,
+  auf 9:16). Bei einem Querformatvideo ohne Ausschnitt stehen Untertitel nach Möglichkeit unter dem scharfen Bild,
   Bauchbinden bleiben möglichst im Bild. Die eigene Story-Fassung wird beim Posten extra hochgeladen.
 - **Querformat für Instagram/TikTok:** Ein Querformat-Video erscheint in Reels und TikTok sonst klein mit Balken.
   Mit **📲 9:16 für Insta** bekommen die Netzwerke aus `HOCHKANT_NETZE` (Standard Instagram und TikTok) die
