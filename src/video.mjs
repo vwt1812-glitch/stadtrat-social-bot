@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { untertitelGroesse, untertitelPosition } from "./untertitel.mjs";
 import { bildRechteck, gesichterUebertragen, logoPlatzierung } from "./story-layout.mjs";
+import { gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
 
 export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -327,7 +328,10 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
   let letzte = "0:v";
   let eingang = 1;
   if (story || quer) {
-    filter.push(`[0:v]${storyFlaeche(masse)}[flaeche]`);
+    const a = story && layout.ausschnitt;
+    filter.push(`[0:v]${a
+      ? `crop=${a.breite}:${a.hoehe}:${a.x}:${a.y},scale=${masse.breite}:${masse.hoehe},setsar=1`
+      : storyFlaeche(masse)}[flaeche]`);
     letzte = "flaeche";
     if (story && layout.logo && layout.logoStil === "frei") {
       const schleier = path.join(ordner, "story-schleier.png");
@@ -442,7 +446,11 @@ export function storyBild(original, masse = STORY_MASSE) {
  * unscharfen Fläche (so verdecken sie nichts). Untertitel nur dorthin, wo sie noch über Name und
  * Caption von Reels/TikTok bleiben (untere 22 %); sonst gilt das normale Hochkant-Layout.
  */
-export function storyLayout(layout, original, masse = STORY_MASSE) {
+export function storyLayout(layout, original, masse = STORY_MASSE, ausschnitt = null) {
+  if (ausschnitt) return {
+    ...layout, ausschnitt, bild: null, smartLogo: true, layoutModus: "reel", positionFest: undefined,
+    gesichter: gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt),
+  };
   const bild = bildRechteck(original, masse);
   const ergebnis = {
     ...layout, bild, smartLogo: true, layoutModus: "reel",
