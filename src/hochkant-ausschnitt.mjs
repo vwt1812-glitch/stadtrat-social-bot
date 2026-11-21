@@ -76,7 +76,7 @@ export function ausschnittHinweis(funde, ausschnitt) {
   return "Kein sicherer Hochkant-Ausschnitt gefunden; vollständiges Bild";
 }
 
-export function hochkantAusschnitt(original, funde) {
+export function hochkantAusschnitt(original, funde, { breite: zielBreite, links: sicherLinks=0, rechts: sicherRechts=1 }={}) {
   const { breite, hoehe } = original;
   if (!(Number.isFinite(breite) && Number.isFinite(hoehe) && breite > hoehe && hoehe >= 32) || !funde?.alleGesichter ||
       !Number.isInteger(funde.bilder) || funde.bilder < 12 || !funde.gesichter?.length) return null;
@@ -95,9 +95,9 @@ export function hochkantAusschnitt(original, funde) {
   // Alte, weit verteilte Probebilder bleiben an die bisherige Quote gebunden.
   if ((!dicht && gruppen.size < Math.ceil(funde.bilder * 0.9)) || gruppen.size > funde.bilder) return null;
   const h = Math.floor(hoehe / 2) * 2;
-  const w = Math.round(h * 9 / 16 / 2) * 2;
+  const w = zielBreite ?? Math.round(h * 9 / 16 / 2) * 2;
   // Chroma-kompatible Maße; das genaue Zielformat entsteht beim Skalieren.
-  if (w % 2) return null;
+  if (!Number.isFinite(w)||w<2||w>breite||w%2||sicherLinks<0||sicherRechts>1||sicherLinks>=sicherRechts) return null;
   const y = Math.floor((hoehe - h) / 4) * 2;
   let minX = 0, maxX = breite - w;
   const rahmen = [];
@@ -116,8 +116,8 @@ export function hochkantAusschnitt(original, funde) {
       // als die Kamera überhaupt aufgenommen hat.
       if (Math.max(0, g.y - g.h * 0.35) * hoehe < y ||
           Math.min(1, g.y + g.h * 1.15) * hoehe > y + h) passt = false;
-      von = Math.max(von, rechts - w);
-      bis = Math.min(bis, links);
+      von = Math.max(von, rechts - sicherRechts*w);
+      bis = Math.min(bis, links - sicherLinks*w);
     }
     von = Math.ceil(von / 2) * 2;
     bis = Math.floor(bis / 2) * 2;
@@ -133,7 +133,7 @@ export function hochkantAusschnitt(original, funde) {
   const links = Math.ceil(minX / 2) * 2;
   const rechts = Math.floor(maxX / 2) * 2;
   const mitte = funde.gesichter.reduce((sum, g) => sum + (g.x + g.w / 2) * breite, 0) / funde.gesichter.length;
-  const ziel = Math.round((mitte - w / 2) / 2) * 2;
+  const ziel = Math.round((mitte - w*(sicherLinks+sicherRechts)/2) / 2) * 2;
   const basis = { x: Math.max(links, Math.min(rechts, ziel)), y, breite: w, hoehe: h };
   // Bewegte Ausschnitte nur mit der neuen Erkennung und bekannten Probebildzeiten.
   if (funde.version !== AUSSCHNITT_VERSION || !Array.isArray(funde.zeiten)) {
@@ -208,13 +208,14 @@ export function gesichterImAusschnitt(gesichter, original, ausschnitt, masse = {
   const faktor = Math.min(masse.breite / original.breite, masse.hoehe / original.hoehe);
   const bw = original.breite * faktor / masse.breite;
   const bh = original.hoehe * faktor / masse.hoehe;
+  const d=ausschnitt.darstellung??{x:0,y:0,breite:masse.breite,hoehe:masse.hoehe};
   return gesichter.map((g) => !ausschnittAktiv(ausschnitt, g.t ?? 0) ? {
     ...g, x: (1 - bw) / 2 + g.x * bw, y: (1 - bh) / 2 + g.y * bh, w: g.w * bw, h: g.h * bh,
   } : ({
     ...g,
-    x: (g.x * original.breite - ausschnittX(ausschnitt, g.t ?? 0)) / ausschnitt.breite,
-    y: (g.y * original.hoehe - ausschnitt.y) / ausschnitt.hoehe,
-    w: g.w * original.breite / ausschnitt.breite,
-    h: g.h * original.hoehe / ausschnitt.hoehe,
+    x: (d.x+(g.x * original.breite - ausschnittX(ausschnitt, g.t ?? 0))/ausschnitt.breite*d.breite)/masse.breite,
+    y: (d.y+(g.y * original.hoehe - ausschnitt.y)/ausschnitt.hoehe*d.hoehe)/masse.hoehe,
+    w: g.w * original.breite/ausschnitt.breite*d.breite/masse.breite,
+    h: g.h * original.hoehe/ausschnitt.hoehe*d.hoehe/masse.hoehe,
   }));
 }

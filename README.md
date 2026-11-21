@@ -306,10 +306,13 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   eine weitere vollständige Dekodierung großer HEVC-Originale; gerendert wird weiterhin aus dem Original.
   Bei kurzen Videos wird die Abtastung erhöht. Die Originalhöhe bleibt erhalten, damit zusätzliches
   Kopfpolster nicht zum Ablehnen der gesamten Aufnahme oder zum Abschneiden der Haare führt.
-  Untertitel erhalten im ausgefüllten Hochkant-Ausschnitt einen festen tieferen Platz je Video,
-  möglichst unterhalb des Mundes auch bei gesenktem Kopf. Der Abstand vom unteren Rand beträgt
-  dafür 16–23 %; bei langen App-Captions kann der verfügbare Platz knapp werden. Eine ausdrücklich
-  gewählte Lage unter **📍 Position** hat weiterhin Vorrang. Die normale Fassung behält ihre Position.
+  Bildausschnitt und Untertitel werden gemeinsam innerhalb der Plattform-Freizonen geplant:
+  oben 14 %, unten 35 %, links 6 % und rechts 16 % bleiben für die Bedienoberfläche frei.
+  Für nahe Gesichter wird der Ausschnitt breiter und als größeres Bild im oberen Bereich platziert,
+  damit darunter Platz für Text bleibt. Der Hintergrund bleibt weichgezeichnet.
+  Der gesamte Untertitelblock einschließlich Kontur und Schatten bleibt innerhalb der Freizone;
+  lange Wörter werden bei Bedarf kleiner gesetzt. Auch eine ausdrücklich gewählte Textposition
+  wird darauf begrenzt. Die normale Querformatfassung behält ihre Position.
   Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
   Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
   abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.

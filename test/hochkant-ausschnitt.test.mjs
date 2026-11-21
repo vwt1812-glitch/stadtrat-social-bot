@@ -7,7 +7,8 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ausschnittAktiv, ausschnittAktivFilter, ausschnittHinweis, ausschnittKommandos, ausschnittX, gesichterImAusschnitt, hochkantAusschnitt } from "../src/hochkant-ausschnitt.mjs";
 import { ausfuehren, rendern, storyLayout, untersuche } from "../src/video.mjs";
-import { untertitelPosition } from "../src/untertitel.mjs";
+import { untertitelPosition,untertitelRahmen } from "../src/untertitel.mjs";
+import { sichererHochkantAusschnitt } from "../src/plattform-video.mjs";
 
 const original = { breite: 1920, hoehe: 1080 };
 const funde = (x = 0.65) => ({ bilder: 24, alleGesichter: true,
@@ -27,7 +28,7 @@ test("Fester 9:16-Ausschnitt folgt einer seitlich stehenden Person mit Kopfrand"
   }
   const layout = storyLayout({ gesichter: f.gesichter, positionFest: 0.6 }, original, { breite: 1080, hoehe: 1920 }, a);
   assert.equal(layout.bild, null);
-  assert.equal(layout.positionFest, 0.23);
+  assert.ok(layout.positionFest>=0.35);
   assert.ok(layout.gesichter.every((g) => g.x > 0 && g.x + g.w < 1));
   assert.equal(layout.gesichter[0].t, 0);
 });
@@ -144,24 +145,25 @@ test("Langsame Kamerafahrt behält ihre Geschwindigkeit über Messpunkte hinweg 
   }
 });
 
-test("Untertitel im ausgefüllten Hochkant-Ausschnitt stehen tiefer; manuelle obere Lage bleibt wählbar", () => {
+test("Plattform-Freizonen haben Vorrang vor tiefer Lage; manuelle obere Lage bleibt wählbar", () => {
   const a=hochkantAusschnitt(original,funde());
   const masse={breite:1080,hoehe:1920};
   const layout=storyLayout({position:0.35},original,masse,a);
-  assert.equal(untertitelPosition({...masse,...layout}),0.23);
-  assert.equal(Math.round(masse.hoehe*(0.35-untertitelPosition({...masse,...layout}))),230);
+  assert.ok(untertitelPosition({...masse,...layout})>=0.35);
   assert.equal(untertitelPosition({...masse,...layout,lage:"oben"}),0.62);
   assert.equal(untertitelPosition({...masse,position:0.35}),0.35);
 });
 
 test("Gesenkter Kopf bekommt einen festen tieferen Untertitelplatz statt Text über dem Mund",()=>{
-  const a=hochkantAusschnitt(original,funde());
   const masse={breite:1080,hoehe:1920};
-  const layout=storyLayout({position:0.35,zeilen:1,gesichter:[{t:2,x:0.3,y:0.42,w:0.2,h:0.4}]},original,masse,a);
+  const f=funde();f.gesichter=f.gesichter.map(g=>({...g,x:0.3,y:0.42,w:0.2,h:0.4}));
+  const basis={position:0.35,zeilen:1,gesichter:f.gesichter};
+  const a=sichererHochkantAusschnitt(original,f,masse,basis);
+  const layout=storyLayout(basis,original,masse,a);
   const p=untertitelPosition({...masse,...layout});
-  assert.ok(p>=0.16&&p<0.23);
-  const textOben=1-p-67*1.15/1920;
-  assert.ok(textOben>0.42+0.85*0.4+0.01);
+  assert.ok(p>=0.35);
+  const r=untertitelRahmen({...masse,...layout});
+  assert.ok(layout.gesichter.every(g=>(g.y+0.85*g.h)*1920<r.unten-r.textHoehe));
 });
 
 test("Kamera am Anfang ausrichten: kurzer Schwenk verwirft nur den Anfang", () => {

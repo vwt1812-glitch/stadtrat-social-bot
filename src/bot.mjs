@@ -18,7 +18,8 @@ import {
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
-import { AUSSCHNITT_VERSION, ausschnittHinweis, hochkantAusschnitt } from "./hochkant-ausschnitt.mjs";
+import { AUSSCHNITT_VERSION, ausschnittHinweis } from "./hochkant-ausschnitt.mjs";
+import { sichererHochkantAusschnitt } from "./plattform-video.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
@@ -836,7 +837,7 @@ async function storyFassung(auftrag) {
       funde = await gesichtSuchen(analyseDatei, { ...config.gesicht, alleGesichter: true, dicht: true }, 24);
       auftraege.aendern(auftrag.id, { hochkantFunde: funde, hochkantFundeVersion: AUSSCHNITT_VERSION });
     }
-    ausschnitt = hochkantAusschnitt(auftrag.masse, funde);
+    ausschnitt = sichererHochkantAusschnitt(auftrag.masse,funde,masse,layoutFuer(auftrag));
     hinweis = ausschnittHinweis(funde, ausschnitt);
     if (ausschnitt) gesichter = funde.gesichter;
   }
