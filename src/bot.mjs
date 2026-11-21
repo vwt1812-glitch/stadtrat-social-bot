@@ -830,7 +830,9 @@ async function storyFassung(auftrag) {
     // Eigene Prüfung: ältere Funde enthalten nur das größte Gesicht pro Bild.
     let funde = auftrag.hochkantFunde;
     if (funde === undefined || (funde ? funde.version !== AUSSCHNITT_VERSION : auftrag.hochkantFundeVersion !== AUSSCHNITT_VERSION)) {
-      funde = await gesichtSuchen(auftrag.original, { ...config.gesicht, alleGesichter: true }, 24);
+      let analyseDatei = datei(auftrag, "fertig.mp4");
+      try { await fs.access(analyseDatei); } catch { analyseDatei = auftrag.original; }
+      funde = await gesichtSuchen(analyseDatei, { ...config.gesicht, alleGesichter: true, dicht: true }, 24);
       auftraege.aendern(auftrag.id, { hochkantFunde: funde, hochkantFundeVersion: AUSSCHNITT_VERSION });
     }
     ausschnitt = hochkantAusschnitt(auftrag.masse, funde);
@@ -840,7 +842,7 @@ async function storyFassung(auftrag) {
   auftraege.aendern(auftrag.id, { hochkantAusschnitt: ausschnitt, hochkantHinweis: hinweis });
   let layout = nativ ? layoutFuer(auftrag) : storyLayout({ ...layoutFuer(auftrag), gesichter }, auftrag.masse, masse, ausschnitt);
   if (!nativ && auftrag.untertitelAuto) {
-    const wahl = lageWaehlen({ bilder: ausschnitt ? 24 : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
+    const wahl = lageWaehlen({ bilder: ausschnitt ? gesichter.length : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
     layout = { ...layout, lage: wahl.lage === "unten" ? null : wahl.lage };
   }
   const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));

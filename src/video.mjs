@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { untertitelGroesse, untertitelPosition } from "./untertitel.mjs";
 import { bildRechteck, gesichterUebertragen, logoPlatzierung } from "./story-layout.mjs";
-import { ausschnittXFilter, gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
+import { ausschnittKommandos, gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
 
 export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -329,7 +329,8 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
   let eingang = 1;
   if (story || quer) {
     const a = story && layout.ausschnitt;
-    const crop = a && `crop=${a.breite}:${a.hoehe}:x='${ausschnittXFilter(a)}':y=${a.y},scale=${masse.breite}:${masse.hoehe},setsar=1`;
+    if (a?.punkte) await fs.writeFile(path.join(ordner, "ausschnitt.cmd"), ausschnittKommandos(a));
+    const crop = a && `${a.punkte ? "sendcmd=f=ausschnitt.cmd," : ""}crop@hochkant=${a.breite}:${a.hoehe}:x=${a.x}:y=${a.y},scale=${masse.breite}:${masse.hoehe}:force_original_aspect_ratio=increase,crop=${masse.breite}:${masse.hoehe},setsar=1`;
     if (a && (a.ab > 0 || (Number.isFinite(a.bis) && a.bis < masse.dauer - 0.05))) {
       // Unbekannte Bildbereiche am Anfang/Ende vollständig zeigen, z. B.
       // wenn die Person sich erst zum Rednerpult dreht.

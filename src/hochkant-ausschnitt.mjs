@@ -1,7 +1,7 @@
 // Ein fester Ausschnitt bleibt bevorzugt. Bei langsamer Bewegung folgt er
 // innerhalb der gesicherten Zeitspanne; unbekannte Ränder bleiben vollständig.
 // Ohne sichere Gesichtsfunde bleibt die vollständige Aufnahme sichtbar.
-export const AUSSCHNITT_VERSION = 2;
+export const AUSSCHNITT_VERSION = 3;
 
 /** Kurze Erklärung für die Vorschau, damit ein Fallback nicht wie ein Fehler wirkt. */
 export function ausschnittHinweis(funde, ausschnitt) {
@@ -29,8 +29,8 @@ export function hochkantAusschnitt(original, funde) {
   }
   // Mehrere Gesichter im selben Bild zählen nicht als mehrere erfolgreiche Probebilder.
   if (gruppen.size < Math.ceil(funde.bilder * 0.9) || gruppen.size > funde.bilder) return null;
-  const h = Math.floor(hoehe / 32) * 32;
-  const w = h * 9 / 16;
+  const h = Math.floor(hoehe / 2) * 2;
+  const w = Math.round(h * 9 / 16 / 2) * 2;
   // Chroma-kompatible Maße bei exakt 9:16.
   if (w % 2) return null;
   const y = Math.floor((hoehe - h) / 4) * 2;
@@ -43,8 +43,10 @@ export function hochkantAusschnitt(original, funde) {
       // Kopf und seitlicher Abstand bleiben vollständig im Ausschnitt.
       const links = (g.x - g.w * 0.18) * breite;
       const rechts = (g.x + g.w * 1.18) * breite;
-      if (g.y * hoehe - g.h * hoehe * 0.35 < y ||
-          (g.y + g.h * 1.15) * hoehe > y + h) return null;
+      // Die Originalhöhe erhalten: Kopfabstand darf nicht mehr verlangen,
+      // als die Kamera überhaupt aufgenommen hat.
+      if (Math.max(0, g.y - g.h * 0.35) * hoehe < y ||
+          Math.min(1, g.y + g.h * 1.15) * hoehe > y + h) return null;
       von = Math.max(von, rechts - w);
       bis = Math.min(bis, links);
     }
@@ -70,9 +72,10 @@ export function hochkantAusschnitt(original, funde) {
   const schritt = (zeiten.at(-1) - zeiten[0]) / (zeiten.length - 1);
   if (!(schritt > 0)) return null;
   // Größere Erkennungslücken oder schnelle Bildsprünge sind keine sichere Grundlage.
-  if (rahmen.some((p, i) => i && p.t - rahmen[i - 1].t > schritt * 2.1)) return null;
+  if (rahmen.some((p, i) => i && p.t - rahmen[i - 1].t > Math.min(2.1, schritt * 4.1))) return null;
   const ab = rahmen[0].t === zeiten[0] ? 0 : rahmen[0].t;
-  const bis = rahmen.at(-1).t === zeiten.at(-1) ? (original.dauer ?? zeiten.at(-1)) : rahmen.at(-1).t;
+  const bis = funde.dicht ? rahmen.at(-1).t : (rahmen.at(-1).t === zeiten.at(-1) ? (original.dauer ?? zeiten.at(-1)) : rahmen.at(-1).t);
+  if (!funde.dicht || schritt > 0.55) return links <= rechts ? { ...basis, ab, bis } : null;
   if (links <= rechts) return { ...basis, ab, bis };
   let x = Math.max(rahmen[0].von, Math.min(rahmen[0].bis, ziel));
   const punkte = [];
@@ -81,7 +84,7 @@ export function hochkantAusschnitt(original, funde) {
     // Kleine Bewegungen ignorieren, größere zur Mitte hin ausgleichen.
     const naechstesX = Math.max(p.von, Math.min(p.bis, Math.abs(mitteX - x) > w * 0.08 ? mitteX : x));
     const vorher = punkte.at(-1);
-    if (vorher && Math.abs(naechstesX - x) / (p.t - vorher.t) > breite * 0.08) return null;
+    if (vorher && Math.abs(naechstesX - x) / (p.t - vorher.t) > breite * 0.35) return null;
     x = naechstesX;
     punkte.push({ t: p.t, x });
   }
@@ -100,18 +103,16 @@ export function ausschnittX(ausschnitt, t) {
   return p.at(-1).x;
 }
 
-/** Dieselbe ruhige Interpolation wie bei den Layout-Koordinaten, in FFmpeg-Syntax. */
-export function ausschnittXFilter(ausschnitt) {
+/** Kleine einzelne Ausdrücke statt eines riesigen verschachtelten Filterarguments. */
+export function ausschnittKommandos(ausschnitt) {
   const p = ausschnitt.punkte;
-  if (!p?.length) return String(ausschnitt.x);
-  let wert = String(p.at(-1).x);
-  for (let i = p.length - 1; i > 0; i--) {
-    const a = p[i - 1], b = p[i];
+  if (!p?.length) return "";
+  return p.map((a, i) => {
+    const b = p[i + 1];
+    if (!b) return `${a.t} crop@hochkant x '${a.x}';`;
     const u = `clip((t-${a.t})/${b.t - a.t},0,1)`;
-    const x = a.x === b.x ? String(a.x) : `${a.x}+${b.x - a.x}*pow(${u},2)*(3-2*${u})`;
-    wert = `if(lt(t,${b.t}),${x},${wert})`;
-  }
-  return wert;
+    return `${a.t} crop@hochkant x '${a.x}+${b.x - a.x}*pow(${u},2)*(3-2*${u})';`;
+  }).join("\n");
 }
 
 export function gesichterImAusschnitt(gesichter, original, ausschnitt) {

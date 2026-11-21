@@ -290,7 +290,7 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   Der Bot nutzt dafür konservative Sicherheitsbereiche (oben 14 %, unten 20 %); für Reels/TikTok oben 14 %,
   unten 35 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
   Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung. Bei Querformatvideos prüft er
-  zuerst lokal mit OpenCV/YuNet in 24 Bildern einschließlich Anfang und Ende, ob ein 9:16-Ausschnitt
+  zuerst lokal mit OpenCV/YuNet mindestens zweimal pro Sekunde, ob ein 9:16-Ausschnitt
   passt. Dafür müssen in mindestens 90 % der Probebilder Gesichter erkannt werden. Alle erkannten
   Köpfe samt seitlichem Abstand müssen in den Ausschnitt passen; der Oberkörper darf angeschnitten werden.
   Ein fester Ausschnitt bleibt bevorzugt. Bei langsamer Bewegung folgt er ruhig nach, ohne kleine
@@ -298,6 +298,10 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   vollständig sichtbar; die Vorschau nennt den Beginn des Ausschnitts. Bei unsicherer Erkennung,
   Erkennungslücken, schnellen Bildsprüngen oder weit getrennten Personen bleibt
   das vollständige Bild mit unscharfem Hintergrund sichtbar; ebenso ohne eingerichtetes OpenCV.
+  Für die Analyse wird nach Möglichkeit die bereits berechnete Feed-Fassung verwendet. Das vermeidet
+  eine weitere vollständige Dekodierung großer HEVC-Originale; gerendert wird weiterhin aus dem Original.
+  Bei kurzen Videos wird die Abtastung erhöht. Die Originalhöhe bleibt erhalten, damit zusätzliches
+  Kopfpolster nicht zum Ablehnen der gesamten Aufnahme oder zum Abschneiden der Haare führt.
   Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
   Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
   abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.
