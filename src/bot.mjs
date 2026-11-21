@@ -843,7 +843,8 @@ async function storyFassung(auftrag) {
   }
   auftraege.aendern(auftrag.id, { hochkantAusschnitt: ausschnitt, hochkantHinweis: hinweis });
   let layout = nativ ? layoutFuer(auftrag) : storyLayout({ ...layoutFuer(auftrag), gesichter }, auftrag.masse, masse, ausschnitt);
-  if (!nativ && auftrag.untertitelAuto) {
+  if (ausschnitt && auftrag.untertitelAuto) layout = { ...layout, lage: null };
+  if (!nativ && !ausschnitt && auftrag.untertitelAuto) {
     const wahl = lageWaehlen({ bilder: ausschnitt ? gesichter.length : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
     layout = { ...layout, lage: wahl.lage === "unten" ? null : wahl.lage };
   }

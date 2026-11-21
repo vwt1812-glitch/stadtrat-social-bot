@@ -21,7 +21,7 @@ fs.writeFileSync(analyseDatei, "Feed-Fassung mit gleicher Bildgeometrie");
 fs.writeFileSync(path.join(a.ordner, "untertitel.srt"), "");
 s.aendern(a.id, { art: "video", status: "vorschau", caption: "Caption bleibt", original,
   medien: [original], masse: { breite: 1920, hoehe: 1080, dauer: 5 }, hochkant: false,
-  story: false, kanaele: ["ig"], menueNachricht: 1, untertitelAuto: true,
+  story: false, kanaele: ["ig"], menueNachricht: 1, untertitelAuto: true, untertitelLage: "mitte",
   hochkantFunde: { bilder: 24, alleGesichter: true, gesichter: [] } });
 if(modus === "fortsetzen") s.aendern(a.id,{status:"arbeitet",hochkant:true,hochkantWiederholen:true});
 const stand = () => JSON.parse(fs.readFileSync(path.join(dir, "auftraege.json"), "utf8"))[a.id];
@@ -64,6 +64,10 @@ mock.method(Telegram.prototype, "aufruf", async (methode) => {
     if (schritt > 0) {
       const crop = schritt !== 2;
       assert.equal(Boolean(renders.at(-1).layout.ausschnitt), crop);
+      if(crop) {
+        assert.equal(renders.at(-1).layout.lage,null);
+        assert.ok(Number.isFinite(renders.at(-1).layout.positionFest));
+      }
       assert.equal(Boolean(b.hochkantAusschnitt), crop);
       assert.match(captions.at(-1), crop ? /automatischer Ausschnitt/i : /vollständiges Bild/i);
       assert.equal(b.caption, "Caption bleibt");
