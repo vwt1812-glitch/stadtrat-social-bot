@@ -130,6 +130,16 @@ test("Langer Anfang ohne Person blockiert den gut erkannten Rest nicht", () => {
   assert.equal(ausschnittAktiv(a,30),true);
 });
 
+test("Kamera wird anfangs zu hoch oder tief gehalten: erst nach dem Ausrichten zuschneiden", () => {
+  const f=ruhigeAufnahme();
+  f.gesichter=f.gesichter.map(g=>({...g,y:g.t<=4?0.01:g.y}));
+  const a=hochkantAusschnitt(langeMasse,f);
+  assert.ok(a);
+  assert.equal(a.ab,4.5);
+  assert.equal(ausschnittAktiv(a,2),false);
+  assert.equal(ausschnittAktiv(a,20),true);
+});
+
 for (const art of ["Wackler", "Erkennungslücke", "zwei entfernte Personen"]) test(`${art} mitten im Video: nur die Problemstelle bleibt vollständig`, () => {
   const f = ruhigeAufnahme();
   if(art === "Wackler") f.gesichter = f.gesichter.map(g => ({ ...g, x: g.t === 20 ? 0.8 : g.x }));

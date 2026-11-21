@@ -59,6 +59,9 @@ export function hochkantAusschnitt(original, funde) {
       // Kopf und seitlicher Abstand bleiben vollständig im Ausschnitt.
       const links = (g.x - g.w * 0.18) * breite;
       const rechts = (g.x + g.w * 1.18) * breite;
+      // Beim Ausrichten der Kamera liegt der Kopf mitunter am Bildrand.
+      // Diesen Zeitpunkt vollständig zeigen, bis wieder etwas Kopfpolster da ist.
+      if (dicht && (g.y < g.h * 0.2 || g.y + g.h * 1.05 > 1)) passt = false;
       // Die Originalhöhe erhalten: Kopfabstand darf nicht mehr verlangen,
       // als die Kamera überhaupt aufgenommen hat.
       if (Math.max(0, g.y - g.h * 0.35) * hoehe < y ||
