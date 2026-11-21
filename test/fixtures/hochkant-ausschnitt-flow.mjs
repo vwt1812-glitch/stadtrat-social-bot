@@ -19,7 +19,8 @@ fs.writeFileSync(original, "Originalvideo");
 fs.writeFileSync(path.join(a.ordner, "untertitel.srt"), "");
 s.aendern(a.id, { art: "video", status: "vorschau", caption: "Caption bleibt", original,
   medien: [original], masse: { breite: 1920, hoehe: 1080, dauer: 5 }, hochkant: false,
-  story: false, kanaele: ["ig"], menueNachricht: 1, untertitelAuto: true });
+  story: false, kanaele: ["ig"], menueNachricht: 1, untertitelAuto: true,
+  hochkantFunde: { bilder: 24, alleGesichter: true, gesichter: [] } });
 const stand = () => JSON.parse(fs.readFileSync(path.join(dir, "auftraege.json"), "utf8"))[a.id];
 const renders = [], captions = [];
 let pruefungen = 0;
@@ -32,7 +33,8 @@ mock.module("../../src/gesicht.mjs", { namedExports: { ...gesicht,
     assert.equal(optionen.alleGesichter, true);
     assert.equal(bilder, 24);
     pruefungen++;
-    return { bilder, alleGesichter: true, gesichter: Array.from({ length: bilder }, (_, t) =>
+    const zeiten = Array.from({ length: bilder }, (_, i) => Math.round(i * 5 / 23 * 10000) / 10000);
+    return { bilder, version: 2, zeiten, alleGesichter: true, gesichter: zeiten.map((t) =>
       ({ t, x: 0.65, y: 0.25, w: 0.09, h: 0.17 })) };
   },
 } });
@@ -51,7 +53,7 @@ mock.method(Telegram.prototype, "aufruf", async (methode) => {
       const crop = schritt !== 2;
       assert.equal(Boolean(renders.at(-1).layout.ausschnitt), crop);
       assert.equal(Boolean(b.hochkantAusschnitt), crop);
-      assert.match(captions.at(-1), crop ? /automatischer Ausschnitt/ : /vollständiges Bild/);
+      assert.match(captions.at(-1), crop ? /automatischer Ausschnitt/i : /vollständiges Bild/i);
       assert.equal(b.caption, "Caption bleibt");
       assert.equal(pruefungen, 1);
       assert.equal(fs.readFileSync(original, "utf8"), "Originalvideo");

@@ -290,15 +290,19 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   Der Bot nutzt dafür konservative Sicherheitsbereiche (oben 14 %, unten 20 %); für Reels/TikTok oben 14 %,
   unten 35 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
   Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung. Bei Querformatvideos prüft er
-  zuerst lokal mit OpenCV in 24 Bildern einschließlich Anfang und Ende, ob ein fester 9:16-Ausschnitt
-  passt. Dafür müssen in mindestens 90 % der Probebilder Gesichter erkannt werden und alle erkannten
-  Köpfe samt seitlichem Abstand für Schultern in denselben Ausschnitt passen. Es gibt keine bewegte
-  Kameranachführung. Bei unsicherer Erkennung, zu starker Bewegung oder weit getrennten Personen bleibt
+  zuerst lokal mit OpenCV/YuNet in 24 Bildern einschließlich Anfang und Ende, ob ein 9:16-Ausschnitt
+  passt. Dafür müssen in mindestens 90 % der Probebilder Gesichter erkannt werden. Alle erkannten
+  Köpfe samt seitlichem Abstand müssen in den Ausschnitt passen; der Oberkörper darf angeschnitten werden.
+  Ein fester Ausschnitt bleibt bevorzugt. Bei langsamer Bewegung folgt er ruhig nach, ohne kleine
+  Positionsänderungen ständig auszugleichen. Anfang oder Ende ohne verlässlichen Gesichtsfund bleiben
+  vollständig sichtbar; die Vorschau nennt den Beginn des Ausschnitts. Bei unsicherer Erkennung,
+  Erkennungslücken, schnellen Bildsprüngen oder weit getrennten Personen bleibt
   das vollständige Bild mit unscharfem Hintergrund sichtbar; ebenso ohne eingerichtetes OpenCV.
   Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
   Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
   abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.
-  Die Vorschau nennt die verwendete Darstellung. Story und zusätzliche Hochkantfassung nutzen dieselbe
+  Die Vorschau nennt die verwendete Darstellung und bei einem Fallback den Grund. Alte Gesichtsfunde
+  werden beim nächsten Erstellen der automatischen Fassung neu geprüft. Story und zusätzliche Hochkantfassung nutzen dieselbe
   Auswahl. Fotos behalten ihren unscharfen Hintergrund.
   Fotos werden **direkt aus dem Original** bearbeitet: erst Hintergrund und scharfes Bild, dann das Logo,
   damit es nicht in den unscharfen Hintergrund eingebrannt ist. Das Logo landet bevorzugt auf einer ausreichend
