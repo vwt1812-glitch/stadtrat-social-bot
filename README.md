@@ -291,13 +291,15 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   unten 35 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
   Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung. Bei Querformatvideos prüft er
   zuerst lokal mit OpenCV/YuNet mindestens zweimal pro Sekunde, ob ein 9:16-Ausschnitt
-  passt. Dafür müssen in mindestens 90 % der Probebilder Gesichter erkannt werden. Alle erkannten
+  passt. Ruhige Abschnitte von mindestens zwei Sekunden werden getrennt beurteilt. Alle erkannten
   Köpfe samt seitlichem Abstand müssen in den Ausschnitt passen; der Oberkörper darf angeschnitten werden.
   Ein fester Ausschnitt bleibt bevorzugt. Bei langsamer Bewegung folgt er ruhig nach, ohne kleine
   Positionsänderungen ständig auszugleichen. Anfang oder Ende ohne verlässlichen Gesichtsfund bleiben
   vollständig sichtbar; die Vorschau nennt den Beginn des Ausschnitts. Bei unsicherer Erkennung,
-  Erkennungslücken, schnellen Bildsprüngen oder weit getrennten Personen bleibt
-  das vollständige Bild mit unscharfem Hintergrund sichtbar; ebenso ohne eingerichtetes OpenCV.
+  Erkennungslücken, schnellen Bildsprüngen oder weit getrennten Personen bleibt nur die betroffene
+  Stelle vollständig mit unscharfem Hintergrund sichtbar. Danach kann der Ausschnitt wieder einsetzen.
+  Das Ausrichten am Anfang oder ein einzelner Wackler verwirft somit nicht den gut erkannten Rest.
+  Ohne ausreichend lange ruhige Abschnitte oder ohne eingerichtetes OpenCV bleibt das vollständige Bild.
   Für die Analyse wird nach Möglichkeit die bereits berechnete Feed-Fassung verwendet. Das vermeidet
   eine weitere vollständige Dekodierung großer HEVC-Originale; gerendert wird weiterhin aus dem Original.
   Bei kurzen Videos wird die Abtastung erhöht. Die Originalhöhe bleibt erhalten, damit zusätzliches
@@ -305,6 +307,8 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
   Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
   abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.
+  **🔄 Ausschnitt neu berechnen** erstellt bei aktiver Automatik die Fassung erneut und verwendet
+  vorhandene Gesichtsfunde weiter. Ein Neustart während dieser Neuberechnung setzt denselben Entwurf fort.
   Die Vorschau nennt die verwendete Darstellung und bei einem Fallback den Grund. Alte Gesichtsfunde
   werden beim nächsten Erstellen der automatischen Fassung neu geprüft. Story und zusätzliche Hochkantfassung nutzen dieselbe
   Auswahl. Fotos behalten ihren unscharfen Hintergrund.

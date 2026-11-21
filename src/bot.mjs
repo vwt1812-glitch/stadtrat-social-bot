@@ -426,6 +426,7 @@ async function videoFormatMenue(a) {
   }
   if (a.masse?.breite > a.masse?.hoehe) {
     zeilen.push([knopf(a.hochkantGanzesBild ? "✂️ Sinnvollen Ausschnitt automatisch prüfen" : "🖼️ Hochkant mit vollständigem Bild", a, "ausschnitt")]);
+    if (!a.hochkantGanzesBild) zeilen.push([knopf("🔄 Ausschnitt neu berechnen", a, "ausschnittneu")]);
   }
   zeilen.push([knopf("↩️ Zur Vorschau", a, "zurueck")]);
   return {
@@ -860,6 +861,11 @@ async function storyFassung(auftrag) {
 }
 
 /** Story-Fassung neu bauen (oder verwerfen) und als eigene Vorschau schicken. */
+async function hochkantNeuBerechnen(id) {
+  await storyAktualisieren(auftraege.get(id)).catch((e) => console.error(e));
+  await neuesMenue(auftraege.aendern(id, { status: "vorschau", hochkantWiederholen: false }));
+}
+
 async function storyAktualisieren(auftrag) {
   if (auftrag.statusNachricht && (auftrag.story || hochkantAn(auftrag))) await schritt(auftrag, "📱 Baue die 9:16-Fassung …");
   let storyDatei = null;
@@ -1718,16 +1724,14 @@ async function knopfGedrueckt(cq) {
       einreihen(() => renderUndVorschau(id));
       return;
     }
+    case "ausschnittneu":
     case "ausschnitt": {
       if (art(auftrag) !== "video" || !(auftrag.masse?.breite > auftrag.masse?.hoehe)) return antwort("Nur für Querformatvideos verfügbar.", true);
-      auftrag = auftraege.aendern(id, { hochkantGanzesBild: !auftrag.hochkantGanzesBild,
-        storyDatei: null, storyHochgeladen: null, storyClips: null, plan: null, status: "arbeitet" });
+      auftrag = auftraege.aendern(id, { hochkantGanzesBild: aktion === "ausschnittneu" ? false : !auftrag.hochkantGanzesBild,
+        storyDatei: null, storyHochgeladen: null, storyClips: null, plan: null, status: "arbeitet", hochkantWiederholen: true });
       await antwort("Prüfe die Hochkantfassung neu …");
       await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
-      einreihen(async () => {
-        await storyAktualisieren(auftraege.get(id)).catch((e) => console.error(e));
-        await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
-      });
+      einreihen(() => hochkantNeuBerechnen(id));
       return;
     }
     case "hochkant": {
@@ -2155,6 +2159,10 @@ async function main() {
 
   // Verarbeitungen, die ein Neustart unterbrochen hat
   for (const a of Object.values(auftraege.alle)) {
+    if (a.status === "arbeitet" && a.hochkantWiederholen && art(a) === "video") {
+      einreihen(() => hochkantNeuBerechnen(a.id));
+      continue;
+    }
     if (a.status === "arbeitet" || a.status === "postet") {
       auftraege.aendern(a.id, { status: a.status === "postet" ? "vorschau" : "fehler" });
       await tg.senden(a.chatId, a.status === "fehler"

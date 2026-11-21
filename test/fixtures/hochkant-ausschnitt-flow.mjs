@@ -9,7 +9,7 @@ import { Postiz } from "../../src/postiz.mjs";
 import * as video from "../../src/video.mjs";
 import * as gesicht from "../../src/gesicht.mjs";
 
-const [dir] = process.argv.slice(2);
+const [dir,modus] = process.argv.slice(2);
 Object.assign(process.env, { DATEN_DIR: dir, TELEGRAM_BOT_TOKEN: "test", ERLAUBTE_NUTZER: "123",
   POSTIZ_URL: "https://postiz.invalid", POSTIZ_API_KEY: "test", WHISPER_MODELL: "test",
   CAPTION_ANBIETER: "", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", MASTODON_TOKEN: "" });
@@ -23,6 +23,7 @@ s.aendern(a.id, { art: "video", status: "vorschau", caption: "Caption bleibt", o
   medien: [original], masse: { breite: 1920, hoehe: 1080, dauer: 5 }, hochkant: false,
   story: false, kanaele: ["ig"], menueNachricht: 1, untertitelAuto: true,
   hochkantFunde: { bilder: 24, alleGesichter: true, gesichter: [] } });
+if(modus === "fortsetzen") s.aendern(a.id,{status:"arbeitet",hochkant:true,hochkantWiederholen:true});
 const stand = () => JSON.parse(fs.readFileSync(path.join(dir, "auftraege.json"), "utf8"))[a.id];
 const renders = [], captions = [];
 let pruefungen = 0;
@@ -51,6 +52,14 @@ mock.method(Telegram.prototype, "aufruf", async (methode) => {
   for (;;) {
     await pause(10);
     const b = stand();
+    if(modus === "fortsetzen") {
+      if(b.status !== "vorschau") continue;
+      assert.equal(b.hochkantWiederholen,false);
+      assert.ok(renders[0].layout.ausschnitt);
+      assert.equal(pruefungen,1);
+      assert.equal(b.caption,"Caption bleibt");
+      process.exit(0);
+    }
     if (schritt > 0 && (b.status !== "vorschau" || renders.length < schritt)) continue;
     if (schritt > 0) {
       const crop = schritt !== 2;
@@ -61,8 +70,8 @@ mock.method(Telegram.prototype, "aufruf", async (methode) => {
       assert.equal(pruefungen, 1);
       assert.equal(fs.readFileSync(original, "utf8"), "Originalvideo");
     }
-    if (schritt === 3) process.exit(0);
-    const aktion = schritt++ === 0 ? "hochkant" : "ausschnitt";
+    if (schritt === 4) { assert.equal(b.hochkantWiederholen,false); process.exit(0); }
+    const aktion = schritt++ === 0 ? "hochkant" : schritt === 4 ? "ausschnittneu" : "ausschnitt";
     return [{ update_id: schritt, callback_query: { id: String(schritt), from: { id: 123 },
       message: { chat: { id: 123 } }, data: `a:${a.id}:${aktion}` } }];
   }

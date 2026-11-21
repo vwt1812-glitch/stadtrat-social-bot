@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { ausschnittHinweis, ausschnittKommandos, ausschnittX, hochkantAusschnitt } from "../src/hochkant-ausschnitt.mjs";
+import { ausschnittAktiv, ausschnittAktivFilter, ausschnittHinweis, ausschnittKommandos, ausschnittX, gesichterImAusschnitt, hochkantAusschnitt } from "../src/hochkant-ausschnitt.mjs";
 import { ausfuehren, rendern, storyLayout, untersuche } from "../src/video.mjs";
 
 const original = { breite: 1920, hoehe: 1080 };
@@ -103,6 +103,58 @@ test("Wenige weit verteilte Bilder erlauben keine Kamerafahrt zwischen unbekannt
   assert.equal(hochkantAusschnitt({ ...original, dauer: 360 }, f), null);
 });
 
+const ruhigeAufnahme = () => {
+  const zeiten = Array.from({ length: 81 }, (_, i) => i / 2);
+  return { bilder: zeiten.length, version: 3, dicht: true, alleGesichter: true, zeiten,
+    gesichter: zeiten.map((t) => ({ t, x: 0.3, y: 0.25, w: 0.1, h: 0.2 })) };
+};
+const langeMasse = { ...original, dauer: 40.1 };
+
+test("Kamera am Anfang ausrichten: kurzer Schwenk verwirft nur den Anfang", () => {
+  const f = ruhigeAufnahme();
+  f.gesichter = f.gesichter.filter(g => g.t > 0).map(g => ({ ...g, x: g.t <= 2 ? 0.75 : 0.3 }));
+  const a = hochkantAusschnitt(langeMasse,f);
+  assert.ok(a);
+  assert.equal(a.ab,2.5);
+  assert.equal(ausschnittAktiv(a,1),false);
+  assert.equal(ausschnittAktiv(a,30),true);
+});
+
+test("Langer Anfang ohne Person blockiert den gut erkannten Rest nicht", () => {
+  const f = ruhigeAufnahme();
+  f.gesichter = f.gesichter.filter(g => g.t >= 12);
+  const a = hochkantAusschnitt(langeMasse,f);
+  assert.ok(a);
+  assert.equal(a.ab,12);
+  assert.equal(ausschnittAktiv(a,6),false);
+  assert.equal(ausschnittAktiv(a,30),true);
+});
+
+for (const art of ["Wackler", "Erkennungslücke", "zwei entfernte Personen"]) test(`${art} mitten im Video: nur die Problemstelle bleibt vollständig`, () => {
+  const f = ruhigeAufnahme();
+  if(art === "Wackler") f.gesichter = f.gesichter.map(g => ({ ...g, x: g.t === 20 ? 0.8 : g.x }));
+  if(art === "Erkennungslücke") f.gesichter = f.gesichter.filter(g => g.t !== 20 && g.t !== 20.5);
+  if(art === "zwei entfernte Personen") f.gesichter.push({ t:20, x:0.8, y:0.25, w:0.09, h:0.2 });
+  const a = hochkantAusschnitt(langeMasse,f);
+  assert.ok(a);
+  assert.equal(a.bereiche.length,2);
+  assert.equal(ausschnittAktiv(a,10),true);
+  assert.equal(ausschnittAktiv(a,20),false);
+  assert.equal(ausschnittAktiv(a,30),true);
+  assert.match(ausschnittAktivFilter(a), /\+between/);
+  assert.match(ausschnittHinweis(f,a), /zwischendurch vollständiges Bild/);
+  const g=f.gesichter.find(g=>g.t===20) ?? { t:20,x:0.3,y:0.25,w:0.1,h:0.2 };
+  const [neu]=gesichterImAusschnitt([g],original,a);
+  assert.equal(neu.x,g.x);
+  assert.ok(neu.h<g.h);
+});
+
+test("Anhaltendes starkes Wackeln ohne ruhige Abschnitte bleibt vollständig", () => {
+  const f=ruhigeAufnahme();
+  f.gesichter=f.gesichter.map((g,i)=>({ ...g,x:i%2?0.15:0.75 }));
+  assert.equal(hochkantAusschnitt(langeMasse,f),null);
+});
+
 const ffmpeg = (() => { try { execFileSync("ffmpeg", ["-version"], { stdio: "ignore" }); return true; } catch { return false; } })();
 test("Echtes bewegtes Motiv bleibt auch zwischen den Messpunkten vollständig im Ausschnitt", { skip: !ffmpeg }, async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "crop-bewegung-"));
@@ -140,10 +192,12 @@ test("Echtes Video: Ausschnitt füllt das Bild, Fallback erhält Seiten, Ton und
     "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", eingabe]);
   const vorher = await fs.readFile(eingabe);
   const quelle = await untersuche(eingabe);
-  for (const schneiden of [true, false, "bewegung"]) {
+  for (const schneiden of [true, false, "bewegung", "pausen"]) {
     const a = schneiden ? hochkantAusschnitt(quelle, funde()) : null;
     if (schneiden === "bewegung") Object.assign(a, { ab: 0.25, bis: 0.8,
       punkte: [{ t: 0.25, x: 320 }, { t: 0.8, x: 370 }] });
+    if (schneiden === "pausen") Object.assign(a, { ab:0, bis:1,
+      bereiche:[{ab:0,bis:0.2},{ab:0.6,bis:1}], punkte:[{t:0,x:320},{t:1,x:370}] });
     const masse = { breite: 180, hoehe: 320, dauer: 1 };
     const ausgabe = path.join(dir, `${schneiden}.mp4`);
     await rendern({ eingabe, ausgabe, masse, story: true,
@@ -152,10 +206,10 @@ test("Echtes Video: Ausschnitt füllt das Bild, Fallback erhält Seiten, Ton und
     const m = await untersuche(ausgabe);
     assert.deepEqual([m.breite, m.hoehe, m.hatTon], [180, 320, true]);
     assert.ok(Math.abs(m.dauer - 1) < 0.2);
-    for (const t of (schneiden === "bewegung" ? [0, 0.6] : [0])) {
+    for (const t of (schneiden === "bewegung" ? [0, 0.6] : schneiden === "pausen" ? [0,0.4,0.6] : [0])) {
       const rgb = await ausfuehren("ffmpeg", ["-v", "error", "-ss", String(t), "-i", ausgabe, "-vf", "crop=2:2:4:160,scale=1:1",
         "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { binaer: true });
-      const rot = schneiden && (schneiden !== "bewegung" || t > 0.25);
+      const rot = schneiden && ausschnittAktiv(a,t);
       assert.ok(rot ? rgb[0] > rgb[2] + 80 : rgb[2] > rgb[0] + 80, `${schneiden}, ${t}: ${[...rgb]}`);
     }
   }
@@ -168,4 +222,11 @@ test("Telegram: automatische Auswahl, vollständiges Bild und erneute Auswahl ve
   execFileSync(process.execPath, ["--experimental-test-module-mocks",
     fileURLToPath(new URL("./fixtures/hochkant-ausschnitt-flow.mjs", import.meta.url)), dir],
     { timeout: 22000, stdio: "pipe" });
+});
+
+test("Telegram: unterbrochene Neuberechnung wird nach Neustart mit demselben Entwurf fortgesetzt", async(t)=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),"crop-fortsetzen-"));
+  t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+  execFileSync(process.execPath,["--experimental-test-module-mocks",fileURLToPath(new URL("./fixtures/hochkant-ausschnitt-flow.mjs",import.meta.url)),dir,"fortsetzen"],
+    {timeout:22000,stdio:"pipe"});
 });

@@ -6,7 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { untertitelGroesse, untertitelPosition } from "./untertitel.mjs";
 import { bildRechteck, gesichterUebertragen, logoPlatzierung } from "./story-layout.mjs";
-import { ausschnittKommandos, gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
+import { ausschnittAktivFilter, ausschnittKommandos, gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
 
 export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -331,11 +331,11 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
     const a = story && layout.ausschnitt;
     if (a?.punkte) await fs.writeFile(path.join(ordner, "ausschnitt.cmd"), ausschnittKommandos(a));
     const crop = a && `${a.punkte ? "sendcmd=f=ausschnitt.cmd," : ""}crop@hochkant=${a.breite}:${a.hoehe}:x=${a.x}:y=${a.y},scale=${masse.breite}:${masse.hoehe}:force_original_aspect_ratio=increase,crop=${masse.breite}:${masse.hoehe},setsar=1`;
-    if (a && (a.ab > 0 || (Number.isFinite(a.bis) && a.bis < masse.dauer - 0.05))) {
+    if (a && (a.bereiche?.length > 1 || a.ab > 0 || (Number.isFinite(a.bis) && a.bis < masse.dauer - 0.05))) {
       // Unbekannte Bildbereiche am Anfang/Ende vollständig zeigen, z. B.
       // wenn die Person sich erst zum Rednerpult dreht.
       filter.push(`[0:v]split[acrop][avoll];[avoll]${storyFlaeche(masse)}[afull];` +
-        `[acrop]${crop}[acropped];[afull][acropped]overlay=0:0:enable='between(t,${a.ab},${a.bis})'[flaeche]`);
+        `[acrop]${crop}[acropped];[afull][acropped]overlay=0:0:enable='${ausschnittAktivFilter(a)}'[flaeche]`);
     } else {
       filter.push(`[0:v]${a ? crop : storyFlaeche(masse)}[flaeche]`);
     }
@@ -456,7 +456,7 @@ export function storyBild(original, masse = STORY_MASSE) {
 export function storyLayout(layout, original, masse = STORY_MASSE, ausschnitt = null) {
   if (ausschnitt) return {
     ...layout, ausschnitt, bild: null, smartLogo: true, layoutModus: "reel", positionFest: undefined,
-    gesichter: gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt),
+    gesichter: gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt, masse),
   };
   const bild = bildRechteck(original, masse);
   const ergebnis = {

@@ -3,11 +3,22 @@
 // Ohne sichere Gesichtsfunde bleibt die vollständige Aufnahme sichtbar.
 export const AUSSCHNITT_VERSION = 3;
 
+/** Gültige Zeitabschnitte; außerhalb bleibt das vollständige Bild sichtbar. */
+export function ausschnittAktiv(ausschnitt, t) {
+  return (ausschnitt.bereiche ?? [{ ab: ausschnitt.ab ?? 0, bis: ausschnitt.bis ?? Infinity }])
+    .some((b) => t >= b.ab && t <= b.bis);
+}
+
+export function ausschnittAktivFilter(ausschnitt) {
+  return (ausschnitt.bereiche ?? [{ ab: ausschnitt.ab, bis: ausschnitt.bis }])
+    .map((b) => `between(t,${b.ab},${b.bis})`).join("+");
+}
+
 /** Kurze Erklärung für die Vorschau, damit ein Fallback nicht wie ein Fehler wirkt. */
 export function ausschnittHinweis(funde, ausschnitt) {
   if (ausschnitt) {
     const ab = Math.ceil(ausschnitt.ab ?? 0);
-    return `${ausschnitt.punkte ? "Ausschnitt mit ruhiger Nachführung" : "Automatischer Ausschnitt"}${ab > 0 ? ` ab ${Math.floor(ab / 60)}:${String(ab % 60).padStart(2, "0")}; davor vollständiges Bild` : ""}`;
+    return `${ausschnitt.punkte ? "Ausschnitt mit ruhiger Nachführung" : "Automatischer Ausschnitt"}${ab > 0 ? ` ab ${Math.floor(ab / 60)}:${String(ab % 60).padStart(2, "0")}; davor vollständiges Bild` : ""}${ausschnitt.bereiche?.length > 1 ? "; bei Wacklern oder unsicheren Stellen zwischendurch vollständiges Bild" : ""}`;
   }
   if (!funde) return "Gesichtserkennung nicht verfügbar; vollständiges Bild";
   const anzahl = new Set((funde.gesichter ?? []).map((g) => g.t)).size;
@@ -27,17 +38,22 @@ export function hochkantAusschnitt(original, funde) {
     if (!gruppen.has(g.t)) gruppen.set(g.t, []);
     gruppen.get(g.t).push(g);
   }
-  // Mehrere Gesichter im selben Bild zählen nicht als mehrere erfolgreiche Probebilder.
-  if (gruppen.size < Math.ceil(funde.bilder * 0.9) || gruppen.size > funde.bilder) return null;
+  const dicht = funde.version === AUSSCHNITT_VERSION && funde.dicht && Array.isArray(funde.zeiten) &&
+    (funde.zeiten.at(-1) - funde.zeiten[0]) / (funde.zeiten.length - 1) <= 0.55;
+  // Bei dichter Analyse entscheidet jeder ruhige Abschnitt für sich. Ein
+  // längerer Anfang ohne Gesicht darf nicht den gut erkannten Rest ausschließen.
+  // Alte, weit verteilte Probebilder bleiben an die bisherige Quote gebunden.
+  if ((!dicht && gruppen.size < Math.ceil(funde.bilder * 0.9)) || gruppen.size > funde.bilder) return null;
   const h = Math.floor(hoehe / 2) * 2;
   const w = Math.round(h * 9 / 16 / 2) * 2;
-  // Chroma-kompatible Maße bei exakt 9:16.
+  // Chroma-kompatible Maße; das genaue Zielformat entsteht beim Skalieren.
   if (w % 2) return null;
   const y = Math.floor((hoehe - h) / 4) * 2;
   let minX = 0, maxX = breite - w;
   const rahmen = [];
   for (const [t, personen] of [...gruppen].sort((a, b) => a[0] - b[0])) {
     let von = 0, bis = breite - w;
+    let passt = true;
     for (const g of personen) {
       // Im Hochkant-Interview darf der Oberkörper angeschnitten werden;
       // Kopf und seitlicher Abstand bleiben vollständig im Ausschnitt.
@@ -46,17 +62,21 @@ export function hochkantAusschnitt(original, funde) {
       // Die Originalhöhe erhalten: Kopfabstand darf nicht mehr verlangen,
       // als die Kamera überhaupt aufgenommen hat.
       if (Math.max(0, g.y - g.h * 0.35) * hoehe < y ||
-          Math.min(1, g.y + g.h * 1.15) * hoehe > y + h) return null;
+          Math.min(1, g.y + g.h * 1.15) * hoehe > y + h) passt = false;
       von = Math.max(von, rechts - w);
       bis = Math.min(bis, links);
     }
     von = Math.ceil(von / 2) * 2;
     bis = Math.floor(bis / 2) * 2;
-    if (von > bis) return null;
+    if (!passt || von > bis) {
+      if (dicht) continue;
+      return null;
+    }
     rahmen.push({ t, von, bis });
     minX = Math.max(minX, von);
     maxX = Math.min(maxX, bis);
   }
+  if (!rahmen.length) return null;
   const links = Math.ceil(minX / 2) * 2;
   const rechts = Math.floor(maxX / 2) * 2;
   const mitte = funde.gesichter.reduce((sum, g) => sum + (g.x + g.w / 2) * breite, 0) / funde.gesichter.length;
@@ -71,24 +91,37 @@ export function hochkantAusschnitt(original, funde) {
       rahmen.some((p) => !zeiten.includes(p.t))) return null;
   const schritt = (zeiten.at(-1) - zeiten[0]) / (zeiten.length - 1);
   if (!(schritt > 0)) return null;
-  // Größere Erkennungslücken oder schnelle Bildsprünge sind keine sichere Grundlage.
-  if (rahmen.some((p, i) => i && p.t - rahmen[i - 1].t > Math.min(2.1, schritt * 4.1))) return null;
   const ab = rahmen[0].t === zeiten[0] ? 0 : rahmen[0].t;
   const bis = funde.dicht ? rahmen.at(-1).t : (rahmen.at(-1).t === zeiten.at(-1) ? (original.dauer ?? zeiten.at(-1)) : rahmen.at(-1).t);
   if (!funde.dicht || schritt > 0.55) return links <= rechts ? { ...basis, ab, bis } : null;
-  if (links <= rechts) return { ...basis, ab, bis };
+  const fest = links <= rechts;
   let x = Math.max(rahmen[0].von, Math.min(rahmen[0].bis, ziel));
-  const punkte = [];
+  const abschnitte = [];
+  let punkte = [];
   for (const p of rahmen) {
     const mitteX = Math.round((p.von + p.bis) / 4) * 2;
     // Kleine Bewegungen ignorieren, größere zur Mitte hin ausgleichen.
-    const naechstesX = Math.max(p.von, Math.min(p.bis, Math.abs(mitteX - x) > w * 0.08 ? mitteX : x));
+    let naechstesX = fest ? basis.x : Math.max(p.von, Math.min(p.bis, Math.abs(mitteX - x) > w * 0.08 ? mitteX : x));
     const vorher = punkte.at(-1);
-    if (vorher && Math.abs(naechstesX - x) / (p.t - vorher.t) > breite * 0.35) return null;
+    if (vorher && (p.t - vorher.t > schritt * 1.1 ||
+        Math.abs(naechstesX - x) / (p.t - vorher.t) > breite * 0.35)) {
+      abschnitte.push(punkte);
+      punkte = [];
+      // Nach einem Wackler neu ausrichten, statt vom alten Ausschnitt aus zu fahren.
+      naechstesX = fest ? basis.x : mitteX;
+    }
     x = naechstesX;
     punkte.push({ t: p.t, x });
   }
-  return { ...basis, x: punkte[0].x, ab, bis, punkte };
+  abschnitte.push(punkte);
+  // Nur ausreichend lange ruhige Abschnitte verwenden; kurze Fehlfunde und
+  // das Ausrichten der Kamera am Anfang dürfen keinen hektischen Wechsel erzeugen.
+  const sichere = abschnitte.filter((p) => p.at(-1).t - p[0].t >= 2);
+  if (!sichere.length) return null;
+  const bereiche = sichere.map((p) => ({ ab: p[0].t === zeiten[0] ? 0 : p[0].t, bis: p.at(-1).t }));
+  const allePunkte = sichere.flat();
+  return { ...basis, x: allePunkte[0].x, ab: bereiche[0].ab, bis: bereiche.at(-1).bis,
+    bereiche, ...(fest ? {} : { punkte: allePunkte }) };
 }
 
 export function ausschnittX(ausschnitt, t) {
@@ -115,8 +148,13 @@ export function ausschnittKommandos(ausschnitt) {
   }).join("\n");
 }
 
-export function gesichterImAusschnitt(gesichter, original, ausschnitt) {
-  return gesichter.map((g) => ({
+export function gesichterImAusschnitt(gesichter, original, ausschnitt, masse = { breite: 9, hoehe: 16 }) {
+  const faktor = Math.min(masse.breite / original.breite, masse.hoehe / original.hoehe);
+  const bw = original.breite * faktor / masse.breite;
+  const bh = original.hoehe * faktor / masse.hoehe;
+  return gesichter.map((g) => !ausschnittAktiv(ausschnitt, g.t ?? 0) ? {
+    ...g, x: (1 - bw) / 2 + g.x * bw, y: (1 - bh) / 2 + g.y * bh, w: g.w * bw, h: g.h * bh,
+  } : ({
     ...g,
     x: (g.x * original.breite - ausschnittX(ausschnitt, g.t ?? 0)) / ausschnitt.breite,
     y: (g.y * original.hoehe - ausschnitt.y) / ausschnitt.hoehe,
