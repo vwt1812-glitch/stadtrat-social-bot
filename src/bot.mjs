@@ -1,3 +1,4 @@
+import { PORTRAET_HINTERGRUENDE } from "./portraet-cover.mjs";
 // Telegram-Bot: Video, Fotos oder Text rein → Vorschau mit Logo, Untertiteln und
 // Caption zurück → per Knopfdruck sofort oder geplant über Postiz veröffentlichen.
 
@@ -449,21 +450,24 @@ async function thumbnailMenue(a) {
     return `• ${html(k.name)}: ${z.hinweis ? html(z.hinweis) : "Eigenes Titelbild wird übertragen."}` + (profil ? ` (${profil.breite}×${profil.hoehe})` : "");
   });
   return {
-    text: "<b>Video-Titelbild</b>\n" + (t ? `Quelle: ${{ text: "Nur Text", frame: "Bild aus dem Video", bild: "Hochgeladenes Foto" }[t.modus] ?? html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` +
-      `Gestaltung: ${t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Text"}\n` +
+    text: "<b>Video-Titelbild</b>\n" + (t ? `Quelle: ${{ text: "Nur Text", frame: "Bild aus dem Video", bild: "Hochgeladenes Foto", portraet: "Porträt-Vorlage" }[t.modus] ?? html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` +
+      `Gestaltung: ${t.modus === "portraet" ? "Porträt mit schrägem Titelbalken · "+html(PORTRAET_HINTERGRUENDE[t.hintergrund??"orange"]??"Hintergrund") : t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Text"}\n` +
       `Zusätzliche Querdatei zum Download: ${t.quer ? "ja" : "nein"}\n` : "Noch kein eigenes Titelbild.\n") +
       "Foto mit Text: Hochkant bleibt das Foto vollflächig; im Querformat stehen Bild und Text nebeneinander. Titelbildtext und Beitragstext werden getrennt bearbeitet. Die zusätzliche Querdatei dient nur dem Download und ändert das Videoformat nicht.\n" + infos.join("\n") +
       "\nJPEG-Ausgaben: höchstens 2 MiB. Kanäle ohne Cover-Unterstützung erhalten kein zusätzliches Feedbild. Shorts-Cover werden für Studio exportiert.",
     reply_markup: { inline_keyboard: [
+      [knopf("👤 Porträt-Thumbnail erstellen", a, "thumbportraet")],
       [knopf("🎞️ Bild aus Video auswählen", a, "thumbframe")],
       [knopf("📝 Titelbild nur aus Text", a, "thumbgrafik")],
       [knopf("📷 Foto als Titelbild hochladen", a, "thumbbild")],
       ...(t ? [
         [knopf("✏️ Text im Titelbild ändern", a, "thumbtext")],
+        ...(t.modus==="portraet"?[[knopf("🏛️ Hintergrund wählen",a,"thumbhintergrund")],[knopf("👤 Anderes Porträt hochladen",a,"thumbportraetbild")]]:[]),
+        ...(t.modus==="portraet"&&t.hintergrund==="video"?[[knopf("🎞️ Hintergrund-Bildzeit ändern",a,"thumbhinterzeit")]]:[]),
         [knopf("🔄 Titelbilder neu berechnen", a, "thumbneu")],
         [knopf(t.quer ? "🖥️ Zusätzliche Querdatei entfernen" : "🖥️ Querdatei zusätzlich erstellen", a, "thumbquer")],
-        ...(t.modus !== "text" && t.mitText ? [[knopf(t.vorlage === "grafik" ? "🖼️ Zu Foto mit Text wechseln" : "📝 Zur Textgrafik wechseln", a, "thumbstil")]] : []),
-        ...(t.modus !== "text" && t.mitText && t.vorlage !== "grafik" ? [[knopf("📍 Textposition im Hochkantbild", a, "thumbtextpos")]] : []),
+        ...(t.modus !== "portraet" && t.modus !== "text" && t.mitText ? [[knopf(t.vorlage === "grafik" ? "🖼️ Zu Foto mit Text wechseln" : "📝 Zur Textgrafik wechseln", a, "thumbstil")]] : []),
+        ...(t.modus !== "portraet" && t.modus !== "text" && t.mitText && t.vorlage !== "grafik" ? [[knopf("📍 Textposition im Hochkantbild", a, "thumbtextpos")]] : []),
         ...(kanaele.some((k) => k.identifier === "youtube") ? [[knopf(t.youtubeShort ? "YouTube: zu normalem Video wechseln" : "YouTube: zu Shorts-Export wechseln", a, "thumbshort")]] : []),
         [knopf("📎 Titelbilder herunterladen", a, "thumbexport")],
         [knopf("🗑️ Eigenes Titelbild entfernen", a, "thumboff")],
@@ -479,8 +483,8 @@ async function thumbnailBauen(a, optionen) {
   await tg.senden(a.chatId, "🖼️ Erstelle die Titelbilder in den passenden Größen …");
   einreihen(async () => {
     try {
-      const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), quelle: a.original ?? coverVideo(a), layout: a.grafikModus ? grafikLayout(a) : layoutFuer(a),
-        optionen, kanaele, mastodonPatch: config.postiz.mastodonThumbnails, gesicht: config.gesicht });
+      const thumbnail = await thumbnailsErstellen({ ordner: a.ordner, video: coverVideo(a), quelle: a.original ?? coverVideo(a), layout: optionen.modus==="portraet"?{...layoutFuer(a),logo:config.layout.logo}:a.grafikModus ? grafikLayout(a) : layoutFuer(a),
+        optionen, kanaele, mastodonPatch: config.postiz.mastodonThumbnails, gesicht: config.gesicht, vorlagen:config.thumbnail });
       // Nur nach vollständigem Rendern übernehmen; eine misslungene Änderung lässt das bisherige Cover intakt.
       auftraege.aendern(a.id, { thumbnail });
       const gezeigt = new Set();
@@ -1270,6 +1274,34 @@ async function knopfGedrueckt(cq) {
       if (art(auftrag) !== "video" || auftrag.nurStory) return antwort("Titelbilder sind für Feed-Videos vorgesehen.", true);
       await zeigeMenue(auftrag, await thumbnailMenue(auftrag));
       return antwort();
+    case "thumbportraet": {
+      if(art(auftrag)!=="video")return antwort("Bitte zuerst ein Video auswählen.",true);
+      const datei=auftrag.thumbnail?.portraet??config.thumbnail.portraet;
+      try {await fs.access(datei);} catch {
+        auftraege.aendern(id,{wartetAuf:"thumbnailPortraet"});await antwort();
+        return tg.senden(auftrag.chatId,"Schick dein Porträt als JPG vor hellem, ruhigem Hintergrund oder als freigestelltes PNG (max. 12 MB). Danach kannst du Hintergrund und Titel ändern.");
+      }
+      auftraege.aendern(id,{wartetAuf:"thumbnailText",thumbnailTextModus:"portraet"});await antwort();
+      return tg.senden(auftrag.chatId,"Überschrift für dein Porträt-Thumbnail schicken (max. 70 Zeichen). Optional zweite Zeile als Unterzeile. Danach kannst du den Hintergrund auswählen. Dein Video und der Beitragstext bleiben erhalten.");
+    }
+    case "thumbportraetbild":
+      auftraege.aendern(id,{wartetAuf:"thumbnailPortraet"});await antwort();
+      return tg.senden(auftrag.chatId,"Schick ein Porträt vor hellem, ruhigem Hintergrund oder ein freigestelltes PNG (max. 12 MB).");
+    case "thumbhinterzeit":
+      if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
+      auftraege.aendern(id,{wartetAuf:"thumbnailHintergrundZeit"});await antwort();
+      return tg.senden(auftrag.chatId,"Zeitpunkt für das Hintergrundbild schicken, als Sekunden oder MM:SS. Es wird ein Bild aus deinem Originalvideo verwendet.");
+    case "thumbhintergrund": {
+      if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
+      if(!arg) {
+        await zeigeMenue(auftrag,{text:"<b>Hintergrund wählen</b>\n„Stadtrat / Videobild“ verwendet ein Bild aus deinem Video, keinen erfundenen Sitzungssaal. Ein eigenes Hintergrundfoto kannst du hochladen.",reply_markup:{inline_keyboard:[
+          ...Object.entries(PORTRAET_HINTERGRUENDE).map(([key,name])=>[knopf(`${(auftrag.thumbnail.hintergrund??"orange")===key?"🔘":"⚪"} ${name}`,auftrag,`thumbhintergrund:${key}`)]),
+          [knopf("↩️ Zum Titelbild",auftrag,"thumb")]]}});return antwort();
+      }
+      if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,arg))return antwort("Ungültiger Hintergrund.",true);
+      if(arg==="eigen") {auftraege.aendern(id,{wartetAuf:"thumbnailHintergrund"});await antwort();return tg.senden(auftrag.chatId,"Schick ein Hintergrundfoto als JPG oder PNG (max. 12 MB), zum Beispiel aus dem Sitzungssaal.");}
+      await antwort();return thumbnailBauen(auftrag,{...auftrag.thumbnail,hintergrund:arg});
+    }
     case "thumbframe": {
       if (art(auftrag) !== "video") return antwort("Bitte zuerst ein Video auswählen.", true);
       const masse = await untersuche(coverVideo(auftrag));
@@ -1832,6 +1864,12 @@ async function texteingabe(auftrag, text) {
       auftraege.aendern(auftrag.id, { thumbnailTextModus: null });
       return thumbnailBauen(auftrag, { ...auftrag.thumbnail, modus, text: textNeu, mitText: modus !== "text" });
     }
+    case "thumbnailHintergrundZeit": {
+      let ms;
+      try {ms=frameZeit(text,(await untersuche(coverVideo(auftrag))).dauer);}
+      catch(e) {return tg.senden(auftrag.chatId,html(e.message));}
+      return thumbnailBauen(auftrag,{...auftrag.thumbnail,hintergrund:"video",frameMs:ms});
+    }
     case "quelle": {
       let q;
       try { q = quellenBearbeiten(text, auftrag.quellenkarte); }
@@ -2053,6 +2091,15 @@ async function nachricht(msg) {
   }
 
   const wartend = auftraege.wartend(chatId);
+  if (["thumbnailPortraet","thumbnailHintergrund"].includes(wartend?.wartetAuf) && (msg.photo||msg.document?.mime_type?.startsWith("image/"))) {
+    const bild=msg.photo?.at(-1)??msg.document;
+    if(bild.file_size>12*MB)return tg.senden(chatId,"Bitte ein Bild unter 12 MB schicken.");
+    const ziel=datei(wartend,`portraet-upload-${createHash("sha256").update(bild.file_id).digest("hex").slice(0,12)}.bild`);
+    await tg.herunterladen(bild.file_id,ziel);
+    const alt=wartend.thumbnail??{};
+    return thumbnailBauen(wartend,{...alt,modus:"portraet",mitText:true,text:alt.text??kurzerTitel(wartend.caption,60),
+      ...(wartend.wartetAuf==="thumbnailPortraet"?{portraet:ziel}:{hintergrund:"eigen",hintergrundBild:ziel})});
+  }
   if (wartend?.wartetAuf === "thumbnailBild" && (msg.photo || msg.document?.mime_type?.startsWith("image/"))) {
     const bild = msg.photo?.at(-1) ?? msg.document;
     if (bild.file_size > 12 * MB) return tg.senden(chatId, "Bitte ein Titelbild unter 12 MB schicken.");

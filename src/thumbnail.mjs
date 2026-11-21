@@ -1,3 +1,4 @@
+import { portraetCover, portraetFreistellen, PORTRAET_HINTERGRUENDE } from "./portraet-cover.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes } from "node:crypto";
@@ -72,7 +73,7 @@ export async function jpegProfil(eingabe, ausgabe, profil) {
   throw new Error("Das Titelbild lässt sich nicht sicher unter 2 MiB verkleinern. Bitte ein einfacheres Bild wählen.");
 }
 
-export async function thumbnailsErstellen({ ordner, video, quelle = video, layout, optionen, kanaele, mastodonPatch = false, gesicht = null }) {
+export async function thumbnailsErstellen({ ordner, video, quelle = video, layout, optionen, kanaele, mastodonPatch = false, gesicht = null, vorlagen = {} }) {
   const masse = await untersuche(video);
   const stand = await videoStand(video);
   const ausgabeDir = path.join(ordner, `cover-${randomBytes(4).toString("hex")}`);
@@ -84,22 +85,41 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
     await ausfuehren("ffmpeg", ["-y", "-v", "error", "-ss", String(ms / 1000), "-i", quelle,
       "-frames:v", "1", "-q:v", "2", bild]);
   }
-  if (!["text", "frame", "bild"].includes(optionen.modus) || (optionen.modus !== "text" && !bild)) throw new Error("Bitte zuerst ein Bild oder einen Videoframe auswählen.");
-  const funde = gesicht && bild && optionen.mitText && optionen.vorlage !== "grafik"
+  let portraet,freigestellt,hintergrundBild;
+  if(optionen.modus==="portraet") {
+    portraet=optionen.portraet??vorlagen.portraet;
+    if(!portraet)throw Error("Bitte zuerst ein Porträt hochladen.");
+    try {await fs.access(portraet);} catch {throw Error("Bitte zuerst ein Porträt hochladen.");}
+    const bg=optionen.hintergrund??"orange";
+    if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,bg))throw Error("Unbekannter Porträt-Hintergrund.");
+    if(bg!=="original") {
+      if(!optionen.portraet&&vorlagen.freigestellt)try {await fs.access(vorlagen.freigestellt);freigestellt=vorlagen.freigestellt;}catch {}
+      freigestellt??=await portraetFreistellen(portraet,ordner,gesicht?.python);
+    } else freigestellt=portraet;
+    if(bg==="video") {
+      const ms=frameZeit(String((optionen.frameMs??0)/1000),masse.dauer);
+      hintergrundBild=path.join(ausgabeDir,"hintergrund.jpg");
+      await ausfuehren("ffmpeg",["-y","-v","error","-ss",String(ms/1000),"-i",quelle,"-frames:v","1","-q:v","2",hintergrundBild]);
+    } else if(bg==="eigen")hintergrundBild=optionen.hintergrundBild;
+  }
+  if (!["text", "frame", "bild", "portraet"].includes(optionen.modus) || (!["text","portraet"].includes(optionen.modus) && !bild)) throw new Error("Bitte zuerst ein Bild oder einen Videoframe auswählen.");
+  const funde = optionen.modus!=="portraet" && gesicht && bild && optionen.mitText && optionen.vorlage !== "grafik"
     ? await gesichtSuchen(bild, gesicht, 1) : null;
   const profile = new Set(["original", ...(optionen.quer ? ["quer"] : []), ...kanaele.map((k) => thumbnailZiel(k, optionen, mastodonPatch).profil)]);
   const dateien = {};
   for (const key of profile) {
     const profil = key === "original" ? originalProfil(masse) : THUMBNAIL_PROFILE[key];
     let eingabe = bild;
-    if (optionen.modus === "text" || optionen.mitText) {
+    if (optionen.modus === "portraet" || optionen.modus === "text" || optionen.mitText) {
       const inhalt = grafikInhalt(optionen.text);
       // Cover sind kurz. Keine unsichtbare Kürzung längerer Erklärtexte.
       if (inhalt.gekuerzt || [...inhalt.titel].length > 70 || [...inhalt.beschreibung].length > 60) {
         throw new Error("Bitte eine Cover-Überschrift bis 70 Zeichen und optional bis 60 Zeichen Erklärung schreiben.");
       }
       eingabe = path.join(ausgabeDir, `${key}-grafik.jpg`);
-      if (optionen.modus !== "text" && optionen.vorlage !== "grafik") {
+      if(optionen.modus==="portraet") {
+        await portraetCover({ausgabe:eingabe,inhalt,layout,portraet,freigestellt,hintergrund:optionen.hintergrund??"orange",hintergrundBild,quer:profil.breite>profil.hoehe,unterzeile:vorlagen.unterzeile??""});
+      } else if (optionen.modus !== "text" && optionen.vorlage !== "grafik") {
         await fotoCover({ ausgabe: eingabe, inhalt, layout, bild, quer: profil.breite > profil.hoehe,
           gesichter: funde?.gesichter ?? [], textPosition: optionen.textPosition ?? "auto" });
       } else {

@@ -34,6 +34,28 @@ gesetzten Thumbnails. Shorts-Cover werden für Studio exportiert, nicht ungeprü
 
 Größenempfehlungen, harte Grenzen, unterstützte Provider und Patch-Anleitung: [docs/THUMBNAILS.md](docs/THUMBNAILS.md).
 
+#### Porträt-Thumbnails mit auswählbarem Hintergrund
+
+Im Videoentwurf unter **Video-Titelbild → Porträt-Thumbnail erstellen** eine Überschrift schicken
+(maximal 70 Zeichen). Eine zweite Zeile ist optional und ersetzt die voreingestellte Unterzeile.
+Die Vorlage kombiniert Porträt, Logo und einen schrägen schwarz-orangen Titelbalken.
+Hochkantcover und die benötigten Quercover werden getrennt gestaltet; das Video wird nicht neu gerendert.
+
+Unter **Hintergrund wählen** stehen Originalfoto, Orange, Dunkel, ein Videobild oder ein eigenes
+Hintergrundfoto zur Auswahl. „Stadtrat / Videobild“ entnimmt ein Bild aus dem vorhandenen Originalvideo;
+es ist keine Aufnahme eines anderen oder erfundenen Sitzungssaals. Über **Hintergrund-Bildzeit ändern**
+lässt sich ein anderer Zeitpunkt wählen. Ein eigenes Foto aus dem Saal kann als Hintergrund hochgeladen werden.
+**Anderes Porträt hochladen** ersetzt das Motiv nur für diesen Entwurf. Text und Hintergründe bleiben
+weiter bearbeitbar. Misslingt eine Änderung, bleibt das vorherige Titelbild erhalten.
+
+Für die Standardvorlage das private Original unter `daten/vorlagen/portraet.jpg` und optional eine
+freigestellte Version unter `daten/vorlagen/portraet.png` ablegen; eigene Pfade lassen sich über
+`THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
+Die Bilder gehören nicht ins Git-Repository. Die lokale Freistellung verwendet das bereits für die
+Gesichtssuche vorhandene Python mit OpenCV und funktioniert für ruhige, helle Studiohintergründe.
+Für andere Motive ein transparentes PNG verwenden. Die Farbpixel des Porträts bleiben unverändert;
+nur Transparenz und äußere Ränder werden angepasst. Es werden keine Bilder an eine Bild-KI übertragen.
+
 ### Entwürfe, Archiv und Quellen
 
 - `/entwuerfe` zeigt alle noch offenen Entwürfe dieses Chats, mit Seiten zum Weiterblättern.
@@ -368,4 +390,5 @@ Tests: `npm test`
 
 Kontrolle nach dem Posten, Mastodon direkt, Zählweise, Kanalauswahl per Name, Anfragenlimit und die
 Pi-Skripte stammen aus [eu-piraten-abstimmungen](https://github.com/vwt1812-glitch/eu-piraten-abstimmungen).
+
 

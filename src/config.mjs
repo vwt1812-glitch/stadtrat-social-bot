@@ -77,6 +77,11 @@ export function ladeConfig() {
     glossar: pfad(env("GLOSSAR", "glossar.txt")),
     // Python mit OpenCV für die Gesichtssuche (pi/install.sh legt es an); fehlt es, bleibt die Suche aus
     gesicht: { python: pfad(env("GESICHT_PYTHON", ".venv/bin/python")) },
+    thumbnail: {
+      portraet: pfad(env("THUMBNAIL_PORTRAET", "daten/vorlagen/portraet.jpg")),
+      freigestellt: pfad(env("THUMBNAIL_FREIGESTELLT", "daten/vorlagen/portraet.png")),
+      unterzeile: env("THUMBNAIL_UNTERZEILE", "Transparenz. Teilhabe. Digitale Souveränität."),
+    },
     layout: {
       logo: logoPfad(),
       logoPosition: env("LOGO_POSITION", "oben-links"),
