@@ -1,10 +1,11 @@
+import { ausschnittUntertitelPosition } from "./plattform-video.mjs";
 // Alles, was ffmpeg/ffprobe macht: Video untersuchen, Ton für Whisper
 // herauslösen, Logo + Untertitel einbrennen.
 
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { untertitelGroesse, untertitelPosition, untertitelRahmen } from "./untertitel.mjs";
+import { untertitelGroesse, untertitelPosition } from "./untertitel.mjs";
 import { bildRechteck, gesichterUebertragen, logoPlatzierung, sichereZone } from "./story-layout.mjs";
 import { ausschnittAktivFilter, ausschnittKommandos, gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
 
@@ -466,12 +467,11 @@ export function storyBild(original, masse = STORY_MASSE) {
 export function storyLayout(layout, original, masse = STORY_MASSE, ausschnitt = null) {
   if (ausschnitt) {
     const gesichter=gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt, masse);
-    const r=untertitelRahmen({...masse,...layout,layoutModus:"reel"});
     const d=ausschnitt.darstellung;
     const bild=d?{links:d.x,rechts:d.x+d.breite,oben:d.y,unten:d.y+d.hoehe,breite:d.breite,hoehe:d.hoehe}:null;
     return {
       ...layout, ausschnitt, bild, smartLogo: true, layoutModus: "reel",
-      positionFest: (masse.hoehe-r.unten)/masse.hoehe, gesichter,
+      positionFest: ausschnittUntertitelPosition(gesichter,masse,layout), gesichter,
     };
   }
   const bild = bildRechteck(original, masse);

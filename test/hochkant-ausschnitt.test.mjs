@@ -154,7 +154,7 @@ test("Plattform-Freizonen haben Vorrang vor tiefer Lage; manuelle obere Lage ble
   assert.equal(untertitelPosition({...masse,position:0.35}),0.35);
 });
 
-test("Gesenkter Kopf bekommt einen festen tieferen Untertitelplatz statt Text über dem Mund",()=>{
+test("Gesenkter Kopf behält bildfüllenden Ausschnitt und bekommt Text außerhalb des Mundes",()=>{
   const masse={breite:1080,hoehe:1920};
   const f=funde();f.gesichter=f.gesichter.map(g=>({...g,x:0.3,y:0.42,w:0.2,h:0.4}));
   const basis={position:0.35,zeilen:1,gesichter:f.gesichter};
@@ -163,7 +163,9 @@ test("Gesenkter Kopf bekommt einen festen tieferen Untertitelplatz statt Text ü
   const p=untertitelPosition({...masse,...layout});
   assert.ok(p>=0.35);
   const r=untertitelRahmen({...masse,...layout});
-  assert.ok(layout.gesichter.every(g=>(g.y+0.85*g.h)*1920<r.unten-r.textHoehe));
+  const unten=(1-p)*1920,oben=unten-r.textHoehe;
+  assert.equal(a.darstellung,undefined);
+  assert.ok(layout.gesichter.every(g=>unten<=(g.y+0.55*g.h)*1920||oben>=(g.y+1.05*g.h)*1920));
 });
 
 test("Kamera am Anfang ausrichten: kurzer Schwenk verwirft nur den Anfang", () => {
@@ -259,7 +261,7 @@ test("Echtes Video: Ausschnitt füllt das Bild, Fallback erhält Seiten, Ton und
   const vorher = await fs.readFile(eingabe);
   const quelle = await untersuche(eingabe);
   for (const schneiden of [true, false, "bewegung", "pausen"]) {
-    const a = schneiden ? hochkantAusschnitt(quelle, funde()) : null;
+    const a = schneiden ? sichererHochkantAusschnitt(quelle, funde()) : null;
     if (schneiden === "bewegung") Object.assign(a, { ab: 0.25, bis: 0.8,
       punkte: [{ t: 0.25, x: 320 }, { t: 0.8, x: 370 }] });
     if (schneiden === "pausen") Object.assign(a, { ab:0, bis:1,
@@ -273,10 +275,12 @@ test("Echtes Video: Ausschnitt füllt das Bild, Fallback erhält Seiten, Ton und
     assert.deepEqual([m.breite, m.hoehe, m.hatTon], [180, 320, true]);
     assert.ok(Math.abs(m.dauer - 1) < 0.2);
     for (const t of (schneiden === "bewegung" ? [0, 0.6] : schneiden === "pausen" ? [0,0.4,0.6] : [0])) {
-      const rgb = await ausfuehren("ffmpeg", ["-v", "error", "-ss", String(t), "-i", ausgabe, "-vf", "crop=2:2:4:160,scale=1:1",
+      for (const y of [6,160,310]) {
+      const rgb = await ausfuehren("ffmpeg", ["-v", "error", "-ss", String(t), "-i", ausgabe, "-vf", `crop=2:2:4:${y},scale=1:1`,
         "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1"], { binaer: true });
       const rot = schneiden && ausschnittAktiv(a,t);
-      assert.ok(rot ? rgb[0] > rgb[2] + 80 : rgb[2] > rgb[0] + 80, `${schneiden}, ${t}: ${[...rgb]}`);
+      assert.ok(rot ? rgb[0] > rgb[2] + 80 : rgb[2] > rgb[0] + 80, `${schneiden}, ${t}, y=${y}: ${[...rgb]}`);
+      }
     }
   }
   assert.deepEqual(await fs.readFile(eingabe), vorher);

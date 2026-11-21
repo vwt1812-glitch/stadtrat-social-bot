@@ -1,33 +1,26 @@
-import { sichereZone } from "./story-layout.mjs";
 import { untertitelRahmen } from "./untertitel.mjs";
-import { ausschnittAktiv, hochkantAusschnitt } from "./hochkant-ausschnitt.mjs";
+import { hochkantAusschnitt } from "./hochkant-ausschnitt.mjs";
 
-/** Bild und Text gemeinsam planen: freier Mund darf nicht auf Kosten der UI-Flächen gehen. */
-export function sichererHochkantAusschnitt(original,funde,masse,layout) {
-  const zonen=sichereZone(masse,"reel");
-  const text=untertitelRahmen({...masse,...layout,layoutModus:"reel"});
-  const normal=hochkantAusschnitt(original,funde,{links:zonen.links/masse.breite,rechts:zonen.rechts/masse.breite});
-  const referenz=normal??hochkantAusschnitt(original,funde);
-  if(!referenz)return null;
-  const gesichter=funde.gesichter.filter(g=>ausschnittAktiv(referenz,g.t));
-  const unten=Math.max(...gesichter.map(g=>g.y+g.h*1.05));
-  const oben=Math.min(...gesichter.map(g=>Math.max(0,g.y-g.h*0.2)));
-  const textOben=text.unten-text.textHoehe;
-  const abstand=Math.round(masse.hoehe*0.02);
-  if(normal&&oben*masse.hoehe>=zonen.oben&&unten*masse.hoehe<=textOben-abstand)return normal;
-  let kopfUnten=unten;
-  for(let versuch=0;versuch<8;versuch++) {
-    const h=Math.floor(Math.min(masse.hoehe,(textOben-abstand-zonen.oben)/kopfUnten)/2)*2;
-    const w=Math.round(original.hoehe*masse.breite/h/2)*2;
-    if(h<2||w>original.breite)return null;
-    const a=hochkantAusschnitt(original,funde,{breite:w,links:zonen.links/masse.breite,rechts:zonen.rechts/masse.breite});
-    if(!a)return null;
-    // Ein breiterer Ausschnitt kann zusätzliche Abschnitte/Personen einschließen.
-    // Deren Kopfbereiche müssen ebenfalls oberhalb des Textes bleiben.
-    const neuUnten=Math.max(...funde.gesichter.filter(g=>ausschnittAktiv(a,g.t)).map(g=>g.y+g.h*1.05));
-    if(neuUnten>kopfUnten+1e-9) {kopfUnten=neuUnten;continue;}
-    const dauer=original.dauer??masse.dauer??Math.max(...funde.gesichter.map(g=>g.t))+1;
-    return {...a,ab:a.ab??0,bis:a.bis??dauer,darstellung:{x:0,y:zonen.oben,breite:masse.breite,hoehe:h}};
+/** Ein echter 9:16-Ausschnitt füllt das Zielbild. UI-Freizonen gelten für die Einblendungen. */
+export function sichererHochkantAusschnitt(original,funde) {
+  return hochkantAusschnitt(original,funde);
+}
+
+/** Fester Textplatz je Video: zuerst Mund schützen, dann übrige Kopfbereiche. */
+export function ausschnittUntertitelPosition(gesichter,masse,layout) {
+  const r=untertitelRahmen({...masse,...layout,layoutModus:"reel"});
+  const unten=r.unten,oben=r.oben+r.textHoehe;
+  if(!gesichter.length)return 1-unten/masse.hoehe;
+  const overlap=(a,b,c,d)=>Math.max(0,Math.min(b,d)-Math.max(a,c));
+  let beste={y:unten,mund:Infinity,kopf:Infinity};
+  for(let y=unten;y>=oben;y-=2) {
+    const top=(y-r.textHoehe)/masse.hoehe,bottom=y/masse.hoehe;
+    let mund=0,kopf=0;
+    for(const g of gesichter) {
+      mund+=overlap(top,bottom,g.y+g.h*0.55,g.y+g.h*1.05);
+      kopf+=overlap(top,bottom,g.y-g.h*0.2,g.y+g.h*1.05);
+    }
+    if(mund<beste.mund-1e-9||(Math.abs(mund-beste.mund)<1e-9&&kopf<beste.kopf-1e-9))beste={y,mund,kopf};
   }
-  return null;
+  return 1-beste.y/masse.hoehe;
 }

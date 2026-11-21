@@ -306,10 +306,12 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   eine weitere vollständige Dekodierung großer HEVC-Originale; gerendert wird weiterhin aus dem Original.
   Bei kurzen Videos wird die Abtastung erhöht. Die Originalhöhe bleibt erhalten, damit zusätzliches
   Kopfpolster nicht zum Ablehnen der gesamten Aufnahme oder zum Abschneiden der Haare führt.
-  Bildausschnitt und Untertitel werden gemeinsam innerhalb der Plattform-Freizonen geplant:
-  oben 14 %, unten 35 %, links 6 % und rechts 16 % bleiben für die Bedienoberfläche frei.
-  Für nahe Gesichter wird der Ausschnitt breiter und als größeres Bild im oberen Bereich platziert,
-  damit darunter Platz für Text bleibt. Der Hintergrund bleibt weichgezeichnet.
+  Ein gewählter 9:16-Ausschnitt füllt die Hochkantfläche vollständig aus. Dafür wird die Person
+  nicht als verkleinerte Kachel auf einem unscharfen Hintergrund dargestellt. Nur unsichere
+  Abschnitte zeigen weiterhin das vollständige Originalbild mit unscharfem Hintergrund.
+  Die Plattform-Freizonen gelten für Untertitel und Logo: oben 14 %, unten 35 %, links 6 % und
+  rechts 16 %. Die Untertitel erhalten pro Video einen festen Platz, der zuerst den Mundbereich
+  und danach übrige Kopfbereiche meidet. Wo unten kein Platz bleibt, stehen sie weiter oben.
   Der gesamte Untertitelblock einschließlich Kontur und Schatten bleibt innerhalb der Freizone;
   lange Wörter werden bei Bedarf kleiner gesetzt. Auch eine ausdrücklich gewählte Textposition
   wird darauf begrenzt. Die normale Querformatfassung behält ihre Position.

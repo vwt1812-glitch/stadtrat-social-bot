@@ -16,38 +16,32 @@ const layout={position:0.35,zeilen:1,schrift:"Inter",farbe:"#F18616",rand:"#1D1D
 const funde=(y=0.4,h=0.36,w=0.16)=>({bilder:24,version:3,dicht:true,alleGesichter:true,
   zeiten:Array.from({length:24},(_,i)=>i/2),gesichter:Array.from({length:24},(_,i)=>({t:i/2,x:0.36,y,w,h}))});
 
-test("Gesicht und Untertitel passen gemeinsam oberhalb der Reels-Bedienelemente",()=>{
+test("Nahe Sprecher bleiben in einem bildfüllenden 9:16-Ausschnitt ohne Blur-Kachel",()=>{
   const f=funde(),a=sichererHochkantAusschnitt(original,f,masse,layout);
-  assert.ok(a?.darstellung);
-  assert.ok(a.breite>608&&a.breite<original.breite);
+  assert.ok(a);
+  assert.equal(a.breite,608);
+  assert.equal(a.hoehe,1080);
+  assert.equal(a.darstellung,undefined);
   const l=storyLayout({...layout,gesichter:f.gesichter},original,masse,a);
-  const r=untertitelRahmen({...masse,...l}),zone=sichereZone(masse,"reel");
-  for(const g of l.gesichter) {
-    assert.ok(g.x*1080>=zone.links);
-    assert.ok((g.x+g.w)*1080<=zone.rechts);
-    assert.ok(g.y*1920>=zone.oben);
-    assert.ok((g.y+g.h)*1920<r.unten-r.textHoehe);
-  }
-  assert.ok(r.unten<=zone.unten);
+  const r=untertitelRahmen({...masse,...l}),y=(1-untertitelPosition({...masse,...l}))*1920;
+  assert.ok(y<=r.unten&&y-r.textHoehe>=r.oben);
+  for(const g of l.gesichter)assert.ok(y<=g.y*1920||(y-r.textHoehe)>=(g.y+g.h)*1920);
 });
 
-test("Ausreichend kleiner Sprecher kann weiterhin die ganze 9:16-Fläche nutzen",()=>{
+test("Auch kleine Sprecher behalten einen bildfüllenden Ausschnitt",()=>{
   const a=sichererHochkantAusschnitt(original,funde(0.26,0.12,0.06),masse,layout);
   assert.ok(a);
+  assert.equal(a.breite,608);
   assert.equal(a.darstellung,undefined);
 });
 
-test("Zusätzliche Personen im breiteren Ausschnitt werden erneut gegen den Textbereich geprüft",()=>{
+test("Zwei entfernte Personen führen lokal zum vollständigen Bild statt zum Verkleinern des Ausschnitts",()=>{
   const f=funde();
-  for(const g of [...f.gesichter])if(g.t>=4&&g.t<=7) {
-    f.gesichter.push({...g,x:0.55,y:0.5,w:0.1});
-  }
+  for(const g of [...f.gesichter])if(g.t>=4&&g.t<=7)f.gesichter.push({...g,x:0.75});
   const a=sichererHochkantAusschnitt(original,f,masse,layout);
-  assert.ok(a?.darstellung);
-  assert.ok(a.bereiche.some(b=>b.ab<=5&&b.bis>=6));
-  const l=storyLayout({...layout,gesichter:f.gesichter},original,masse,a);
-  const r=untertitelRahmen({...masse,...l});
-  for(const g of l.gesichter)assert.ok((g.y+g.h)*1920<r.unten-r.textHoehe);
+  assert.ok(a);
+  assert.equal(a.darstellung,undefined);
+  assert.ok(!a.bereiche.some(b=>b.ab<=5&&b.bis>=6));
 });
 
 test("Auch ausdrückliche Randpositionen lassen den ganzen Textblock innerhalb der UI-Freizonen",()=>{
