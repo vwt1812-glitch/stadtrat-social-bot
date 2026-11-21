@@ -51,19 +51,19 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     filter.push(`[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=10:1,eq=brightness=-0.12:saturation=0.7,setsar=1[grund]`);
   } else {
     const farbe=hintergrund==="orange"?"0xF18616":hintergrund==="dunkel"?"0x263D45":"0xE5E6E7";
-    filter.push(`color=c=${farbe}:s=${w}x${h}:d=1,drawbox=x=0:y=0:w=${Math.round(w*.6)}:h=ih:color=white@0.08:t=fill[grund]`);
+    const verlauf=hintergrund==="orange"?",geq=r='r(X,Y)*(0.25+0.75*Y/H)':g='g(X,Y)*(0.25+0.75*Y/H)':b='b(X,Y)*(0.25+0.75*Y/H)'":"";
+    filter.push(`color=c=${farbe}:s=${w}x${h}:d=1${verlauf},drawbox=x=0:y=0:w=${Math.round(w*.6)}:h=ih:color=white@0.08:t=fill[grund]`);
   }
   args.push("-i",hintergrund==="original"?portraet:freigestellt);
   filter.push(`[${index}:v]scale=${pw}:${ph},format=rgba[person];[grund][person]overlay=${px}:${py}:format=auto[basis]`);
   index++;
   let label="basis";
   if(layout.logo) {
-    const logoDatei=logoFuerGrafik(layout.logo,"hell"),logoInfo=await untersuche(logoDatei);
+    const logoDatei=logoFuerGrafik(layout.logo,hintergrund==="original"?"hell":"dunkel"),logoInfo=await untersuche(logoDatei);
     args.push("-i",logoDatei);
     const lw=Math.round(Math.min(quer?850:930,(quer?190:210)*logoInfo.breite/logoInfo.hoehe));
     const lx=quer?60:Math.round((w-lw)/2),ly=quer?60:305;
-    filter.push(`[${label}]drawbox=x=${lx-15}:y=${ly-15}:w=${lw+30}:h=${Math.round(lw*logoInfo.hoehe/logoInfo.breite)+30}:color=white@0.94:t=fill[logogrund]`);
-    filter.push(`[${index}:v]scale=${lw}:-1,format=rgba[logo];[logogrund][logo]overlay=${lx}:${ly}:format=auto[marke]`);
+    filter.push(`[${index}:v]scale=${lw}:-1,format=rgba[logo];[${label}][logo]overlay=${lx}:${ly}:format=auto[marke]`);
     label="marke";index++;
   }
   const panelW=quer?960:1060;

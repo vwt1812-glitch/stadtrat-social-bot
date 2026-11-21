@@ -52,6 +52,9 @@ test("Porträt-Thumbnail rendert Hoch-/Querprofile und Raster, ohne Video oder P
   for(const hintergrund of ["orange","dunkel","original","eigen"]) {
     await portraetCover({ausgabe:path.join(dir,`${hintergrund}.jpg`),inhalt:{titel:"Stadtrat erklärt"},layout,portraet,freigestellt:portraet,hintergrund,hintergrundBild:bg});
   }
+  // Am Rand neben dem transparenten Logo bleibt der warme Hintergrund sichtbar.
+  const pixel=await ausfuehren("ffmpeg",["-v","error","-i",path.join(dir,"orange.jpg"),"-vf","crop=2:2:70:294,scale=1:1","-frames:v","1","-f","rawvideo","-pix_fmt","rgb24","pipe:1"],{binaer:true});
+  assert.ok(pixel[0]>pixel[1]+20&&pixel[1]>pixel[2]+20,`Keine weiße Logokarte: ${[...pixel]}`);
   await assert.rejects(portraetCover({ausgabe:path.join(dir,"falsch.jpg"),hintergrund:"../fremd"}),/Unbekannter/);
   await assert.rejects(thumbnailsErstellen({ordner:dir,video,layout,optionen:{...optionen,portraet:path.join(dir,"fehlt.png")},kanaele:[]}),/Porträt hochladen/);
   assert.deepEqual(await fs.readFile(video),vorher);assert.deepEqual(await fs.readFile(portraet),fotoVorher);
