@@ -37,6 +37,19 @@ test("Ausreichend kleiner Sprecher kann weiterhin die ganze 9:16-Fläche nutzen"
   assert.equal(a.darstellung,undefined);
 });
 
+test("Zusätzliche Personen im breiteren Ausschnitt werden erneut gegen den Textbereich geprüft",()=>{
+  const f=funde();
+  for(const g of [...f.gesichter])if(g.t>=4&&g.t<=7) {
+    f.gesichter.push({...g,x:0.55,y:0.5,w:0.1});
+  }
+  const a=sichererHochkantAusschnitt(original,f,masse,layout);
+  assert.ok(a?.darstellung);
+  assert.ok(a.bereiche.some(b=>b.ab<=5&&b.bis>=6));
+  const l=storyLayout({...layout,gesichter:f.gesichter},original,masse,a);
+  const r=untertitelRahmen({...masse,...l});
+  for(const g of l.gesichter)assert.ok((g.y+g.h)*1920<r.unten-r.textHoehe);
+});
+
 test("Auch ausdrückliche Randpositionen lassen den ganzen Textblock innerhalb der UI-Freizonen",()=>{
   for(const modus of ["reel","story"])for(const zeilen of [1,2])for(const position of [0,0.16,0.35,0.99]) {
     const o={...masse,...layout,layoutModus:modus,zeilen,position};
