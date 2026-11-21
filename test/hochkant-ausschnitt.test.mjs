@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { ausschnittAktiv, ausschnittAktivFilter, ausschnittHinweis, ausschnittKommandos, ausschnittX, gesichterImAusschnitt, hochkantAusschnitt } from "../src/hochkant-ausschnitt.mjs";
 import { ausfuehren, rendern, storyLayout, untersuche } from "../src/video.mjs";
+import { untertitelPosition } from "../src/untertitel.mjs";
 
 const original = { breite: 1920, hoehe: 1080 };
 const funde = (x = 0.65) => ({ bilder: 24, alleGesichter: true,
@@ -26,7 +27,7 @@ test("Fester 9:16-Ausschnitt folgt einer seitlich stehenden Person mit Kopfrand"
   }
   const layout = storyLayout({ gesichter: f.gesichter, positionFest: 0.6 }, original, { breite: 1080, hoehe: 1920 }, a);
   assert.equal(layout.bild, null);
-  assert.equal(layout.positionFest, undefined);
+  assert.equal(layout.positionFest, 0.23);
   assert.ok(layout.gesichter.every((g) => g.x > 0 && g.x + g.w < 1));
   assert.equal(layout.gesichter[0].t, 0);
 });
@@ -109,6 +110,59 @@ const ruhigeAufnahme = () => {
     gesichter: zeiten.map((t) => ({ t, x: 0.3, y: 0.25, w: 0.1, h: 0.2 })) };
 };
 const langeMasse = { ...original, dauer: 40.1 };
+
+test("Kleine Kopfbewegungen bei ausreichend Platz lösen keine Kamerafahrt aus", () => {
+  const f=ruhigeAufnahme();
+  f.gesichter=f.gesichter.filter(g=>g.t>0).map((g,i)=>({...g,x:g.t<=2?0.75:0.3+0.035*Math.sin(i*1.7)}));
+  const a=hochkantAusschnitt(langeMasse,f);
+  assert.ok(a);
+  const x=Array.from({length:300},(_,i)=>ausschnittX(a,5+i/10));
+  assert.ok(Math.max(...x)-Math.min(...x)<0.001);
+});
+
+test("Langsame Kamerafahrt behält ihre Geschwindigkeit über Messpunkte hinweg und schwingt nicht über", () => {
+  const f=ruhigeAufnahme();
+  f.gesichter=f.gesichter.map(g=>({...g,x:0.15+0.5*g.t/40+0.005*Math.sin(g.t*4)}));
+  const a=hochkantAusschnitt(langeMasse,f);
+  assert.ok(a?.punkte?.length);
+  assert.ok(a.punkte.some(p=>Math.abs(p.v)>0.1));
+  for(let i=1;i<a.punkte.length-1;i++) {
+    const p=a.punkte[i],eps=0.0001;
+    const links=(ausschnittX(a,p.t)-ausschnittX(a,p.t-eps))/eps;
+    const rechts=(ausschnittX(a,p.t+eps)-ausschnittX(a,p.t))/eps;
+    assert.ok(Math.abs(links-rechts)<0.05);
+    const nach=a.punkte[i+1];
+    for(const u of [0.25,0.5,0.75]) {
+      const x=ausschnittX(a,p.t+u*(nach.t-p.t));
+      assert.ok(x>=Math.min(p.x,nach.x)-0.001&&x<=Math.max(p.x,nach.x)+0.001);
+    }
+  }
+  for(const g of f.gesichter) {
+    const x=ausschnittX(a,g.t);
+    assert.ok(x<=(g.x-g.w*0.18)*original.breite+0.001);
+    assert.ok(x+a.breite>=(g.x+g.w*1.18)*original.breite-0.001);
+  }
+});
+
+test("Untertitel im ausgefüllten Hochkant-Ausschnitt stehen tiefer; manuelle obere Lage bleibt wählbar", () => {
+  const a=hochkantAusschnitt(original,funde());
+  const masse={breite:1080,hoehe:1920};
+  const layout=storyLayout({position:0.35},original,masse,a);
+  assert.equal(untertitelPosition({...masse,...layout}),0.23);
+  assert.equal(Math.round(masse.hoehe*(0.35-untertitelPosition({...masse,...layout}))),230);
+  assert.equal(untertitelPosition({...masse,...layout,lage:"oben"}),0.62);
+  assert.equal(untertitelPosition({...masse,position:0.35}),0.35);
+});
+
+test("Gesenkter Kopf bekommt einen festen tieferen Untertitelplatz statt Text über dem Mund",()=>{
+  const a=hochkantAusschnitt(original,funde());
+  const masse={breite:1080,hoehe:1920};
+  const layout=storyLayout({position:0.35,zeilen:1,gesichter:[{t:2,x:0.3,y:0.42,w:0.2,h:0.4}]},original,masse,a);
+  const p=untertitelPosition({...masse,...layout});
+  assert.ok(p>=0.16&&p<0.23);
+  const textOben=1-p-67*1.15/1920;
+  assert.ok(textOben>0.42+0.85*0.4+0.01);
+});
 
 test("Kamera am Anfang ausrichten: kurzer Schwenk verwirft nur den Anfang", () => {
   const f = ruhigeAufnahme();

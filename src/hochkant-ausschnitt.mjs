@@ -3,6 +3,56 @@
 // Ohne sichere Gesichtsfunde bleibt die vollständige Aufnahme sichtbar.
 export const AUSSCHNITT_VERSION = 3;
 
+/** Ruhige Kamerabahn innerhalb der erlaubten Kopfbereiche: Geschwindigkeit
+ * und Beschleunigung gemeinsam minimieren, statt jeder Kopfbewegung zu folgen. */
+function kamerabahn(punkte) {
+  const n = punkte.length;
+  const unten = Math.max(...punkte.map(p => p.min));
+  const oben = Math.min(...punkte.map(p => p.max));
+  if (unten <= oben) {
+    const mitte = [...punkte].sort((a,b) => a.x-b.x)[Math.floor(n/2)].x;
+    const x = Math.max(unten,Math.min(oben,mitte));
+    return punkte.map(p => ({t:p.t,x,v:0}));
+  }
+  let x = Float64Array.from(punkte,p=>p.x);
+  let y = x.slice();
+  let tempo = 1;
+  const gewicht = 32, schritt = 1/(8+32*gewicht);
+  for (let lauf=0;lauf<1200;lauf++) {
+    const g = new Float64Array(n);
+    for(let i=0;i<n-1;i++) {
+      const d=2*(y[i+1]-y[i]);g[i]-=d;g[i+1]+=d;
+    }
+    for(let i=1;i<n-1;i++) {
+      const d=2*gewicht*(y[i-1]-2*y[i]+y[i+1]);
+      g[i-1]+=d;g[i]-=2*d;g[i+1]+=d;
+    }
+    const neu=new Float64Array(n);
+    for(let i=0;i<n;i++)neu[i]=Math.max(punkte[i].min,Math.min(punkte[i].max,y[i]-schritt*g[i]));
+    const naechstesTempo=(1+Math.sqrt(1+4*tempo*tempo))/2;
+    const schwung=(tempo-1)/naechstesTempo;
+    for(let i=0;i<n;i++)y[i]=neu[i]+schwung*(neu[i]-x[i]);
+    x=neu;tempo=naechstesTempo;
+  }
+  const ergebnis=punkte.map((p,i)=>({t:p.t,x:x[i],v:0}));
+  // Formtreue kubische Übergänge: gleiche Geschwindigkeit links und rechts
+  // jedes Messpunkts, ohne über die beiden Nachbarpositionen hinauszuschwingen.
+  for(let i=1;i<n-1;i++) {
+    const h0=punkte[i].t-punkte[i-1].t,h1=punkte[i+1].t-punkte[i].t;
+    const d0=(x[i]-x[i-1])/h0,d1=(x[i+1]-x[i])/h1;
+    if(d0*d1>0) {
+      const w0=2*h1+h0,w1=h1+2*h0;
+      ergebnis[i].v=(w0+w1)/(w0/d0+w1/d1);
+    }
+  }
+  return ergebnis;
+}
+
+function kurve(a,b) {
+  const h=b.t-a.t,v0=a.v??0,v1=b.v??0;
+  return {a:2*a.x-2*b.x+h*(v0+v1),b:-3*a.x+3*b.x-h*(2*v0+v1),c:h*v0,d:a.x};
+}
+
 /** Gültige Zeitabschnitte; außerhalb bleibt das vollständige Bild sichtbar. */
 export function ausschnittAktiv(ausschnitt, t) {
   return (ausschnitt.bereiche ?? [{ ab: ausschnitt.ab ?? 0, bis: ausschnitt.bis ?? Infinity }])
@@ -114,7 +164,7 @@ export function hochkantAusschnitt(original, funde) {
       naechstesX = fest ? basis.x : mitteX;
     }
     x = naechstesX;
-    punkte.push({ t: p.t, x });
+    punkte.push({ t: p.t, x, min:p.von, max:p.bis });
   }
   abschnitte.push(punkte);
   // Nur ausreichend lange ruhige Abschnitte verwenden; kurze Fehlfunde und
@@ -122,9 +172,10 @@ export function hochkantAusschnitt(original, funde) {
   const sichere = abschnitte.filter((p) => p.at(-1).t - p[0].t >= 2);
   if (!sichere.length) return null;
   const bereiche = sichere.map((p) => ({ ab: p[0].t === zeiten[0] ? 0 : p[0].t, bis: p.at(-1).t }));
-  const allePunkte = sichere.flat();
+  const allePunkte = sichere.flatMap(kamerabahn);
+  const bewegt = allePunkte.some(p=>Math.abs(p.x-allePunkte[0].x)>0.01);
   return { ...basis, x: allePunkte[0].x, ab: bereiche[0].ab, bis: bereiche.at(-1).bis,
-    bereiche, ...(fest ? {} : { punkte: allePunkte }) };
+    bereiche, ...(bewegt ? { punkte: allePunkte } : {}) };
 }
 
 export function ausschnittX(ausschnitt, t) {
@@ -133,7 +184,8 @@ export function ausschnittX(ausschnitt, t) {
   for (let i = 1; i < p.length; i++) {
     if (t <= p[i].t) {
       const u = Math.max(0, Math.min(1, (t - p[i - 1].t) / (p[i].t - p[i - 1].t)));
-      return p[i - 1].x + (p[i].x - p[i - 1].x) * u * u * (3 - 2 * u);
+      const k=kurve(p[i-1],p[i]);
+      return ((k.a*u+k.b)*u+k.c)*u+k.d;
     }
   }
   return p.at(-1).x;
@@ -147,7 +199,8 @@ export function ausschnittKommandos(ausschnitt) {
     const b = p[i + 1];
     if (!b) return `${a.t} crop@hochkant x '${a.x}';`;
     const u = `clip((t-${a.t})/${b.t - a.t},0,1)`;
-    return `${a.t} crop@hochkant x '${a.x}+${b.x - a.x}*pow(${u},2)*(3-2*${u})';`;
+    const k=kurve(a,b);
+    return `${a.t} crop@hochkant x '${k.d}+(${k.c})*${u}+(${k.b})*pow(${u},2)+(${k.a})*pow(${u},3)';`;
   }).join("\n");
 }
 

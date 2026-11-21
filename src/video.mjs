@@ -454,10 +454,18 @@ export function storyBild(original, masse = STORY_MASSE) {
  * Caption von Reels/TikTok bleiben (untere 22 %); sonst gilt das normale Hochkant-Layout.
  */
 export function storyLayout(layout, original, masse = STORY_MASSE, ausschnitt = null) {
-  if (ausschnitt) return {
-    ...layout, ausschnitt, bild: null, smartLogo: true, layoutModus: "reel", positionFest: undefined,
-    gesichter: gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt, masse),
-  };
+  if (ausschnitt) {
+    const gesichter=gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt, masse);
+    // Ein fester Platz pro Video: auch beim gesenkten Kopf unter dem Mund,
+    // ohne den Text mit jeder Kopfbewegung zu verschieben.
+    const mundUnten=Math.max(0,...gesichter.map(g=>g.y+0.85*g.h));
+    const textHoehe=untertitelGroesse(masse)*1.15*(layout.zeilen===1?1:2)/masse.hoehe;
+    const position=Math.max(0.16,Math.min(0.23,1-mundUnten-0.015-textHoehe));
+    return {
+      ...layout, ausschnitt, bild: null, smartLogo: true, layoutModus: "reel",
+      positionFest: Math.min(layout.position ?? 0.35,position), gesichter,
+    };
+  }
   const bild = bildRechteck(original, masse);
   const ergebnis = {
     ...layout, bild, smartLogo: true, layoutModus: "reel",

@@ -293,8 +293,10 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   zuerst lokal mit OpenCV/YuNet mindestens zweimal pro Sekunde, ob ein 9:16-Ausschnitt
   passt. Ruhige Abschnitte von mindestens zwei Sekunden werden getrennt beurteilt. Alle erkannten
   Köpfe samt seitlichem Abstand müssen in den Ausschnitt passen; der Oberkörper darf angeschnitten werden.
-  Ein fester Ausschnitt bleibt bevorzugt. Bei langsamer Bewegung folgt er ruhig nach, ohne kleine
-  Positionsänderungen ständig auszugleichen. Anfang oder Ende ohne verlässlichen Gesichtsfund bleiben
+  Ein fester Ausschnitt bleibt bevorzugt, auch innerhalb einzelner ruhiger Abschnitte. Notwendige
+  Kamerafahrten werden vorausschauend über den ganzen Abschnitt geglättet; sie starten und stoppen
+  nicht mehr an jedem Probebild. Kopfbereiche bleiben dabei geschützt. Kleine Kopfbewegungen lösen
+  bei ausreichend Platz keine zusätzliche Fahrt aus. Anfang oder Ende ohne verlässlichen Gesichtsfund bleiben
   vollständig sichtbar; die Vorschau nennt den Beginn des Ausschnitts. Bei unsicherer Erkennung,
   Erkennungslücken, schnellen Bildsprüngen oder weit getrennten Personen bleibt nur die betroffene
   Stelle vollständig mit unscharfem Hintergrund sichtbar. Danach kann der Ausschnitt wieder einsetzen.
@@ -304,6 +306,10 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   eine weitere vollständige Dekodierung großer HEVC-Originale; gerendert wird weiterhin aus dem Original.
   Bei kurzen Videos wird die Abtastung erhöht. Die Originalhöhe bleibt erhalten, damit zusätzliches
   Kopfpolster nicht zum Ablehnen der gesamten Aufnahme oder zum Abschneiden der Haare führt.
+  Untertitel erhalten im ausgefüllten Hochkant-Ausschnitt einen festen tieferen Platz je Video,
+  möglichst unterhalb des Mundes auch bei gesenktem Kopf. Der Abstand vom unteren Rand beträgt
+  dafür 16–23 %; bei langen App-Captions kann der verfügbare Platz knapp werden. Eine ausdrücklich
+  gewählte Lage unter **📍 Position** hat weiterhin Vorrang. Die normale Fassung behält ihre Position.
   Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
   Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
   abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.
