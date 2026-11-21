@@ -18,7 +18,7 @@ import {
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
-import { hochkantAusschnitt } from "./hochkant-ausschnitt.mjs";
+import { AUSSCHNITT_VERSION, ausschnittHinweis, hochkantAusschnitt } from "./hochkant-ausschnitt.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
@@ -824,21 +824,25 @@ async function storyFassung(auftrag) {
   const nativ = querAn(auftrag) && istStoryFormat(auftrag.masse);
   const masse = nativ ? auftrag.masse : { ...STORY_MASSE, dauer: auftrag.masse.dauer };
   let ausschnitt = null;
+  let hinweis = "Vollständiges Bild gewählt";
   let gesichter = auftrag.gesichter ?? [];
   if (!nativ && !auftrag.hochkantGanzesBild && auftrag.masse.breite > auftrag.masse.hoehe) {
     // Eigene Prüfung: ältere Funde enthalten nur das größte Gesicht pro Bild.
     let funde = auftrag.hochkantFunde;
-    if (funde === undefined) {
-      funde = await gesichtSuchen(auftrag.original, { ...config.gesicht, alleGesichter: true }, 24);
-      auftraege.aendern(auftrag.id, { hochkantFunde: funde });
+    if (funde === undefined || (funde ? funde.version !== AUSSCHNITT_VERSION : auftrag.hochkantFundeVersion !== AUSSCHNITT_VERSION)) {
+      let analyseDatei = datei(auftrag, "fertig.mp4");
+      try { await fs.access(analyseDatei); } catch { analyseDatei = auftrag.original; }
+      funde = await gesichtSuchen(analyseDatei, { ...config.gesicht, alleGesichter: true, dicht: true }, 24);
+      auftraege.aendern(auftrag.id, { hochkantFunde: funde, hochkantFundeVersion: AUSSCHNITT_VERSION });
     }
     ausschnitt = hochkantAusschnitt(auftrag.masse, funde);
+    hinweis = ausschnittHinweis(funde, ausschnitt);
     if (ausschnitt) gesichter = funde.gesichter;
   }
-  auftraege.aendern(auftrag.id, { hochkantAusschnitt: ausschnitt });
+  auftraege.aendern(auftrag.id, { hochkantAusschnitt: ausschnitt, hochkantHinweis: hinweis });
   let layout = nativ ? layoutFuer(auftrag) : storyLayout({ ...layoutFuer(auftrag), gesichter }, auftrag.masse, masse, ausschnitt);
   if (!nativ && auftrag.untertitelAuto) {
-    const wahl = lageWaehlen({ bilder: ausschnitt ? 24 : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
+    const wahl = lageWaehlen({ bilder: ausschnitt ? gesichter.length : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
     layout = { ...layout, lage: wahl.lage === "unten" ? null : wahl.lage };
   }
   const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
@@ -882,7 +886,7 @@ async function storyAktualisieren(auftrag) {
   const vorschauMasse = querAn(auftrag) && istStoryFormat(auftrag.masse) ? auftrag.masse : STORY_MASSE;
   await tg.datei(auftrag.chatId, "sendVideo", "video", senden, {
     caption: `9:16-Fassung für ${wofuer}${auftrag.masse.breite > auftrag.masse.hoehe
-      ? (auftrag.hochkantAusschnitt ? " · automatischer Ausschnitt" : " · vollständiges Bild mit unscharfem Hintergrund") : ""}`, supports_streaming: "true",
+      ? ` · ${auftrag.hochkantHinweis ?? "Vollständiges Bild mit unscharfem Hintergrund"}` : ""}`, supports_streaming: "true",
     width: String(vorschauMasse.breite), height: String(vorschauMasse.hoehe),
   });
   return auftrag;
