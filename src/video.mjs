@@ -466,12 +466,13 @@ export function storyBild(original, masse = STORY_MASSE) {
  */
 export function storyLayout(layout, original, masse = STORY_MASSE, ausschnitt = null) {
   if (ausschnitt) {
+    const profil={...layout,untertitelProfil:layout.untertitelProfil??"instagram-organisch"};
     const gesichter=gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt, masse);
     const d=ausschnitt.darstellung;
     const bild=d?{links:d.x,rechts:d.x+d.breite,oben:d.y,unten:d.y+d.hoehe,breite:d.breite,hoehe:d.hoehe}:null;
     return {
-      ...layout, ausschnitt, bild, smartLogo: true, layoutModus: "reel",
-      positionFest: ausschnittUntertitelPosition(gesichter,masse,layout), gesichter,
+      ...profil, ausschnitt, bild, smartLogo: true, layoutModus: "reel",
+      positionFest: ausschnittUntertitelPosition(gesichter,masse,profil), gesichter,
     };
   }
   const bild = bildRechteck(original, masse);

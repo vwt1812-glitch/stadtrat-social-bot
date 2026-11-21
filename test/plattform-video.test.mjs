@@ -44,6 +44,15 @@ test("Zwei entfernte Personen führen lokal zum vollständigen Bild statt zum Ve
   assert.ok(!a.bereiche.some(b=>b.ab<=5&&b.bis>=6));
 });
 
+test("Instagram-Profil hält 16 Prozent Abstand und die rechte Knopfleiste frei",()=>{
+  const o={...masse,...layout,layoutModus:"reel",untertitelProfil:"instagram-organisch",positionFest:0.16};
+  assert.equal(untertitelPosition(o),0.16);
+  const r=untertitelRahmen(o);
+  assert.equal(r.rechts,873);
+  assert.ok((1-0.16)*1920<=r.unten);
+  assert.ok(untertitelPosition({...o,untertitelProfil:"reel-werbung"})>=0.35);
+});
+
 test("Auch ausdrückliche Randpositionen lassen den ganzen Textblock innerhalb der UI-Freizonen",()=>{
   for(const modus of ["reel","story"])for(const zeilen of [1,2])for(const position of [0,0.16,0.35,0.99]) {
     const o={...masse,...layout,layoutModus:modus,zeilen,position};
@@ -82,8 +91,8 @@ test("Gerenderte lange Untertitel einschließlich Rand und Schatten bleiben in d
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'untertitel-safe-'));
   t.after(()=>fs.rm(dir,{recursive:true,force:true}));
   await fs.cp(new URL('../assets/fonts',import.meta.url),path.join(dir,'fonts'),{recursive:true});
-  for(const [modus,stil,lage] of [["reel","rand",null],["reel","box","logobereich"],["story","rand","oben"]]) {
-    const o={...masse,...layout,layoutModus:modus,position:0.16,stil,lage};
+  for(const [modus,stil,lage,untertitelProfil] of [["reel","rand",null],["reel","box","logobereich"],["story","rand","oben"],["reel","rand",null,"instagram-organisch"]]) {
+    const o={...masse,...layout,layoutModus:modus,position:0.16,stil,lage,untertitelProfil};
     await fs.writeFile(path.join(dir,'sicher.ass'),zuAss([{start:0,end:1000,text:'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW'}],o));
     const raw=await ausfuehren('ffmpeg',['-v','error','-f','lavfi','-i','color=c=0x777777:s=1080x1920:d=1',
       '-vf','ass=sicher.ass:fontsdir=fonts','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{cwd:dir,binaer:true});
@@ -95,6 +104,7 @@ test("Gerenderte lange Untertitel einschließlich Rand und Schatten bleiben in d
       }
     }
     const z=sichereZone(masse,modus);
+    if(untertitelProfil==="instagram-organisch") {z.unten=Math.round(masse.hoehe*0.86);assert.ok(y0>1450);}
     assert.ok(x1>x0&&y1>y0);
     assert.ok(x0>=z.links&&x1<z.rechts&&y0>=z.oben&&y1<z.unten,`${modus}/${stil}: ${[x0,x1,y0,y1]}`);
   }

@@ -237,6 +237,8 @@ export const UNTERTITEL_LAGEN = { oben: { hochkant: 0.62, quer: 0.8 }, mitte: { 
 export function untertitelRahmen(o) {
   if(o.hoehe<=o.breite||!['reel','story'].includes(o.layoutModus))return null;
   const zone=sichereZone(o,o.layoutModus),rand=Math.ceil(untertitelGroesse(o)*0.5);
+  // An der normalen Instagram-Reels-Ansicht geprüft; Werbeprofile behalten die strengere Zone.
+  if(o.untertitelProfil==="instagram-organisch")zone.unten=Math.round(o.hoehe*0.86);
   return {links:zone.links+rand,rechts:zone.rechts-rand,oben:zone.oben+rand,unten:zone.unten-rand,
     textHoehe:Math.ceil(untertitelGroesse(o)*1.3*(o.zeilen===1?1:2)),rand};
 }

@@ -309,12 +309,16 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
   Ein gewählter 9:16-Ausschnitt füllt die Hochkantfläche vollständig aus. Dafür wird die Person
   nicht als verkleinerte Kachel auf einem unscharfen Hintergrund dargestellt. Nur unsichere
   Abschnitte zeigen weiterhin das vollständige Originalbild mit unscharfem Hintergrund.
-  Die Plattform-Freizonen gelten für Untertitel und Logo: oben 14 %, unten 35 %, links 6 % und
-  rechts 16 %. Die Untertitel erhalten pro Video einen festen Platz, der zuerst den Mundbereich
-  und danach übrige Kopfbereiche meidet. Wo unten kein Platz bleibt, stehen sie weiter oben.
-  Der gesamte Untertitelblock einschließlich Kontur und Schatten bleibt innerhalb der Freizone;
-  lange Wörter werden bei Bedarf kleiner gesetzt. Auch eine ausdrücklich gewählte Textposition
-  wird darauf begrenzt. Die normale Querformatfassung behält ihre Position.
+  Für die Untertitel im automatischen Hochkant-Ausschnitt gilt das Profil `instagram-organisch`:
+  fester Abstand von 16 % zum unteren Videorand, anhand einer normalen Instagram-Reels-Ansicht
+  geprüft. Rechts bleibt Platz für die Knopfleiste. Der gesamte Text einschließlich Kontur und
+  Schatten wird innerhalb des dafür vorgesehenen Bereichs gehalten; lange Wörter werden bei
+  Bedarf kleiner gesetzt. Aufgeklappter Beitragstext kann weiter ins Bild hineinragen.
+  Logo und andere Profile behalten die konservativen Plattform-Freizonen: oben 14 %, unten
+  35 %, links 6 %, rechts 16 %. Mit `untertitelProfil: "reel-werbung"` im Layout gilt auch für
+  Untertitel wieder dieser strengere Bereich samt automatischer Gesichtsausweichposition.
+  Eine ausdrücklich gewählte Textlage bleibt innerhalb des jeweiligen Textbereichs wählbar.
+  Die normale Querformatfassung behält ihre Position.
   Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
   Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
   abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.

@@ -8,6 +8,7 @@ export function sichererHochkantAusschnitt(original,funde) {
 
 /** Fester Textplatz je Video: zuerst Mund schützen, dann übrige Kopfbereiche. */
 export function ausschnittUntertitelPosition(gesichter,masse,layout) {
+  if(layout.untertitelProfil==="instagram-organisch")return 0.16;
   const r=untertitelRahmen({...masse,...layout,layoutModus:"reel"});
   const unten=r.unten,oben=r.oben+r.textHoehe;
   if(!gesichter.length)return 1-unten/masse.hoehe;

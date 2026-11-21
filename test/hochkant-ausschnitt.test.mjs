@@ -28,7 +28,7 @@ test("Fester 9:16-Ausschnitt folgt einer seitlich stehenden Person mit Kopfrand"
   }
   const layout = storyLayout({ gesichter: f.gesichter, positionFest: 0.6 }, original, { breite: 1080, hoehe: 1920 }, a);
   assert.equal(layout.bild, null);
-  assert.ok(layout.positionFest>=0.35);
+  assert.equal(layout.positionFest,0.16);
   assert.ok(layout.gesichter.every((g) => g.x > 0 && g.x + g.w < 1));
   assert.equal(layout.gesichter[0].t, 0);
 });
@@ -145,27 +145,27 @@ test("Langsame Kamerafahrt behält ihre Geschwindigkeit über Messpunkte hinweg 
   }
 });
 
-test("Plattform-Freizonen haben Vorrang vor tiefer Lage; manuelle obere Lage bleibt wählbar", () => {
+test("Organische Instagram-Ausschnitte stehen unten; manuelle obere Lage bleibt wählbar", () => {
   const a=hochkantAusschnitt(original,funde());
   const masse={breite:1080,hoehe:1920};
   const layout=storyLayout({position:0.35},original,masse,a);
-  assert.ok(untertitelPosition({...masse,...layout})>=0.35);
+  assert.equal(untertitelPosition({...masse,...layout}),0.16);
   assert.equal(untertitelPosition({...masse,...layout,lage:"oben"}),0.62);
   assert.equal(untertitelPosition({...masse,position:0.35}),0.35);
 });
 
-test("Gesenkter Kopf behält bildfüllenden Ausschnitt und bekommt Text außerhalb des Mundes",()=>{
+test("Gesenkter Kopf behält bildfüllenden Ausschnitt und die bestätigte untere Textposition",()=>{
   const masse={breite:1080,hoehe:1920};
   const f=funde();f.gesichter=f.gesichter.map(g=>({...g,x:0.3,y:0.42,w:0.2,h:0.4}));
   const basis={position:0.35,zeilen:1,gesichter:f.gesichter};
   const a=sichererHochkantAusschnitt(original,f,masse,basis);
   const layout=storyLayout(basis,original,masse,a);
   const p=untertitelPosition({...masse,...layout});
-  assert.ok(p>=0.35);
+  assert.equal(p,0.16);
   const r=untertitelRahmen({...masse,...layout});
   const unten=(1-p)*1920,oben=unten-r.textHoehe;
   assert.equal(a.darstellung,undefined);
-  assert.ok(layout.gesichter.every(g=>unten<=(g.y+0.55*g.h)*1920||oben>=(g.y+1.05*g.h)*1920));
+  assert.ok(unten<=r.unten&&oben>=r.oben);
 });
 
 test("Kamera am Anfang ausrichten: kurzer Schwenk verwirft nur den Anfang", () => {
