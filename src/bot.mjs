@@ -1294,8 +1294,9 @@ async function knopfGedrueckt(cq) {
     case "thumbhintergrund": {
       if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
       if(!arg) {
+        let hatRatssaal=false;try {await fs.access(config.thumbnail.ratssaal);hatRatssaal=true;}catch {}
         await zeigeMenue(auftrag,{text:"<b>Hintergrund wählen</b>\n„Stadtrat / Videobild“ verwendet ein Bild aus deinem Video, keinen erfundenen Sitzungssaal. Ein eigenes Hintergrundfoto kannst du hochladen.",reply_markup:{inline_keyboard:[
-          ...Object.entries(PORTRAET_HINTERGRUENDE).map(([key,name])=>[knopf(`${(auftrag.thumbnail.hintergrund??"orange")===key?"🔘":"⚪"} ${name}`,auftrag,`thumbhintergrund:${key}`)]),
+          ...Object.entries(PORTRAET_HINTERGRUENDE).filter(([key])=>key!=="ratssaal"||hatRatssaal).map(([key,name])=>[knopf(`${(auftrag.thumbnail.hintergrund??"orange")===key?"🔘":"⚪"} ${name}`,auftrag,`thumbhintergrund:${key}`)]),
           [knopf("↩️ Zum Titelbild",auftrag,"thumb")]]}});return antwort();
       }
       if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,arg))return antwort("Ungültiger Hintergrund.",true);

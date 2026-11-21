@@ -21,7 +21,7 @@ test("Porträt-Titel bleibt vollständig und groß, auch mit Umlauten und Satzze
 });
 
 test("Hintergründe unterscheiden vorhandenes Video und eigenes Foto",()=>{
-  assert.deepEqual(Object.keys(PORTRAET_HINTERGRUENDE),["original","orange","dunkel","video","eigen"]);
+  assert.deepEqual(Object.keys(PORTRAET_HINTERGRUENDE),["original","orange","dunkel","ratssaal","video","eigen"]);
 });
 
 const ffmpeg=(()=>{try{execFileSync('ffmpeg',['-version'],{stdio:'ignore'});return true;}catch{return false;}})();
@@ -49,6 +49,9 @@ test("Porträt-Thumbnail rendert Hoch-/Querprofile und Raster, ohne Video oder P
     assert.deepEqual([m.breite,m.hoehe],[p.breite,p.hoehe]);
     assert.ok((await fs.stat(datei)).size<=p.maxBytes);
   }
+  const saal=await thumbnailsErstellen({ordner:dir,video,layout,optionen:{...optionen,hintergrund:"ratssaal"},kanaele:[],vorlagen:{portraet,freigestellt:portraet,ratssaal:bg}});
+  assert.ok(saal.dateien.original);
+  await assert.rejects(thumbnailsErstellen({ordner:dir,video,layout,optionen:{...optionen,hintergrund:"ratssaal"},kanaele:[],vorlagen:{portraet,freigestellt:portraet}}),/Sitzungssaal-Foto/);
   for(const hintergrund of ["orange","dunkel","original","eigen"]) {
     await portraetCover({ausgabe:path.join(dir,`${hintergrund}.jpg`),inhalt:{titel:"Stadtrat erklärt"},layout,portraet,freigestellt:portraet,hintergrund,hintergrundBild:bg});
   }
@@ -62,5 +65,8 @@ test("Porträt-Thumbnail rendert Hoch-/Querprofile und Raster, ohne Video oder P
 
 test("Telegram: Porträt erstellen, Hintergrund wechseln, eigene Bilder und Fehler lassen Entwurf intakt",async t=>{
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),"portraet-flow-"));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
-  execFileSync(process.execPath,["--experimental-test-module-mocks",fileURLToPath(new URL("./fixtures/portraet-flow.mjs",import.meta.url)),dir],{timeout:22000,stdio:"pipe"});
+  for(const modus of ["mit-saal","ohne-saal"]) {
+    const teil=path.join(dir,modus);await fs.mkdir(teil);
+    execFileSync(process.execPath,["--experimental-test-module-mocks",fileURLToPath(new URL("./fixtures/portraet-flow.mjs",import.meta.url)),teil,modus],{timeout:22000,stdio:"pipe"});
+  }
 });

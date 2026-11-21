@@ -43,7 +43,7 @@ Orange bleibt Akzent auf neutralem Anthrazit. Foto-Hintergründe werden entsätt
 dem Logo sanft abgedunkelt; das Porträt behält seine Originalfarben.
 Hochkantcover und die benötigten Quercover werden getrennt gestaltet; das Video wird nicht neu gerendert.
 
-Unter **Hintergrund wählen** stehen Originalfoto, Anthrazit mit Orange, Anthrazit, ein Videobild oder ein eigenes
+Unter **Hintergrund wählen** stehen Originalfoto, Anthrazit mit Orange, Anthrazit, ein hinterlegtes Sitzungssaalfoto, ein Videobild oder ein eigenes
 Hintergrundfoto zur Auswahl. „Stadtrat / Videobild“ entnimmt ein Bild aus dem vorhandenen Originalvideo;
 es ist keine Aufnahme eines anderen oder erfundenen Sitzungssaals. Über **Hintergrund-Bildzeit ändern**
 lässt sich ein anderer Zeitpunkt wählen. Ein eigenes Foto aus dem Saal kann als Hintergrund hochgeladen werden.
@@ -52,7 +52,9 @@ weiter bearbeitbar. Misslingt eine Änderung, bleibt das vorherige Titelbild erh
 
 Für die Standardvorlage das private Original unter `daten/vorlagen/portraet.jpg` und optional eine
 freigestellte Version unter `daten/vorlagen/portraet.png` ablegen; eigene Pfade lassen sich über
-`THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
+`THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen.
+Ein dauerhaft auswählbares Saalfoto liegt unter `daten/vorlagen/ratssaal.jpg` (alternativ
+`THUMBNAIL_RATSSAAL`). Die Auswahl „Sitzungssaal“ erscheint, sobald die Datei vorhanden ist. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
 Die Bilder gehören nicht ins Git-Repository. Die lokale Freistellung verwendet das bereits für die
 Gesichtssuche vorhandene Python mit OpenCV und funktioniert für ruhige, helle Studiohintergründe.
 Für andere Motive ein transparentes PNG verwenden. Die Farbpixel des Porträts bleiben unverändert;

@@ -78,6 +78,7 @@ export function ladeConfig() {
     // Python mit OpenCV für die Gesichtssuche (pi/install.sh legt es an); fehlt es, bleibt die Suche aus
     gesicht: { python: pfad(env("GESICHT_PYTHON", ".venv/bin/python")) },
     thumbnail: {
+      ratssaal: pfad(env("THUMBNAIL_RATSSAAL", "daten/vorlagen/ratssaal.jpg")),
       portraet: pfad(env("THUMBNAIL_PORTRAET", "daten/vorlagen/portraet.jpg")),
       freigestellt: pfad(env("THUMBNAIL_FREIGESTELLT", "daten/vorlagen/portraet.png")),
       unterzeile: env("THUMBNAIL_UNTERZEILE", "Transparenz. Teilhabe. Digitale Souveränität."),

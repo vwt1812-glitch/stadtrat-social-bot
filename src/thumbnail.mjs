@@ -101,6 +101,11 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
       hintergrundBild=path.join(ausgabeDir,"hintergrund.jpg");
       await ausfuehren("ffmpeg",["-y","-v","error","-ss",String(ms/1000),"-i",quelle,"-frames:v","1","-q:v","2",hintergrundBild]);
     } else if(bg==="eigen")hintergrundBild=optionen.hintergrundBild;
+    else if(bg==="ratssaal") {
+      hintergrundBild=vorlagen.ratssaal;
+      try {if(!hintergrundBild)throw Error();await fs.access(hintergrundBild);}
+      catch {throw Error("Das Sitzungssaal-Foto ist noch nicht hinterlegt. Bitte ein eigenes Hintergrundfoto hochladen.");}
+    }
   }
   if (!["text", "frame", "bild", "portraet"].includes(optionen.modus) || (!["text","portraet"].includes(optionen.modus) && !bild)) throw new Error("Bitte zuerst ein Bild oder einen Videoframe auswählen.");
   const funde = optionen.modus!=="portraet" && gesicht && bild && optionen.mitText && optionen.vorlage !== "grafik"
