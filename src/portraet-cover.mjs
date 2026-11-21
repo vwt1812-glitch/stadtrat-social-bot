@@ -7,7 +7,7 @@ import { ausgewogeneZeilen, logoFuerGrafik } from "./grafik-text.mjs";
 import { untertitelTextBreite } from "./untertitel.mjs";
 
 export const PORTRAET_HINTERGRUENDE = Object.freeze({
-  original: "Originalfoto", orange: "Orange", dunkel: "Dunkel", video: "Stadtrat / Videobild", eigen: "Eigenes Foto",
+  original: "Originalfoto", orange: "Anthrazit mit Orange", dunkel: "Anthrazit", video: "Stadtrat / Videobild", eigen: "Eigenes Foto",
 });
 
 export async function portraetFreistellen(eingabe, ordner, python) {
@@ -48,11 +48,13 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
   if(["video","eigen"].includes(hintergrund)) {
     if(!hintergrundBild)throw Error("Bitte zuerst ein Hintergrundfoto auswählen.");
     args.push("-i",hintergrundBild);index++;
-    filter.push(`[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=10:1,eq=brightness=-0.12:saturation=0.7,setsar=1[grund]`);
+    const licht="(0.12+0.68*max(0,(Y/H-0.30)/0.70))";
+    filter.push(`[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=10:1,hue=s=0,format=rgb24,geq=r='r(X,Y)*${licht}':g='g(X,Y)*${licht}':b='b(X,Y)*${licht}',setsar=1[grund]`);
   } else {
-    const farbe=hintergrund==="orange"?"0xF18616":hintergrund==="dunkel"?"0x263D45":"0xE5E6E7";
-    const verlauf=hintergrund==="orange"?",geq=r='r(X,Y)*(0.25+0.75*Y/H)':g='g(X,Y)*(0.25+0.75*Y/H)':b='b(X,Y)*(0.25+0.75*Y/H)'":"";
-    filter.push(`color=c=${farbe}:s=${w}x${h}:d=1${verlauf},drawbox=x=0:y=0:w=${Math.round(w*.6)}:h=ih:color=white@0.08:t=fill[grund]`);
+    // Orange bleibt Markenakzent; die Logofläche ist neutral und kontrastreich.
+    const farbe=hintergrund==="original"?"0xE5E6E7":"0x1D1D1B";
+    const akzent=hintergrund==="orange"?`,drawbox=x=0:y=0:w=24:h=ih:color=0xF18616:t=fill,drawbox=x=0:y=ih-16:w=iw:h=16:color=0xF18616:t=fill`:"";
+    filter.push(`color=c=${farbe}:s=${w}x${h}:d=1${akzent}[grund]`);
   }
   args.push("-i",hintergrund==="original"?portraet:freigestellt);
   filter.push(`[${index}:v]scale=${pw}:${ph},format=rgba[person];[grund][person]overlay=${px}:${py}:format=auto[basis]`);

@@ -38,10 +38,12 @@ Größenempfehlungen, harte Grenzen, unterstützte Provider und Patch-Anleitung:
 
 Im Videoentwurf unter **Video-Titelbild → Porträt-Thumbnail erstellen** eine Überschrift schicken
 (maximal 70 Zeichen). Eine zweite Zeile ist optional und ersetzt die voreingestellte Unterzeile.
-Die Vorlage kombiniert Porträt, Logo und einen schrägen schwarz-orangen Titelbalken.
+Die Vorlage kombiniert Porträt, transparentes Logo und einen schrägen schwarz-orangen Titelbalken.
+Orange bleibt Akzent auf neutralem Anthrazit. Foto-Hintergründe werden entsättigt und hinter
+dem Logo sanft abgedunkelt; das Porträt behält seine Originalfarben.
 Hochkantcover und die benötigten Quercover werden getrennt gestaltet; das Video wird nicht neu gerendert.
 
-Unter **Hintergrund wählen** stehen Originalfoto, Orange, Dunkel, ein Videobild oder ein eigenes
+Unter **Hintergrund wählen** stehen Originalfoto, Anthrazit mit Orange, Anthrazit, ein Videobild oder ein eigenes
 Hintergrundfoto zur Auswahl. „Stadtrat / Videobild“ entnimmt ein Bild aus dem vorhandenen Originalvideo;
 es ist keine Aufnahme eines anderen oder erfundenen Sitzungssaals. Über **Hintergrund-Bildzeit ändern**
 lässt sich ein anderer Zeitpunkt wählen. Ein eigenes Foto aus dem Saal kann als Hintergrund hochgeladen werden.
