@@ -2,9 +2,9 @@
 # Inter is distributed under the SIL Open Font License in assets/fonts/.
 # OpenType tables: https://learn.microsoft.com/en-us/typography/opentype/spec/hmtx
 # Unicode mapping: https://learn.microsoft.com/en-us/typography/opentype/spec/cmap
-import struct,json,hashlib,pathlib,sys
+import struct,json,hashlib,pathlib
 root=pathlib.Path(__file__).resolve().parents[1]
-font=root/(sys.argv[1] if len(sys.argv)>1 else 'assets/fonts/Inter-Bold.otf'); data=font.read_bytes()
+font=root/'assets/fonts/Inter-Bold.otf'; data=font.read_bytes()
 u16=lambda p:struct.unpack_from('>H',data,p)[0]
 s16=lambda p:struct.unpack_from('>h',data,p)[0]
 u32=lambda p:struct.unpack_from('>I',data,p)[0]
@@ -26,6 +26,6 @@ def glyph(cp):
     return 0
 chars=list(range(32,592))+list(range(0x2010,0x2040))+[0x20ac]
 adv={chr(cp):u16(tables['hmtx']+4*min(glyph(cp),metrics-1)) for cp in chars if glyph(cp)}
-out={'font':font.name,'sha256':hashlib.sha256(data).hexdigest(),'unitsPerEm':units,'advances':adv}
-(root/(sys.argv[2] if len(sys.argv)>2 else 'assets/fonts/inter-bold-metriken.json')).write_text(json.dumps(out,ensure_ascii=True,separators=(',',':'))+'\n',encoding='utf-8')
+out={'font':'Inter-Bold.otf','sha256':hashlib.sha256(data).hexdigest(),'unitsPerEm':units,'advances':adv}
+(root/'assets/fonts/inter-bold-metriken.json').write_text(json.dumps(out,ensure_ascii=True,separators=(',',':'))+'\n',encoding='utf-8')
 print('Zeichenmetriken:',len(adv),'Einheiten pro em:',units)
