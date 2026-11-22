@@ -7,7 +7,8 @@ image = cv2.imread(source, cv2.IMREAD_UNCHANGED)
 if image is None: raise ValueError("Porträt konnte nicht gelesen werden")
 if image.ndim==3 and image.shape[2]==4 and image[:,:,3].min()<250:
     cv2.imwrite(target,image);sys.exit(0)
-image=cv2.cvtColor(image,cv2.COLOR_GRAY2BGR) if image.ndim==2 else image[:,:,:3]
+# IMREAD_COLOR respects camera EXIF orientation (UNCHANGED above preserves existing alpha).
+image=cv2.imread(source,cv2.IMREAD_COLOR)
 model=pathlib.Path(sys.argv[3]) if len(sys.argv)>3 else pathlib.Path(__file__).resolve().parents[1]/'assets/models/u2netp.onnx'
 if hashlib.md5(model.read_bytes()).hexdigest()!='8e83ca70e441ab06c318d82300c84806':raise ValueError('Freistellungsmodell beschädigt')
 rgb=cv2.cvtColor(cv2.resize(image,(320,320)),cv2.COLOR_BGR2RGB).astype(np.float32)
