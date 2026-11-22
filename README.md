@@ -39,8 +39,10 @@ Größenempfehlungen, harte Grenzen, unterstützte Provider und Patch-Anleitung:
 Im Videoentwurf unter **Video-Titelbild → Porträt-Thumbnail erstellen** eine Überschrift schicken
 (maximal 70 Zeichen). Eine zweite Zeile ist optional und ersetzt die voreingestellte Unterzeile.
 Die Vorlage kombiniert Porträt, transparentes Logo und einen schrägen schwarz-orangen Titelbalken.
-Der Titel ist linksbündig, der Kasten richtet sich nach seiner Breite und trägt nur links und unten
-einen schmalen orangefarbenen Versatz. Seine Neigung entspricht der Referenzvorlage (etwa 8 Grad).
+Der Titel ist linksbündig. Im Hochkantbild läuft der schwarze Kasten auch bei kurzen Titeln über
+die rechte Bildkante hinaus. Dahinter liegt ein eigenes, gleich großes orangefarbenes Rechteck,
+um 14 Pixel nach links und 18 Pixel nach unten versetzt. Seine Neigung entspricht der
+Referenzvorlage (etwa 8 Grad). Hintergrund, Porträt und Logo behalten dabei ihre Positionen.
 Orange bleibt Akzent auf neutralem Anthrazit. Foto-Hintergründe werden entsättigt und hinter
 dem Logo sanft abgedunkelt; das Porträt behält seine Originalfarben.
 Hochkantcover und die benötigten Quercover werden getrennt gestaltet; das Video wird nicht neu gerendert.

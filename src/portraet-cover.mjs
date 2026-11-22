@@ -47,8 +47,10 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
   const dir=path.dirname(ausgabe),w=quer?1920:1080,h=quer?1080:1920;
   if(!Object.hasOwn(PORTRAET_SCHRIFTEN,schrift))throw Error("Unbekannte Schrift.");
   const titel=portraetTitel(inhalt.titel,quer,schrift),line=Math.round(titel.size*1.12);
-  const panelW=Math.ceil(Math.max(...titel.zeilen.map(z=>portraetTextBreite(z,titel.size,schrift)))+82);
-  const panelH=(titel.zeilen.length-1)*line+Math.ceil(titel.size*.98)+54;
+  // Portrait reference: both rectangles continue beyond the right image edge,
+  // including for short titles. Orange is a separate rectangle shifted down/left.
+  const panelW=quer?Math.ceil(Math.max(...titel.zeilen.map(z=>portraetTextBreite(z,titel.size,schrift)))+82):1120;
+  const panelH=(titel.zeilen.length-1)*line+Math.ceil(titel.size*.98)+58;
   const winkel=-.14,rotH=Math.ceil(panelW*Math.abs(Math.sin(winkel))+panelH*Math.cos(winkel));
   await fs.copyFile(path.join(layout.schriftOrdner,schrift==="inter"?"Inter-Bold.otf":"LiberationSans-Bold.ttf"),path.join(dir,"portraet-font.otf"));
   const foto=await untersuche(hintergrund==="original"?portraet:freigestellt);
@@ -81,12 +83,15 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     filter.push(`[${index}:v]scale=${lw}:-1,format=rgba[logo];[${label}][logo]overlay=${lx}:${ly}:format=rgb[marke]`);
     label="marke";index++;
   }
-  const zeichnen=[`drawbox=x=14:y=0:w=iw-14:h=ih-14:color=black:t=fill`];
+  const zeichnen=[
+    `drawbox=x=0:y=18:w=iw-14:h=ih-18:color=0xF18616:t=fill:replace=1`,
+    `drawbox=x=14:y=0:w=iw-14:h=ih-18:color=black:t=fill:replace=1`,
+  ];
   for(const [i,z] of titel.zeilen.entries()) {
     const name=`portraet-titel-${i}.txt`;await fs.writeFile(path.join(dir,name),z);
     zeichnen.push(`drawtext=fontfile=portraet-font.otf:textfile=${name}:expansion=none:fontsize=${titel.size}:fontcolor=white:x=48:y=${20+i*line}`);
   }
-  filter.push(`color=c=0xF18616:s=${panelW}x${panelH}:d=1,format=rgba,${zeichnen.join(",")},rotate=${winkel}:ow=rotw(${winkel}):oh=roth(${winkel}):c=none[panel]`);
+  filter.push(`color=c=black@0:s=${panelW}x${panelH}:d=1,format=rgba,${zeichnen.join(",")},rotate=${winkel}:ow=rotw(${winkel}):oh=roth(${winkel}):c=none[panel]`);
   filter.push(`[${label}][panel]overlay=${quer?45:60}:${quer?Math.min(560,900-rotH):1680-rotH}:format=rgb[banner]`);
   const body=inhalt.beschreibung||unterzeile;
   if(body) {

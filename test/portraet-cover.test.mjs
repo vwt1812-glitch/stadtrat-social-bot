@@ -52,6 +52,14 @@ test("Weiche Porträttransparenz bleibt im fertigen Thumbnail erhalten",{skip:!f
   for(const [i,expected] of [142,15,14].entries())assert.ok(Math.abs(pixel[i]-expected)<5,`50% Alpha muss mit Anthrazit gemischt werden: ${[...pixel]}`);
   const banner=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=980:400:50:1280','-frames:v','1','-f','rawvideo','-pix_fmt','gray','pipe:1'],{binaer:true});
   assert.ok(banner.filter(p=>p>235).length>1000,'Die weiße Überschrift muss im schwarzen Banner sichtbar bleiben');
+  const rand=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=8:480:1072:1250','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{binaer:true});
+  let schwarz=0,orange=0;
+  for(let i=0;i<rand.length;i+=3) {
+    if(Math.max(rand[i],rand[i+1],rand[i+2])<12)schwarz++;
+    if(rand[i]>200&&rand[i+1]>95&&rand[i+1]<180&&rand[i+2]<65)orange++;
+  }
+  assert.ok(schwarz>200,'Auch ein kurzer Titel braucht einen schwarzen Kasten bis zur rechten Bildkante');
+  assert.ok(orange>30,'Das versetzte orange Rechteck muss ebenfalls rechts angeschnitten sein');
 });
 test("Porträt-Thumbnail rendert Hoch-/Querprofile und Raster, ohne Video oder Porträt zu verändern",{skip:!ffmpeg},async t=>{
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),"portraet-cover-"));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
