@@ -1,4 +1,4 @@
-import {AUDIO_MODI,auftragTonErsetzen} from "./audio.mjs";
+import {AUDIO_MODI,AUDIO_VERSION,auftragTonErsetzen} from "./audio.mjs";
 import { PORTRAET_HINTERGRUENDE, PORTRAET_SCHRIFTEN } from "./portraet-cover.mjs";
 // Telegram-Bot: Video, Fotos oder Text rein → Vorschau mit Logo, Untertiteln und
 // Caption zurück → per Knopfdruck sofort oder geplant über Postiz veröffentlichen.
@@ -958,7 +958,7 @@ async function renderUndVorschau(id, { gesichtNeu = false } = {}) {
     });
     auftrag = await storyAktualisieren(auftrag);
     await tg.aufruf("deleteMessage", { chat_id: auftrag.chatId, message_id: auftrag.statusNachricht }).catch(() => {});
-    auftrag = auftraege.aendern(id, { status: "vorschau", statusNachricht: null, transkript: volltext(cues) });
+    auftrag = auftraege.aendern(id, { status: "vorschau", statusNachricht: null, transkript: volltext(cues), audioVersion:AUDIO_VERSION });
     await neuesMenue(auftrag);
   } catch (e) {
     console.error(e);
@@ -1272,6 +1272,7 @@ async function knopfGedrueckt(cq) {
       if(art(auftrag)!=="video"||auftrag.grafikAnimation||auftrag.masse?.hatTon===false)return antwort("Für dieses Video ist keine Tonkorrektur verfügbar.",true);
       if(!arg) {await zeigeMenue(auftrag,{text:"<b>Ton für dein Video</b>\nEine praktisch stumme Stereoseite wird automatisch mit dem hörbaren Kanal gefüllt. Normales Stereo bleibt erhalten. Das geht auch ohne weitere Tonbearbeitung. Lautstärkeausgleich und behutsame Sprachverbesserung prüfen die Kanäle ebenfalls. Die Bildspur wird übernommen. Originalton stellt beide ursprünglichen Kanäle wieder her.",reply_markup:{inline_keyboard:[...Object.entries(AUDIO_MODI).map(([key,name])=>[knopf(`${(auftrag.audioTuning??"original")===key?"🔘":"⚪"} ${name}`,auftrag,`audio:${key}`)]),[knopf("↩️ Zur Vorschau",auftrag,"zurueck")]]}});return antwort();}
       if(!Object.hasOwn(AUDIO_MODI,arg))return antwort("Ungültige Tonkorrektur.",true);
+      if((auftrag.audioTuning??"original")===arg&&auftrag.audioVersion===AUDIO_VERSION)return antwort("Diese Toneinstellung ist bereits aktiv.");
       auftraege.aendern(id,{status:"arbeitet"});await antwort();await tg.senden(auftrag.chatId,"🎚️ Bereite die Tonspur neu auf …");
       einreihen(async()=>{
         try {const patch=await auftragTonErsetzen(auftrag,arg);auftraege.aendern(id,patch);await tg.senden(auftrag.chatId,"✅ Ton aktualisiert: "+AUDIO_MODI[arg]+(patch.audioKanal?`\nDer hörbare Kanal (${patch.audioKanal}) liegt jetzt auf beiden Seiten.`:""));}

@@ -4,6 +4,7 @@ import path from "node:path";
 import {createHash,randomBytes} from "node:crypto";
 
 export const AUDIO_MODI=Object.freeze({original:"Originalton",kanaele:"Nur stumme Stereoseite reparieren",lautstaerke:"Lautstärke ausgleichen",sprache:"Sprache behutsam verbessern"});
+export const AUDIO_VERSION=2;
 // Modest denoising and gentle compression; no gate that cuts word beginnings or room decays.
 export const SPRACH_FILTER="highpass=f=70,afftdn=nr=4:nf=-55:tn=1,acompressor=threshold=0.125:ratio=1.5:attack=20:release=250:makeup=1";
 export function tonProzess(bin,args) {
@@ -70,7 +71,7 @@ export async function audioFilter(eingabe,modus="original",ordner=path.dirname(e
   const stereo=await stereoPruefen(eingabe,ordner,spur);
   if(modus==='kanaele')return stereo.filter;
   const kanaele=spur.channels===1?"mono":"stereo";
-  const stat=await fs.stat(eingabe),hash=createHash("sha256").update(JSON.stringify([eingabe,stat.size,stat.mtimeMs,modus,2,stereo.quelle])).digest("hex").slice(0,20);
+  const stat=await fs.stat(eingabe),hash=createHash("sha256").update(JSON.stringify([eingabe,stat.size,stat.mtimeMs,modus,AUDIO_VERSION,stereo.quelle])).digest("hex").slice(0,20);
   const datei=path.join(ordner,`audio-analyse-${hash}.json`),vorfilter=[stereo.filter,modus==="sprache"?SPRACH_FILTER:null].filter(Boolean).map(x=>x+',').join('');
   let m;
   try {m=JSON.parse(await fs.readFile(datei,"utf8"));}
@@ -102,7 +103,7 @@ export async function auftragTonErsetzen(a,modus) {
     }
     const medien=a.medien.map(f=>neu.get(f)),stand=await fs.stat(medien[0]);
     const stereo=modus==='original'?null:await stereoPruefen(a.original,a.ordner);
-    return {medien,storyDatei:a.storyDatei?neu.get(a.storyDatei):a.storyDatei,audioTuning:modus,audioKanal:stereo?.quelle===0?'links':stereo?.quelle===1?'rechts':null,hochgeladen:null,storyHochgeladen:null,storyClips:null,plan:null,
+    return {medien,storyDatei:a.storyDatei?neu.get(a.storyDatei):a.storyDatei,audioTuning:modus,audioVersion:AUDIO_VERSION,audioKanal:stereo?.quelle===0?'links':stereo?.quelle===1?'rechts':null,hochgeladen:null,storyHochgeladen:null,storyClips:null,plan:null,
       ...(a.thumbnail?{thumbnail:{...a.thumbnail,videoStand:{datei:medien[0],groesse:stand.size,geaendert:stand.mtimeMs}}}:{})};
   } catch(e) {await Promise.allSettled(dateien.map(f=>fs.rm(f,{force:true})));throw e;}
 }

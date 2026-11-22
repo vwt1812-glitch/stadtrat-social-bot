@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {audioFilter,messungLesen,auftragTonErsetzen,tonProzess,stereoPruefen,stummerKanalQuelle,kanalPegelLesen,videoTonErsetzen} from "../src/audio.mjs";
+import {audioFilter,messungLesen,auftragTonErsetzen,tonProzess,stereoPruefen,stummerKanalQuelle,kanalPegelLesen,videoTonErsetzen,AUDIO_VERSION} from "../src/audio.mjs";
 import {ausfuehren,untersuche} from "../src/video.mjs";
 
 test("Lautstärkemessung behandelt Stille und lehnt ungültige Werte ab",()=>{
@@ -56,6 +56,7 @@ test("Tonkorrektur normalisiert behutsam, kopiert Video und rechnet erneute Korr
   const a={ordner:dir,original,medien:[original],storyDatei:original,thumbnail:{dateien:{hochkant:'cover.jpg'},videoStand:{}}};
   const snapshot=JSON.stringify(a),before=await fs.readFile(original),result=await auftragTonErsetzen(a,'sprache');
   assert.equal(JSON.stringify(a),snapshot);assert.equal(result.storyDatei,result.medien[0]);
+  assert.equal(result.audioVersion,AUDIO_VERSION);
   assert.equal(await hash(result.medien[0],'v'),await hash(original,'v'));
   const info=await untersuche(result.medien[0]);assert.ok(info.hatTon&&Math.abs(info.dauer-12)<.15);
   const measurement=messungLesen((await tonProzess('ffmpeg',['-hide_banner','-nostats','-i',result.medien[0],'-vn','-af','loudnorm=I=-16:TP=-1.5:LRA=11:print_format=json','-f','null','-'])).err);

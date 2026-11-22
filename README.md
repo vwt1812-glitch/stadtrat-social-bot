@@ -416,6 +416,9 @@ Pi-Skripte stammen aus [eu-piraten-abstimmungen](https://github.com/vwt1812-glit
 glättet die Dynamik sanft und normalisiert in zwei Durchgängen auf −16 LUFS bei höchstens
 −1,5 dBTP Zielspitze. Raumhall lässt sich mit dieser behutsamen Bearbeitung nur begrenzt mindern.
 
+Ein erneuter Klick auf die bereits mit der aktuellen Verarbeitungsversion angewandte Einstellung
+startet keine neue Berechnung. Ältere Fassungen können dieselbe Einstellung erneut anwenden.
+
 Neue Videos verwenden standardmäßig die Sprachkorrektur (`AUDIO_TUNING=sprache`). Bestehende
 Entwürfe behalten ihre Einstellung, bis der Ton umgeschaltet wird. Umschalten übernimmt die
 vorhandene Bildspur und bearbeitet immer den Ton des Originals; wiederholte Korrekturen addieren
