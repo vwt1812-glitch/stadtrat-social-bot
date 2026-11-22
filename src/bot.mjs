@@ -139,7 +139,7 @@ function laengen(auftrag, kanaele) {
   return kanaele.map((kanal) => {
     const text = captionFuer(auftrag, kanal);
     const zahl = zeichenZahl(text, kanal.identifier);
-    const max = zeichenLimit(kanal, eigene);
+    const max = zeichenLimit(kanal, eigene,{mitMedien:art(auftrag)!=='text'});
     return { kanal, text, zahl, max, eigen: auftrag.captions?.[kanal.id] !== undefined, zuLang: max !== null && zahl > max };
   });
 }

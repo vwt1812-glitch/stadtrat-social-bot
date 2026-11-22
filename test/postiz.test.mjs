@@ -8,6 +8,14 @@ import {
   zeichenZahl, zeichenLimit, Postiz, apiBasis, passtZu, AnfragenZaehler,
 } from "../src/postiz.mjs";
 
+test('Telegram-Videotext bleibt innerhalb der Captiongrenze; reine Textposts behalten 4096 Zeichen',()=>{
+  const kanal={id:'t',identifier:'telegram'};
+  assert.equal(zeichenLimit(kanal),4096);
+  assert.equal(zeichenLimit(kanal,{}, {mitMedien:true}),1024);
+  assert.equal(zeichenLimit(kanal,{t:{maxZeichen:4096}},{mitMedien:true}),1024);
+  assert.equal(zeichenLimit(kanal,{t:{maxZeichen:500}},{mitMedien:true}),500);
+});
+
 test("Pflichtfelder je Netzwerk", () => {
   const caption = "Neuer Radweg am Plärrer 🚲 #Nürnberg\n\nMehr dazu …";
   assert.deepEqual(standardEinstellungen("instagram", caption), { post_type: "post", collaborators: [] });

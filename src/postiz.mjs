@@ -40,8 +40,9 @@ export const ZEICHENLIMIT = {
   facebook: 63206,
 };
 
-export function zeichenLimit(kanal, eigene = {}) {
-  return kanal.maxZeichen ?? eigene[kanal.id]?.maxZeichen ?? eigene[kanal.identifier]?.maxZeichen ?? ZEICHENLIMIT[kanal.identifier] ?? null;
+export function zeichenLimit(kanal, eigene = {}, {mitMedien=false}={}) {
+  const max=kanal.maxZeichen ?? eigene[kanal.id]?.maxZeichen ?? eigene[kanal.identifier]?.maxZeichen ?? ZEICHENLIMIT[kanal.identifier] ?? null;
+  return kanal.identifier==='telegram'&&mitMedien?Math.min(max??1024,1024):max;
 }
 
 /**
