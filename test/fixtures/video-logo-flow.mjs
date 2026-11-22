@@ -10,7 +10,7 @@ import * as video from "../../src/video.mjs";
 import * as gesicht from "../../src/gesicht.mjs";
 
 const [dir, modus] = process.argv.slice(2);
-Object.assign(process.env, { DATEN_DIR: dir, TELEGRAM_BOT_TOKEN: "test", ERLAUBTE_NUTZER: "123",
+Object.assign(process.env, {LOGO:path.resolve("assets/logos/quer-dunkel.png"), DATEN_DIR: dir, TELEGRAM_BOT_TOKEN: "test", ERLAUBTE_NUTZER: "123",
   POSTIZ_URL: "https://postiz.invalid", POSTIZ_API_KEY: "test", WHISPER_MODELL: "test",
   CAPTION_ANBIETER: "", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", MASTODON_TOKEN: "" });
 const s = new Auftraege(dir), a = s.neu(123);

@@ -1,3 +1,4 @@
+import {audioFilter} from "./audio.mjs";
 import { ausschnittUntertitelPosition } from "./plattform-video.mjs";
 // Alles, was ffmpeg/ffprobe macht: Video untersuchen, Ton für Whisper
 // herauslösen, Logo + Untertitel einbrennen.
@@ -398,11 +399,13 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
 
   args.push(
     "-filter_complex", filter.join(";"),
-    "-map", "[v]", "-map", "0:a?",
+    "-map", "[v]", "-map", video.audioModus&&video.audioModus!=="original"?"0:a:0?":"0:a?",
     "-c:v", video.encoder,
   );
   if (video.encoder === "libx264") args.push("-preset", video.preset, "-crf", video.crf, "-profile:v", "high");
   else args.push("-b:v", "8M");
+  const ton=await audioFilter(eingabe,video.audioModus??"original",ordner);
+  if(ton)args.push("-af",ton);
   args.push("-force_key_frames", "expr:gte(t,n_forced*59)",
     "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", ausgabe);
 

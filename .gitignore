@@ -1,5 +1,21 @@
 node_modules/
 .venv/
+.venv-portraet/
 .env
 daten/
 kanaele.json
+
+# Private Konfigurationen, lokale Exporte und versehentlich im Projekt abgelegte Medien
+.env.*
+!.env.example
+/private/
+/output/
+/*.jpg
+/*.jpeg
+/*.png
+/*.webp
+/*.mp4
+/*.mov
+/*.pdf
+/*.srt
+/*.log
