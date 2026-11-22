@@ -13,7 +13,7 @@ export const PORTRAET_HINTERGRUENDE = Object.freeze({
 
 export async function portraetFreistellen(eingabe, ordner, python) {
   const daten=await fs.readFile(eingabe),hash=createHash("sha256").update(daten).digest("hex").slice(0,16);
-  const ziel=path.join(ordner,`portraet-v2-${hash}.png`);
+  const ziel=path.join(ordner,`portraet-v3-${hash}.png`);
   try {await fs.access(ziel);return ziel;} catch {}
   // Bereits transparente PNGs brauchen weder OpenCV noch eine neue Segmentierung.
   if(daten.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))&&[4,6].includes(daten[25])) {
@@ -66,7 +66,8 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     filter.push(`color=c=${farbe}:s=${w}x${h}:d=1${akzent}[grund]`);
   }
   args.push("-i",hintergrund==="original"?portraet:freigestellt);
-  filter.push(`[${index}:v]scale=${pw}:${ph},format=rgba[person];[grund][person]overlay=${px}:${py}:format=auto[basis]`);
+  // Keep the canvas opaque RGB: automatic negotiation can quantize soft alpha edges.
+  filter.push(`[${index}:v]scale=${pw}:${ph}:flags=lanczos,format=rgba[person];[grund][person]overlay=${px}:${py}:format=rgb[basis]`);
   index++;
   let label="basis";
   if(layout.logo) {
@@ -74,7 +75,7 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     args.push("-i",logoDatei);
     const lw=Math.round(Math.min(quer?850:930,(quer?190:210)*logoInfo.breite/logoInfo.hoehe));
     const lx=quer?60:Math.round((w-lw)/2),ly=quer?60:305;
-    filter.push(`[${index}:v]scale=${lw}:-1,format=rgba[logo];[${label}][logo]overlay=${lx}:${ly}:format=auto[marke]`);
+    filter.push(`[${index}:v]scale=${lw}:-1,format=rgba[logo];[${label}][logo]overlay=${lx}:${ly}:format=rgb[marke]`);
     label="marke";index++;
   }
   const panelW=quer?960:1060;
@@ -83,8 +84,8 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     const name=`portraet-titel-${i}.txt`;await fs.writeFile(path.join(dir,name),z);
     zeichnen.push(`drawtext=fontfile=portraet-font.otf:textfile=${name}:expansion=none:fontsize=${titel.size}:fontcolor=white:x=(w-text_w)/2:y=${24+i*line}`);
   }
-  filter.push(`color=c=0xF18616:s=${panelW}x${panelH}:d=1,${zeichnen.join(",")},format=rgba,rotate=-0.09:ow=rotw(-0.09):oh=roth(-0.09):c=none[panel]`);
-  filter.push(`[${label}][panel]overlay=${quer?30:"(W-w)/2"}:${quer?470:Math.min(1320,1630-panelH-96)}:format=auto[banner]`);
+  filter.push(`color=c=0xF18616:s=${panelW}x${panelH}:d=1,format=rgba,${zeichnen.join(",")},rotate=-0.09:ow=rotw(-0.09):oh=roth(-0.09):c=none[panel]`);
+  filter.push(`[${label}][panel]overlay=${quer?30:"(W-w)/2"}:${quer?470:Math.min(1320,1630-panelH-96)}:format=rgb[banner]`);
   const body=inhalt.beschreibung||unterzeile;
   if(body) {
     const size=quer?38:36,zeilen=ausgewogeneZeilen(body,quer?42:44);

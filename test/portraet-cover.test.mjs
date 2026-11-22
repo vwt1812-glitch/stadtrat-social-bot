@@ -36,9 +36,22 @@ test("Transparente PNGs werden ohne Python und ohne veränderte Bildpixel wieder
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),"portraet-alpha-"));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
   const bild=path.join(dir,"transparent.png");
   await ausfuehren("ffmpeg",["-y","-v","error","-f","lavfi","-i","color=c=red@0.5:s=160x240,format=rgba","-frames:v","1",bild]);
+  const hash=createHash('sha256').update(await fs.readFile(bild)).digest('hex').slice(0,16);
+  await fs.writeFile(path.join(dir,`portraet-v2-${hash}.png`),'alte harte Maske');
   const ziel=await portraetFreistellen(bild,dir,null);
+  assert.equal(path.basename(ziel),`portraet-v3-${hash}.png`);
   assert.deepEqual(await fs.readFile(ziel),await fs.readFile(bild));
   assert.equal(await portraetFreistellen(bild,dir,null),ziel);
+});
+test("Weiche Porträttransparenz bleibt im fertigen Thumbnail erhalten",{skip:!ffmpeg},async t=>{
+  const dir=await fs.mkdtemp(path.join(os.tmpdir(),'portraet-weich-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
+  const bild=path.join(dir,'weich.png'),ziel=path.join(dir,'cover.jpg');
+  await ausfuehren('ffmpeg',['-y','-v','error','-f','lavfi','-i','color=c=red@0.5:s=240x400,format=rgba','-frames:v','1',bild]);
+  await portraetCover({ausgabe:ziel,inhalt:{titel:'Test'},layout:{schriftOrdner:path.resolve('assets/fonts')},portraet:bild,freigestellt:bild,hintergrund:'dunkel'});
+  const pixel=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=2:2:600:800,scale=1:1','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{binaer:true});
+  for(const [i,expected] of [142,15,14].entries())assert.ok(Math.abs(pixel[i]-expected)<5,`50% Alpha muss mit Anthrazit gemischt werden: ${[...pixel]}`);
+  const banner=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=980:200:50:1350','-frames:v','1','-f','rawvideo','-pix_fmt','gray','pipe:1'],{binaer:true});
+  assert.ok(banner.filter(p=>p>235).length>1000,'Die weiße Überschrift muss im schwarzen Banner sichtbar bleiben');
 });
 test("Porträt-Thumbnail rendert Hoch-/Querprofile und Raster, ohne Video oder Porträt zu verändern",{skip:!ffmpeg},async t=>{
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),"portraet-cover-"));t.after(()=>fs.rm(dir,{recursive:true,force:true}));

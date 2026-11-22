@@ -94,7 +94,7 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
     if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,bg))throw Error("Unbekannter Porträt-Hintergrund.");
     if(bg!=="original") {
       if(!optionen.portraet&&vorlagen.freigestellt)try {await fs.access(vorlagen.freigestellt);freigestellt=vorlagen.freigestellt;}catch {}
-      freigestellt??=await portraetFreistellen(portraet,ordner,gesicht?.python);
+      freigestellt??=await portraetFreistellen(portraet,ordner,vorlagen.python??gesicht?.python);
     } else freigestellt=portraet;
     if(bg==="video") {
       const ms=frameZeit(String((optionen.frameMs??0)/1000),masse.dauer);

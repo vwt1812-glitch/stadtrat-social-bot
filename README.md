@@ -55,11 +55,20 @@ freigestellte Version unter `daten/vorlagen/portraet.png` ablegen; eigene Pfade 
 `THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen.
 Ein dauerhaft auswählbares Saalfoto liegt unter `daten/vorlagen/ratssaal.jpg` (alternativ
 `THUMBNAIL_RATSSAAL`). Die Auswahl „Sitzungssaal“ erscheint, sobald die Datei vorhanden ist. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
-Die Bilder gehören nicht ins Git-Repository. Die lokale Freistellung verwendet U2Netp über das vorhandene Python mit OpenCV. Die Maske
-wird an den Originalkanten verfeinert; helle Hintergrundsäume werden bereinigt. Transparente PNGs
+Die Bilder gehören nicht ins Git-Repository. Für die genaue Freistellung einmal `bash pi/portraet-einrichten.sh`
+ausführen und `THUMBNAIL_PYTHON=.venv-portraet/bin/python` setzen. Das richtet eine separate Bildumgebung
+mit OpenCV und PyMatting ein und lädt IS-Net (ca. 171 MiB, geprüfte Prüfsumme) nach
+`daten/modelle/isnet-general-use.onnx`. Quelle: [IS-Net / DIS](https://github.com/xuebinqin/DIS),
+Apache-2.0, ONNX-Konvertierung aus [rembg](https://github.com/danielgatis/rembg).
+Ohne dieses Modell verwendet die Bildumgebung das kleine mitgelieferte U2Netp.
+Die Maske wird mit weichen Haarkanten und geschätzten Vordergrundfarben verfeinert, damit
+der ursprüngliche helle Hintergrund keinen Saum bildet. Innen bleiben die Originalpixel erhalten.
+Der erste Start dauert durch die lokale Vorbereitung länger; weitere Aufrufe verwenden den Cache.
+Alte Freistellungen werden nicht wiederverwendet. Eine manuell hinterlegte Standard-PNG dagegen bewusst
+ersetzen oder entfernen, damit der Bot sie neu erzeugt. Transparente PNGs
 werden direkt übernommen. Unter **Schrift wählen** stehen eine klassische Arial-ähnliche
 Schrift (Liberation Sans Bold, Standard) und Inter zur Auswahl. Die Schrift betrifft nur das
-Thumbnail. Modell und Schriften samt Lizenzen sind mitgeliefert; Bilder bleiben lokal.
+Thumbnail. Das kleine Modell und die Schriften samt Lizenzen sind mitgeliefert; Bilder bleiben lokal.
 
 ### Entwürfe, Archiv und Quellen
 
