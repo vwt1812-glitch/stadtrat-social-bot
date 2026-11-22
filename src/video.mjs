@@ -1,3 +1,4 @@
+import { ausschnittUntertitelPosition } from "./plattform-video.mjs";
 // Alles, was ffmpeg/ffprobe macht: Video untersuchen, Ton für Whisper
 // herauslösen, Logo + Untertitel einbrennen.
 
@@ -5,8 +6,8 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { untertitelGroesse, untertitelPosition } from "./untertitel.mjs";
-import { bildRechteck, gesichterUebertragen, logoPlatzierung } from "./story-layout.mjs";
-import { gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
+import { bildRechteck, gesichterUebertragen, logoPlatzierung, sichereZone } from "./story-layout.mjs";
+import { ausschnittAktivFilter, ausschnittKommandos, gesichterImAusschnitt } from "./hochkant-ausschnitt.mjs";
 
 export function ausfuehren(befehl, args, { cwd, binaer = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -116,7 +117,15 @@ export async function logoGrafik({ layout, masse, ordner, video = true }) {
   }
   const s = skala(masse);
   const logo = await untersuche(layout.logo);
-  const lw = gerade(Math.min(masse.breite, masse.hoehe) * layout.logoBreite);
+  let lw = gerade(Math.min(masse.breite, masse.hoehe) * layout.logoBreite);
+  if (layout.smartLogo || layout.bild) {
+    const safe=sichereZone(masse,layout.layoutModus??"story");
+    const karte=layout.logoStil!=="frei";
+    const zugabeX=karte?2*pxl(38,s)+2*pxl(16,s):0;
+    const zugabeY=karte?2*pxl(30,s)+2*pxl(16,s):0;
+    lw=Math.max(2,Math.floor(Math.min(lw,safe.rechts-safe.links-zugabeX,
+      (safe.unten-safe.oben-zugabeY)*logo.breite/logo.hoehe)/2)*2);
+  }
   const lh = gerade(lw * logo.hoehe / logo.breite);
   const ziel = path.join(ordner, "logo-grafik.png");
   let grafik;
@@ -329,9 +338,18 @@ export async function rendern({ eingabe, ausgabe, ass, masse, layout, video, bau
   let eingang = 1;
   if (story || quer) {
     const a = story && layout.ausschnitt;
-    filter.push(`[0:v]${a
-      ? `crop=${a.breite}:${a.hoehe}:${a.x}:${a.y},scale=${masse.breite}:${masse.hoehe},setsar=1`
-      : storyFlaeche(masse)}[flaeche]`);
+    const d=a?.darstellung??{x:0,y:0,breite:masse.breite,hoehe:masse.hoehe};
+    if (a?.punkte) await fs.writeFile(path.join(ordner, "ausschnitt.cmd"), ausschnittKommandos(a));
+    const crop = a && `${a.punkte ? "sendcmd=f=ausschnitt.cmd," : ""}crop@hochkant=${a.breite}:${a.hoehe}:x=${a.x}:y=${a.y},scale=${d.breite}:${d.hoehe}:force_original_aspect_ratio=increase,crop=${d.breite}:${d.hoehe},setsar=1`;
+    if (a && (a.darstellung || a.bereiche?.length > 1 || a.ab > 0 || (Number.isFinite(a.bis) && a.bis < masse.dauer - 0.05))) {
+      // Unbekannte Bildbereiche am Anfang/Ende vollständig zeigen, z. B.
+      // wenn die Person sich erst zum Rednerpult dreht.
+      const aktiv=ausschnittAktivFilter(a);
+      filter.push(`[0:v]split[acrop][avoll];[avoll]${storyFlaeche(masse,a.darstellung?{vorneAn:`not(${aktiv})`}:{})}[afull];` +
+        `[acrop]${crop}[acropped];[afull][acropped]overlay=${d.x}:${d.y}:enable='${aktiv}'[flaeche]`);
+    } else {
+      filter.push(`[0:v]${a ? crop : storyFlaeche(masse)}[flaeche]`);
+    }
     letzte = "flaeche";
     if (story && layout.logo && layout.logoStil === "frei") {
       const schleier = path.join(ordner, "story-schleier.png");
@@ -447,10 +465,16 @@ export function storyBild(original, masse = STORY_MASSE) {
  * Caption von Reels/TikTok bleiben (untere 22 %); sonst gilt das normale Hochkant-Layout.
  */
 export function storyLayout(layout, original, masse = STORY_MASSE, ausschnitt = null) {
-  if (ausschnitt) return {
-    ...layout, ausschnitt, bild: null, smartLogo: true, layoutModus: "reel", positionFest: undefined,
-    gesichter: gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt),
-  };
+  if (ausschnitt) {
+    const profil={...layout,untertitelProfil:layout.untertitelProfil??"instagram-organisch"};
+    const gesichter=gesichterImAusschnitt(layout.gesichter ?? [], original, ausschnitt, masse);
+    const d=ausschnitt.darstellung;
+    const bild=d?{links:d.x,rechts:d.x+d.breite,oben:d.y,unten:d.y+d.hoehe,breite:d.breite,hoehe:d.hoehe}:null;
+    return {
+      ...profil, ausschnitt, bild, smartLogo: true, layoutModus: "reel",
+      positionFest: ausschnittUntertitelPosition(gesichter,masse,profil), gesichter,
+    };
+  }
   const bild = bildRechteck(original, masse);
   const ergebnis = {
     ...layout, bild, smartLogo: true, layoutModus: "reel",
@@ -493,12 +517,12 @@ export const istStoryFormat = (masse) => Math.abs(masse.hoehe / masse.breite - 1
  * Nicht abgedunkelt: Das Logo mit dunkler Schrift soll auf dem Hintergrund lesbar bleiben.
  * `vorneHoehe` begrenzt die Höhe des scharfen Bildes (für Fotos, s. STORY_FOTO_HOEHE).
  */
-export function storyFlaeche({ breite, hoehe } = STORY_MASSE, { vorneHoehe = hoehe } = {}) {
+export function storyFlaeche({ breite, hoehe } = STORY_MASSE, { vorneHoehe = hoehe, vorneAn = null } = {}) {
   return `split[sgrund][sbild];` +
     `[sgrund]scale=${breite}:${hoehe}:force_original_aspect_ratio=increase,crop=${breite}:${hoehe},` +
     `boxblur=40:2,eq=saturation=0.85[sunscharf];` +
     `[sbild]scale=${breite}:${gerade(vorneHoehe)}:force_original_aspect_ratio=decrease,scale=trunc(iw/2)*2:trunc(ih/2)*2[svorne];` +
-    `[sunscharf][svorne]overlay=(W-w)/2:(H-h)/2,setsar=1`;
+    `[sunscharf][svorne]overlay=(W-w)/2:(H-h)/2${vorneAn?`:enable='${vorneAn}'`:""},setsar=1`;
 }
 
 /**

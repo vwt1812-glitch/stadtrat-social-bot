@@ -18,7 +18,8 @@ import {
 } from "./video.mjs";
 import { transkribiere } from "./whisper.mjs";
 import { gesichtSuchen, lageWaehlen } from "./gesicht.mjs";
-import { hochkantAusschnitt } from "./hochkant-ausschnitt.mjs";
+import { AUSSCHNITT_VERSION, ausschnittHinweis } from "./hochkant-ausschnitt.mjs";
+import { sichererHochkantAusschnitt } from "./plattform-video.mjs";
 import { captionVorschlag, einfacherVorschlag, kuerzen } from "./caption.mjs";
 import { parseSrt, formatSrt, zuAss, volltext, parseBauchbinde, alsListe, wendeBearbeitungAn } from "./untertitel.mjs";
 import { parseZeit, zeitText, vorschlaege } from "./zeit.mjs";
@@ -426,6 +427,7 @@ async function videoFormatMenue(a) {
   }
   if (a.masse?.breite > a.masse?.hoehe) {
     zeilen.push([knopf(a.hochkantGanzesBild ? "✂️ Sinnvollen Ausschnitt automatisch prüfen" : "🖼️ Hochkant mit vollständigem Bild", a, "ausschnitt")]);
+    if (!a.hochkantGanzesBild) zeilen.push([knopf("🔄 Ausschnitt neu berechnen", a, "ausschnittneu")]);
   }
   zeilen.push([knopf("↩️ Zur Vorschau", a, "zurueck")]);
   return {
@@ -824,21 +826,26 @@ async function storyFassung(auftrag) {
   const nativ = querAn(auftrag) && istStoryFormat(auftrag.masse);
   const masse = nativ ? auftrag.masse : { ...STORY_MASSE, dauer: auftrag.masse.dauer };
   let ausschnitt = null;
+  let hinweis = "Vollständiges Bild gewählt";
   let gesichter = auftrag.gesichter ?? [];
   if (!nativ && !auftrag.hochkantGanzesBild && auftrag.masse.breite > auftrag.masse.hoehe) {
     // Eigene Prüfung: ältere Funde enthalten nur das größte Gesicht pro Bild.
     let funde = auftrag.hochkantFunde;
-    if (funde === undefined) {
-      funde = await gesichtSuchen(auftrag.original, { ...config.gesicht, alleGesichter: true }, 24);
-      auftraege.aendern(auftrag.id, { hochkantFunde: funde });
+    if (funde === undefined || (funde ? funde.version !== AUSSCHNITT_VERSION : auftrag.hochkantFundeVersion !== AUSSCHNITT_VERSION)) {
+      let analyseDatei = datei(auftrag, "fertig.mp4");
+      try { await fs.access(analyseDatei); } catch { analyseDatei = auftrag.original; }
+      funde = await gesichtSuchen(analyseDatei, { ...config.gesicht, alleGesichter: true, dicht: true }, 24);
+      auftraege.aendern(auftrag.id, { hochkantFunde: funde, hochkantFundeVersion: AUSSCHNITT_VERSION });
     }
-    ausschnitt = hochkantAusschnitt(auftrag.masse, funde);
+    ausschnitt = sichererHochkantAusschnitt(auftrag.masse,funde,masse,layoutFuer(auftrag));
+    hinweis = ausschnittHinweis(funde, ausschnitt);
     if (ausschnitt) gesichter = funde.gesichter;
   }
-  auftraege.aendern(auftrag.id, { hochkantAusschnitt: ausschnitt });
+  auftraege.aendern(auftrag.id, { hochkantAusschnitt: ausschnitt, hochkantHinweis: hinweis });
   let layout = nativ ? layoutFuer(auftrag) : storyLayout({ ...layoutFuer(auftrag), gesichter }, auftrag.masse, masse, ausschnitt);
-  if (!nativ && auftrag.untertitelAuto) {
-    const wahl = lageWaehlen({ bilder: ausschnitt ? 24 : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
+  if (ausschnitt && auftrag.untertitelAuto) layout = { ...layout, lage: null };
+  if (!nativ && !ausschnitt && auftrag.untertitelAuto) {
+    const wahl = lageWaehlen({ bilder: ausschnitt ? gesichter.length : auftrag.gesichtBilder, gesichter: layout.gesichter }, { masse, layout });
     layout = { ...layout, lage: wahl.lage === "unten" ? null : wahl.lage };
   }
   const cues = parseSrt(await fs.readFile(datei(auftrag, "untertitel.srt"), "utf8"));
@@ -856,6 +863,11 @@ async function storyFassung(auftrag) {
 }
 
 /** Story-Fassung neu bauen (oder verwerfen) und als eigene Vorschau schicken. */
+async function hochkantNeuBerechnen(id) {
+  await storyAktualisieren(auftraege.get(id)).catch((e) => console.error(e));
+  await neuesMenue(auftraege.aendern(id, { status: "vorschau", hochkantWiederholen: false }));
+}
+
 async function storyAktualisieren(auftrag) {
   if (auftrag.statusNachricht && (auftrag.story || hochkantAn(auftrag))) await schritt(auftrag, "📱 Baue die 9:16-Fassung …");
   let storyDatei = null;
@@ -882,7 +894,7 @@ async function storyAktualisieren(auftrag) {
   const vorschauMasse = querAn(auftrag) && istStoryFormat(auftrag.masse) ? auftrag.masse : STORY_MASSE;
   await tg.datei(auftrag.chatId, "sendVideo", "video", senden, {
     caption: `9:16-Fassung für ${wofuer}${auftrag.masse.breite > auftrag.masse.hoehe
-      ? (auftrag.hochkantAusschnitt ? " · automatischer Ausschnitt" : " · vollständiges Bild mit unscharfem Hintergrund") : ""}`, supports_streaming: "true",
+      ? ` · ${auftrag.hochkantHinweis ?? "Vollständiges Bild mit unscharfem Hintergrund"}` : ""}`, supports_streaming: "true",
     width: String(vorschauMasse.breite), height: String(vorschauMasse.hoehe),
   });
   return auftrag;
@@ -1714,16 +1726,14 @@ async function knopfGedrueckt(cq) {
       einreihen(() => renderUndVorschau(id));
       return;
     }
+    case "ausschnittneu":
     case "ausschnitt": {
       if (art(auftrag) !== "video" || !(auftrag.masse?.breite > auftrag.masse?.hoehe)) return antwort("Nur für Querformatvideos verfügbar.", true);
-      auftrag = auftraege.aendern(id, { hochkantGanzesBild: !auftrag.hochkantGanzesBild,
-        storyDatei: null, storyHochgeladen: null, storyClips: null, plan: null, status: "arbeitet" });
+      auftrag = auftraege.aendern(id, { hochkantGanzesBild: aktion === "ausschnittneu" ? false : !auftrag.hochkantGanzesBild,
+        storyDatei: null, storyHochgeladen: null, storyClips: null, plan: null, status: "arbeitet", hochkantWiederholen: true });
       await antwort("Prüfe die Hochkantfassung neu …");
       await tg.aufruf("editMessageReplyMarkup", { chat_id: auftrag.chatId, message_id: auftrag.menueNachricht }).catch(() => {});
-      einreihen(async () => {
-        await storyAktualisieren(auftraege.get(id)).catch((e) => console.error(e));
-        await neuesMenue(auftraege.aendern(id, { status: "vorschau" }));
-      });
+      einreihen(() => hochkantNeuBerechnen(id));
       return;
     }
     case "hochkant": {
@@ -2151,6 +2161,10 @@ async function main() {
 
   // Verarbeitungen, die ein Neustart unterbrochen hat
   for (const a of Object.values(auftraege.alle)) {
+    if (a.status === "arbeitet" && a.hochkantWiederholen && art(a) === "video") {
+      einreihen(() => hochkantNeuBerechnen(a.id));
+      continue;
+    }
     if (a.status === "arbeitet" || a.status === "postet") {
       auftraege.aendern(a.id, { status: a.status === "postet" ? "vorschau" : "fehler" });
       await tg.senden(a.chatId, a.status === "fehler"

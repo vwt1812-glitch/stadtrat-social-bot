@@ -1,5 +1,18 @@
 // SRT lesen und schreiben, Korrekturen anwenden und daraus eine ASS-Datei
 // bauen, die ffmpeg/libass mit fester Gestaltung ins Video brennt.
+import fs from "node:fs";
+import { sichereZone } from "./story-layout.mjs";
+
+const FONT_METRIKEN = (() => {
+  try { return JSON.parse(fs.readFileSync(new URL("../assets/fonts/inter-bold-metriken.json",import.meta.url),"utf8")); }
+  catch { return null; }
+})();
+
+/** Schriftmetriken statt Zeichenanzahl: auch lange einzelne Wörter müssen passen. */
+export function untertitelTextBreite(text, groesse, schrift="Inter") {
+  const m=/^Inter(?:\s|$)/i.test(schrift)?FONT_METRIKEN:null;
+  return [...text].reduce((sum,c)=>sum+(m?.advances[c]!==undefined?m.advances[c]/m.unitsPerEm:2),0)*groesse;
+}
 
 function zuMs(zeit) {
   const m = zeit.trim().match(/(\d+):(\d{2}):(\d{2})[,.](\d{1,3})/);
@@ -220,19 +233,33 @@ export function untertitelGroesse({ breite, hoehe }) {
 /** Wählbare Lagen pro Video; „unten“ ist die Einstellung aus der .env. */
 export const UNTERTITEL_LAGEN = { oben: { hochkant: 0.62, quer: 0.8 }, mitte: { hochkant: 0.47, quer: 0.42 }, logobereich: { hochkant: 0.80, quer: 0.8 } };
 
+/** Einschließlich Platz für Kontur, Schatten und Glyphenüberhänge. */
+export function untertitelRahmen(o) {
+  if(o.hoehe<=o.breite||!['reel','story'].includes(o.layoutModus))return null;
+  const zone=sichereZone(o,o.layoutModus),rand=Math.ceil(untertitelGroesse(o)*0.5);
+  // An der normalen Instagram-Reels-Ansicht geprüft; Werbeprofile behalten die strengere Zone.
+  if(o.untertitelProfil==="instagram-organisch")zone.unten=Math.round(o.hoehe*0.86);
+  return {links:zone.links+rand,rechts:zone.rechts-rand,oben:zone.oben+rand,unten:zone.unten-rand,
+    textHoehe:Math.ceil(untertitelGroesse(o)*1.3*(o.zeilen===1?1:2)),rand};
+}
+
 /**
  * Abstand der Untertitel vom unteren Rand (Anteil der Bildhöhe) nach Format und gewählter Lage.
  * Hochkant liegt der Standard über dem Bereich, den TikTok und Reels für Name und Caption brauchen.
  */
 export function untertitelPosition(o) {
   const hochkant = o.hoehe > o.breite;
+  let wunsch;
   if (o.lage === "logobereich" && hochkant) {
     // Den ganzen Block unter der oberen UI-Leiste halten, auch bei zwei Zeilen.
-    return 1 - 0.15 - untertitelGroesse(o) * 1.3 * (o.zeilen === 1 ? 1 : 2) / o.hoehe;
+    wunsch = 1 - 0.15 - untertitelGroesse(o) * 1.3 * (o.zeilen === 1 ? 1 : 2) / o.hoehe;
+  } else {
+    const lage = UNTERTITEL_LAGEN[o.lage]?.[hochkant ? "hochkant" : "quer"];
+    wunsch=lage ?? o.positionFest ?? (hochkant ? o.position : (o.positionQuer ?? 0.08));
   }
-  const lage = UNTERTITEL_LAGEN[o.lage]?.[hochkant ? "hochkant" : "quer"];
-  // positionFest: von der Story-Fassung vorgegeben (direkt unter dem Bild); 📍 Position geht vor
-  return lage ?? o.positionFest ?? (hochkant ? o.position : (o.positionQuer ?? 0.08));
+  const r=untertitelRahmen(o);
+  if(!r)return wunsch;
+  return Math.max(1-r.unten/o.hoehe,Math.min(1-(r.oben+r.textHoehe)/o.hoehe,Number.isFinite(wunsch)?wunsch:0.35));
 }
 
 export function zuAss(cues, o) {
@@ -242,6 +269,7 @@ export function zuAss(cues, o) {
   const maxZeichen = hochkant ? 24 : 38;
   const rahmen = Math.max(2, Math.round(groesse * 0.09));
   const box = o.stil === "box";
+  const sicher=untertitelRahmen(o);
 
   const style = [
     "Untertitel",
@@ -257,18 +285,21 @@ export function zuAss(cues, o) {
     box ? Math.round(groesse * 0.25) : rahmen,
     box ? 0 : Math.round(rahmen / 2),
     2, // Alignment: unten mittig
-    Math.round(o.breite * 0.06),
-    Math.round(o.breite * 0.06),
+    sicher?.links ?? Math.round(o.breite * 0.06),
+    sicher ? o.breite-sicher.rechts : Math.round(o.breite * 0.06),
     Math.round(o.hoehe * untertitelPosition(o)),
     1,
   ].join(",");
 
   // 1 = kurze Häppchen in einer Zeile, 2 = bis zu zwei Zeilen
   const zeilen = o.zeilen === 1 ? 1 : 2;
-  const events = aufteilen(cues, maxZeichen, zeilen).map(
-    (c) =>
-      `Dialogue: 0,${assZeit(c.start)},${assZeit(c.end)},Untertitel,,0,0,0,,${zeilen === 1 ? assText(c.text) : umbrechen(assText(c.text), maxZeichen).join("\\N")}`,
-  );
+  const events = aufteilen(cues, maxZeichen, zeilen).map(c=>{
+    const textZeilen=zeilen===1?[c.text]:umbrechen(c.text,maxZeichen);
+    const breite=Math.max(...textZeilen.map(t=>untertitelTextBreite(t,groesse,o.schrift)));
+    const g=sicher?Math.max(1,Math.min(groesse,Math.floor(groesse*(sicher.rechts-sicher.links)/Math.max(1,breite)))):groesse;
+    const format=g<groesse?`{\\fs${g}}`:"";
+    return `Dialogue: 0,${assZeit(c.start)},${assZeit(c.end)},Untertitel,,0,0,0,,${format}${textZeilen.map(assText).join("\\N")}`;
+  });
 
   return `[Script Info]
 ScriptType: v4.00+
