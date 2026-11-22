@@ -1,3 +1,5 @@
+import {versandBedarf,versandVideo,versandQuellen} from "./versand-video.mjs";
+import {postizDiagnose,kanalVorpruefung,DIAGNOSE_TEXTE} from "./postiz-diagnose.mjs";
 import {AUDIO_MODI,AUDIO_VERSION,auftragTonErsetzen} from "./audio.mjs";
 import { PORTRAET_HINTERGRUENDE, PORTRAET_SCHRIFTEN } from "./portraet-cover.mjs";
 // Telegram-Bot: Video, Fotos oder Text rein → Vorschau mit Logo, Untertiteln und
@@ -68,7 +70,7 @@ async function alleKanaele() {
 const erlaubt = (...ids) => ids.some((id) => config.telegram.erlaubt.includes(id));
 
 /** Bedarf an Postiz-Anfragen prüfen; Fehlertext, wenn das Stundenlimit nicht reicht. */
-function limitFehler(auftrag, kanaele) {
+function limitFehler(auftrag, kanaele, extraUploads=0) {
   if (auftrag.videoFormatFehler) return "Die Videofassung konnte nicht erstellt werden. Bitte das Videoformat erneut wählen und die neue Vorschau prüfen.";
   const postizKanaele = kanaele.filter((k) => k.id !== DIREKT);
   if (!postizKanaele.length) return null;
@@ -86,10 +88,11 @@ function limitFehler(auftrag, kanaele) {
       ? storyAnzahl(auftrag.masse?.dauer) - (auftrag.storyClips?.hochgeladen?.filter(Boolean).length ?? 0) : 0,
     coverUploads: art(auftrag) === "video" && !auftrag.nurStory ? coverBedarf(auftrag.thumbnail, postizKanaele, config.postiz.mastodonThumbnails) : 0,
   });
-  const frei = postiz.zaehler.wiederFrei(bedarf);
+  const gesamt=bedarf+extraUploads;
+  const frei = postiz.zaehler.wiederFrei(gesamt);
   if (!frei) return null;
   return frei === Infinity
-    ? `Der Beitrag braucht ${bedarf} Postiz-Anfragen, erlaubt sind nur ${config.postiz.maxAnfragen} pro Stunde (POSTIZ_MAX_ANFRAGEN bzw. API_LIMIT in Postiz erhöhen).`
+    ? `Der Beitrag braucht ${gesamt} Postiz-Anfragen, erlaubt sind nur ${config.postiz.maxAnfragen} pro Stunde (POSTIZ_MAX_ANFRAGEN bzw. API_LIMIT in Postiz erhöhen).`
     : `Postiz-Limit für diese Stunde erreicht – ab ${frei.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} Uhr geht es wieder. Planen kannst du trotzdem: einfach dann nochmal „Ja“.`;
 }
 
@@ -671,8 +674,31 @@ async function repostMenue(auftrag) {
   });
 }
 
+function versandGruppen(bedarf) {
+  const gruppen=new Map();
+  for(const b of bedarf) {
+    const g=gruppen.get(b.datei)??{datei:b.datei,maxBytes:b.maxBytes,ziele:[]};
+    g.maxBytes=Math.min(g.maxBytes,b.maxBytes);g.ziele.push(b);gruppen.set(b.datei,g);
+  }
+  return [...gruppen.values()];
+}
+
+async function versandVorpruefung(a,kanaele) {
+  const eigene=postiz.eigeneEinstellungen();
+  const bedarf=await versandBedarf({...a,art:art(a)},kanaele,{eigene,hochkant:hochkantAn(a),netze:config.hochkant.netze});
+  let diagnose=null,hinweise=[];
+  try {diagnose=await postizDiagnose(config.postiz.diagnoseContainer,kanaele.filter(k=>k.id!==DIREKT).map(k=>k.id));}
+  catch {hinweise.push("Die lokale Kontoprüfung ist gerade nicht erreichbar. Verbindungen und Guthaben bitte in Postiz prüfen.");}
+  const konten=kanalVorpruefung(kanaele,diagnose);
+  hinweise.push(...konten.hinweise);
+  if(bedarf.length)hinweise.push(`Für ${[...new Set(bedarf.map(b=>b.kanal.name))].join(", ")} erstelle ich bei Bedarf kleinere vollständige Versandfassungen. Das kann vor dem Upload etwas dauern; die anderen Kanäle behalten ihre Qualität.`);
+  return {bedarf,fehler:konten.fehler,hinweise};
+}
+
 async function bestaetigung(auftrag, typ, zeit) {
   const kanaele = await gewaehlteKanaele(auftrag);
+  const vorpruefung=await versandVorpruefung(auftrag,kanaele);
+  if(vorpruefung.fehler.length)return {fehler:vorpruefung.fehler.join("\n")+" Bitte neu verbinden oder den Kanal abwählen."};
   const coverFehler = await thumbnailPruefen(auftrag, kanaele);
   if (coverFehler) return { fehler: coverFehler };
   if (!kanaele.length) return { fehler: "Bitte zuerst mindestens einen Kanal wählen." };
@@ -690,7 +716,7 @@ async function bestaetigung(auftrag, typ, zeit) {
   const zuLang = liste.filter((l) => l.zuLang);
   if (zuLang.length) return { fehler: `Zu lang für ${zuLang.map((l) => `${l.kanal.name} (${zahlText(l)})`).join(", ")} – bitte unter „✂️ Text je Kanal“ anpassen.` };
   const eigen = liste.filter((l) => l.eigen).map((l) => html(l.kanal.name));
-  const limit = limitFehler(auftrag, kanaele);
+  const limit = limitFehler(auftrag, kanaele,versandGruppen(vorpruefung.bedarf).length);
   if (limit) return { fehler: limit };
   auftraege.aendern(auftrag.id, { plan: { typ, zeit: zeit.toISOString() } });
   const wann = typ === "now" ? "<b>jetzt</b>" : `am <b>${zeitText(zeit)}</b>`;
@@ -698,6 +724,7 @@ async function bestaetigung(auftrag, typ, zeit) {
     text: [
       `Wirklich ${wann} ${auftrag.nurStory ? "nur die Story" : "den Beitrag"} auf ${kanaele.map((k) => `<b>${html(k.name)}</b>`).join(", ")} posten?`,
       ...details(auftrag, await alleKanaele()),
+      ...vorpruefung.hinweise.map(h=>`ℹ️ ${html(h)}`),
       ...(auftrag.thumbnail && !auftrag.nurStory && art(auftrag) === "video" ? kanaele.map((k) => {
         const z = thumbnailZiel(k, auftrag.thumbnail, config.postiz.mastodonThumbnails);
         return z.hinweis ? `🖼️ ${html(k.name)}: ${html(z.hinweis)}` : `🖼️ ${html(k.name)}: eigenes Titelbild`;
@@ -1137,7 +1164,10 @@ async function veroeffentlichen(auftrag) {
     const hinweise = [];
 
     if (postizKanaele.length && !auftrag.postizFertig) {
-      const limit = limitFehler(auftrag, kanaele);
+      const vorpruefung=auftrag.postiz?.post?{bedarf:[],fehler:[]}:await versandVorpruefung(auftrag,postizKanaele);
+      if(vorpruefung.fehler.length)throw Error(vorpruefung.fehler.join("\n"));
+      const gruppen=versandGruppen(vorpruefung.bedarf);
+      const limit = limitFehler(auftrag, kanaele,gruppen.length);
       if (limit) throw new Error(limit);
       // Bei reinen Storys weder Karussellbilder noch den normalen Feed-Beitrag hochladen:
       // wenn es eine gerenderte 9:16-Fassung gibt, wird nur diese hochgeladen.
@@ -1168,6 +1198,22 @@ async function veroeffentlichen(auftrag) {
         await zeigeMenue(auftrag, { text: "⏫ Lade die 9:16-Fassung zu Postiz hoch …", reply_markup: { inline_keyboard: [] } });
         auftrag = auftraege.aendern(auftrag.id, { storyHochgeladen: await postiz.hochladen(auftrag.storyDatei) });
       }
+      const kanalMedien={};
+      for(const g of gruppen) {
+        await zeigeMenue(auftrag,{text:`📦 Bereite eine kleinere Versandfassung für ${g.ziele.map(b=>html(b.kanal.name)).join(", ")} vor … Das vollständige Video bleibt erhalten.`,reply_markup:{inline_keyboard:[]}});
+        const klein=await versandVideo(g.datei,g.maxBytes,auftrag.ordner),key=path.basename(klein);
+        let upload=auftrag.plattformUploads?.[key];
+        if(!upload) {
+          await zeigeMenue(auftrag,{text:"⏫ Lade die kleinere Versandfassung zu Postiz hoch …",reply_markup:{inline_keyboard:[]}});
+          upload=await postiz.hochladen(klein);
+          auftrag=auftraege.aendern(auftrag.id,{plattformUploads:{...auftrag.plattformUploads,[key]:upload}});
+        }
+        for(const b of g.ziele) {
+          kanalMedien[b.kanal.id]??=versandQuellen(auftrag,b.kanal,hochkant,config.hochkant.netze).map((_,i)=>hochkant&&auftrag.storyDatei&&config.hochkant.netze.includes(b.kanal.identifier)?auftrag.storyHochgeladen:auftrag.hochgeladen[i]);
+          kanalMedien[b.kanal.id][b.index]=upload;
+        }
+      }
+      if(typ==="schedule"&&zeit.getTime()<Date.now()+1000&&!auftrag.postiz?.post)throw Error("Während der Vorbereitung ist der Termin verstrichen. Die Dateien bleiben vorbereitet; bitte einen neuen Termin wählen.");
       await zeigeMenue(auftrag, { text: "📮 Lege Beitrag an …", reply_markup: { inline_keyboard: [] } });
       const thumbnails = {};
       if (auftrag.thumbnail && !auftrag.nurStory && art(auftrag) === "video" && !auftrag.postiz?.post) {
@@ -1195,7 +1241,7 @@ async function veroeffentlichen(auftrag) {
         vorAnlegen: async (teil) => { auftrag = auftraege.aendern(auftrag.id, { postizUnklar: teil }); },
         nachAnlegen: async (stand) => { auftrag = auftraege.aendern(auftrag.id, { postiz: stand, postizUnklar: null }); },
         beiAblehnung: async () => { auftrag = auftraege.aendern(auftrag.id, { postizUnklar: null }); },
-        thumbnails, thumbnailTimestamp: art(auftrag) === "video" && !auftrag.nurStory && auftrag.thumbnail?.modus === "frame" ? auftrag.thumbnail.frameMs : null,
+        kanalMedien, thumbnails, thumbnailTimestamp: art(auftrag) === "video" && !auftrag.nurStory && auftrag.thumbnail?.modus === "frame" ? auftrag.thumbnail.frameMs : null,
         mastodonThumbnails: config.postiz.mastodonThumbnails,
       });
       auftrag = auftraege.aendern(auftrag.id, { postiz: ergebnis, postizFertig: true });
@@ -2210,7 +2256,13 @@ async function kontrollieren() {
   const faellig = faelligeKontrollen(erwartetePosts(Object.values(auftraege.alle)), kontrolle);
   if (!faellig.length || postiz.zaehler.wiederFrei(1)) return;
   const { von, bis } = abfragezeitraum(faellig);
-  const meldungen = auswerten(await postiz.posts(von, bis), faellig, kontrolle);
+  const posts=await postiz.posts(von,bis);
+  const kaputt=posts.filter(p=>p.state==="ERROR"&&faellig.some(([id])=>id===p.id));
+  if(kaputt.length)try {
+    const d=await postizDiagnose(config.postiz.diagnoseContainer,kaputt.map(p=>p.integration?.id).filter(Boolean),kaputt.map(p=>p.id));
+    for(const p of kaputt) {const info=d?.posts.find(x=>x.id===p.id);if(info)p.error=DIAGNOSE_TEXTE[info.code]??DIAGNOSE_TEXTE.UNBEKANNT;}
+  } catch {console.warn("Postiz-Fehlerdetails momentan nicht erreichbar.");}
+  const meldungen = auswerten(posts, faellig, kontrolle);
   for (const [chatId, texte] of meldungen) for (const text of texte) await tg.senden(chatId, html(text)).catch(() => {});
   await fs.writeFile(datei, JSON.stringify(kontrolle));
 }

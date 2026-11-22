@@ -439,3 +439,34 @@ mindestens 35 dB Abstand; hörbarer Kanal mindestens −45 dBFS RMS und −30 dB
 vollständig stille Aufnahmen, Mono, Mehrkanalton und eine zweite Stimme mit deutlichen Spitzen
 werden dadurch nicht automatisch umverteilt. Kanalmessungen werden anhand der Originaldatei
 zwischengespeichert; fehlgeschlagene Messungen übernehmen keine neue Videofassung.
+
+
+### Versandprüfung und kleinere Videos
+
+Vor der Bestätigung prüft der Bot die Dateigrößen für Mastodon (standardmäßig 40 MB)
+und Postiz-Telegram (48 MB mit Reserve zum normalen Bot-API-Limit). Diese Grenzen
+betreffen den Versand über Postiz, auch wenn der Eingangsbot einen lokalen Telegram-Server nutzt.
+Bei Bedarf entsteht eine vollständige H.264/AAC-Fassung mit höchstens 1280 Pixeln an der
+langen Seite und 30 Bildern pro Sekunde. Zwei Durchgänge berechnen die passende Bitrate;
+Dateigröße, Dauer und vorhandener Ton werden vor der Übernahme geprüft. Es wird nichts
+abgeschnitten und der Ton nicht erneut verbessert. Instagram/Facebook behalten ihre bisherige Datei.
+Benötigen mehrere Kanäle dieselbe Quelle kleiner, teilen sie sich die strengere Fassung.
+Dateien und Uploads werden wiederverwendet, solange Quelle und Dateigrenze gleich bleiben.
+Bei zu geringem Bitbudget oder einem Fehler bricht die Vorbereitung verständlich ab.
+Verstreicht währenddessen ein geplanter Termin, muss ein neuer Termin gewählt werden.
+
+Die Mastodon-Grenze hängt vom Server ab. In `kanaele.json` kann `maxVideoMB` pro Netzwerk
+oder konkreter Kanal-ID gesetzt werden, zum Beispiel `"mastodon": {"maxVideoMB": 40}`.
+Diese lokale Einstellung wird nicht als Provider-Einstellung an Postiz geschickt.
+
+Bei selbst gehostetem Postiz kann `POSTIZ_DIAGNOSE_CONTAINER=postiz` aktiviert werden.
+Der Bot-Benutzer benötigt bereits Docker-Zugriff. Der Helfer fragt ausschließlich Verbindungsflags
+und zugehörige Veröffentlichungsabläufe für die über die API zugänglichen Kanal-/Post-IDs ab.
+Die Public API liefert diese Informationen nicht vollständig. Es werden keine Zugangsdaten,
+Providerantworten oder Header nach Telegram übernommen und keine Datenbankeinträge verändert.
+Eine als erneuerungsbedürftig markierte Verbindung verhindert einen neuen Upload, bis der Kanal
+neu verbunden oder abgewählt ist. Beim letzten X-Versuch erschöpfte API-Credits ergeben einen
+Hinweis; das aktuelle Guthaben ist darüber nicht live prüfbar. Ohne lokale Diagnose oder bei
+deren Ausfall bleiben diese zusätzlichen Prüfungen eingeschränkt. Die bestehende Kontrolle
+nach dem Termin meldet konkrete Ursachen, soweit verfügbar. Bekannte Posts werden dabei
+weder neu angelegt noch automatisch wiederholt; nachträgliche Reparaturen veröffentlichen nichts.

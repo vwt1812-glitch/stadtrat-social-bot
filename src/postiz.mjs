@@ -188,6 +188,7 @@ export function einstellungenFuer(kanal, { caption, collabs = [], repost, eigene
     ...eigene[kanal.id],
     __type: kanal.identifier,
   };
+  delete settings.maxVideoMB; // lokale Dateigrenze, kein Postiz-Setting
   delete settings.maxZeichen; // nur für den Bot, nicht für Postiz
   if (collabs.length && kanal.identifier.startsWith("instagram") && settings.post_type !== "story") {
     settings.collaborators = collabs.map((label) => ({ label }));
@@ -333,7 +334,7 @@ export class Postiz {
     typ, zeit, caption, captions = {}, medien, kanaele, collabs, repost, story = false, nurStory = false, storyMedium = null, storyMedien = null,
     hochkantMedium = null, hochkantNetze = HOCHKANT,
     fortschritt = {}, vorAnlegen = async () => {}, nachAnlegen = async () => {}, beiAblehnung = async () => {},
-    thumbnails = {}, thumbnailTimestamp = null, mastodonThumbnails = false,
+    kanalMedien = {}, thumbnails = {}, thumbnailTimestamp = null, mastodonThumbnails = false,
   }) {
     const eigene = this.eigeneEinstellungen();
     const feedPost = (k) => {
@@ -341,7 +342,7 @@ export class Postiz {
       const settings = einstellungenFuer(k, { caption: captionText, collabs, repost, eigene });
       const coverErlaubt = ["instagram", "instagram-standalone", "youtube", "tiktok-business"].includes(k.identifier) || (k.identifier === "mastodon" && mastodonThumbnails);
       const cover = coverErlaubt ? thumbnails[k.id] : null;
-      const medienFuerKanal = hochkantMedium && hochkantNetze.includes(k.identifier) ? [hochkantMedium] : medien;
+      const medienFuerKanal = kanalMedien[k.id] ?? (hochkantMedium && hochkantNetze.includes(k.identifier) ? [hochkantMedium] : medien);
       const image = medienFuerKanal.map((m, i) => {
         // Nur Video, nur erstes Medium: nie Cover als zusätzliches Feedbild oder Storymedium senden.
         if (i || !/\.mp4(?:[?#]|$)/i.test(m.path)) return m;

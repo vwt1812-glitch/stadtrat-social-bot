@@ -66,6 +66,7 @@ export function ladeConfig() {
       maxAnfragen: Number(env("POSTIZ_MAX_ANFRAGEN", "28")),
       einstellungen: pfad(env("KANAL_EINSTELLUNGEN", "kanaele.json")),
       // Nur nach Installation des dokumentierten Postiz-Patches einschalten.
+      diagnoseContainer: env("POSTIZ_DIAGNOSE_CONTAINER", ""),
       mastodonThumbnails: env("POSTIZ_MASTODON_THUMBNAILS", "nein") === "ja",
     },
     whisper: {
