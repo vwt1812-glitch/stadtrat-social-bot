@@ -35,7 +35,7 @@ export function portraetTextBreite(text,size,schrift="klassisch") {
 
 export function portraetTitel(text, quer=false,schrift="klassisch") {
   const breite=quer?850:940;
-  for(const maxZeilen of [2,3])for(let size=maxZeilen===3?86:quer?102:106;size>=58;size-=4) {
+  for(const maxZeilen of [2,3])for(let size=maxZeilen===3?82:quer?98:90;size>=58;size-=4) {
     const zeilen=ausgewogeneZeilen(text,breite/(size*.56));
     if(zeilen.length&&zeilen.length<=maxZeilen&&zeilen.every(z=>portraetTextBreite(z,size,schrift)<=breite))return {size,zeilen};
   }
@@ -46,7 +46,10 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
   if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,hintergrund))throw Error("Unbekannter Porträt-Hintergrund.");
   const dir=path.dirname(ausgabe),w=quer?1920:1080,h=quer?1080:1920;
   if(!Object.hasOwn(PORTRAET_SCHRIFTEN,schrift))throw Error("Unbekannte Schrift.");
-  const titel=portraetTitel(inhalt.titel,quer,schrift),line=Math.round(titel.size*1.16),panelH=titel.zeilen.length*line+64;
+  const titel=portraetTitel(inhalt.titel,quer,schrift),line=Math.round(titel.size*1.12);
+  const panelW=Math.ceil(Math.max(...titel.zeilen.map(z=>portraetTextBreite(z,titel.size,schrift)))+82);
+  const panelH=(titel.zeilen.length-1)*line+Math.ceil(titel.size*.98)+54;
+  const winkel=-.14,rotH=Math.ceil(panelW*Math.abs(Math.sin(winkel))+panelH*Math.cos(winkel));
   await fs.copyFile(path.join(layout.schriftOrdner,schrift==="inter"?"Inter-Bold.otf":"LiberationSans-Bold.ttf"),path.join(dir,"portraet-font.otf"));
   const foto=await untersuche(hintergrund==="original"?portraet:freigestellt);
   const ph=quer?1050:1590,pw=Math.round(ph*foto.breite/foto.hoehe/2)*2;
@@ -78,14 +81,13 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     filter.push(`[${index}:v]scale=${lw}:-1,format=rgba[logo];[${label}][logo]overlay=${lx}:${ly}:format=rgb[marke]`);
     label="marke";index++;
   }
-  const panelW=quer?960:1060;
-  const zeichnen=[`drawbox=x=12:y=0:w=iw-12:h=ih-14:color=black:t=fill`];
+  const zeichnen=[`drawbox=x=14:y=0:w=iw-14:h=ih-14:color=black:t=fill`];
   for(const [i,z] of titel.zeilen.entries()) {
     const name=`portraet-titel-${i}.txt`;await fs.writeFile(path.join(dir,name),z);
-    zeichnen.push(`drawtext=fontfile=portraet-font.otf:textfile=${name}:expansion=none:fontsize=${titel.size}:fontcolor=white:x=(w-text_w)/2:y=${24+i*line}`);
+    zeichnen.push(`drawtext=fontfile=portraet-font.otf:textfile=${name}:expansion=none:fontsize=${titel.size}:fontcolor=white:x=48:y=${20+i*line}`);
   }
-  filter.push(`color=c=0xF18616:s=${panelW}x${panelH}:d=1,format=rgba,${zeichnen.join(",")},rotate=-0.09:ow=rotw(-0.09):oh=roth(-0.09):c=none[panel]`);
-  filter.push(`[${label}][panel]overlay=${quer?30:"(W-w)/2"}:${quer?470:Math.min(1320,1630-panelH-96)}:format=rgb[banner]`);
+  filter.push(`color=c=0xF18616:s=${panelW}x${panelH}:d=1,format=rgba,${zeichnen.join(",")},rotate=${winkel}:ow=rotw(${winkel}):oh=roth(${winkel}):c=none[panel]`);
+  filter.push(`[${label}][panel]overlay=${quer?45:60}:${quer?Math.min(560,900-rotH):1680-rotH}:format=rgb[banner]`);
   const body=inhalt.beschreibung||unterzeile;
   if(body) {
     const size=quer?38:36,zeilen=ausgewogeneZeilen(body,quer?42:44);

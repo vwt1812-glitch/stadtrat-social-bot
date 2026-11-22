@@ -50,7 +50,7 @@ test("Weiche Porträttransparenz bleibt im fertigen Thumbnail erhalten",{skip:!f
   await portraetCover({ausgabe:ziel,inhalt:{titel:'Test'},layout:{schriftOrdner:path.resolve('assets/fonts')},portraet:bild,freigestellt:bild,hintergrund:'dunkel'});
   const pixel=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=2:2:600:800,scale=1:1','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{binaer:true});
   for(const [i,expected] of [142,15,14].entries())assert.ok(Math.abs(pixel[i]-expected)<5,`50% Alpha muss mit Anthrazit gemischt werden: ${[...pixel]}`);
-  const banner=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=980:200:50:1350','-frames:v','1','-f','rawvideo','-pix_fmt','gray','pipe:1'],{binaer:true});
+  const banner=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=980:400:50:1280','-frames:v','1','-f','rawvideo','-pix_fmt','gray','pipe:1'],{binaer:true});
   assert.ok(banner.filter(p=>p>235).length>1000,'Die weiße Überschrift muss im schwarzen Banner sichtbar bleiben');
 });
 test("Porträt-Thumbnail rendert Hoch-/Querprofile und Raster, ohne Video oder Porträt zu verändern",{skip:!ffmpeg},async t=>{

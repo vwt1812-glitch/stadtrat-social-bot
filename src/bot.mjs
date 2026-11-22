@@ -1270,11 +1270,11 @@ async function knopfGedrueckt(cq) {
   switch (aktion) {
     case "audio": {
       if(art(auftrag)!=="video"||auftrag.grafikAnimation||auftrag.masse?.hatTon===false)return antwort("Für dieses Video ist keine Tonkorrektur verfügbar.",true);
-      if(!arg) {await zeigeMenue(auftrag,{text:"<b>Ton für dein Video</b>\nLautstärke ausgleichen oder Sprache behutsam verbessern: weniger tiefe Störgeräusche, leichtes Entrauschen und sanfter Lautstärkeausgleich. Die Bildspur wird dabei übernommen. Originalton lässt sich jederzeit wiederherstellen.",reply_markup:{inline_keyboard:[...Object.entries(AUDIO_MODI).map(([key,name])=>[knopf(`${(auftrag.audioTuning??"original")===key?"🔘":"⚪"} ${name}`,auftrag,`audio:${key}`)]),[knopf("↩️ Zur Vorschau",auftrag,"zurueck")]]}});return antwort();}
+      if(!arg) {await zeigeMenue(auftrag,{text:"<b>Ton für dein Video</b>\nEine praktisch stumme Stereoseite wird automatisch mit dem hörbaren Kanal gefüllt. Normales Stereo bleibt erhalten. Das geht auch ohne weitere Tonbearbeitung. Lautstärkeausgleich und behutsame Sprachverbesserung prüfen die Kanäle ebenfalls. Die Bildspur wird übernommen. Originalton stellt beide ursprünglichen Kanäle wieder her.",reply_markup:{inline_keyboard:[...Object.entries(AUDIO_MODI).map(([key,name])=>[knopf(`${(auftrag.audioTuning??"original")===key?"🔘":"⚪"} ${name}`,auftrag,`audio:${key}`)]),[knopf("↩️ Zur Vorschau",auftrag,"zurueck")]]}});return antwort();}
       if(!Object.hasOwn(AUDIO_MODI,arg))return antwort("Ungültige Tonkorrektur.",true);
       auftraege.aendern(id,{status:"arbeitet"});await antwort();await tg.senden(auftrag.chatId,"🎚️ Bereite die Tonspur neu auf …");
       einreihen(async()=>{
-        try {const patch=await auftragTonErsetzen(auftrag,arg);auftraege.aendern(id,patch);await tg.senden(auftrag.chatId,"✅ Ton aktualisiert: "+AUDIO_MODI[arg]);}
+        try {const patch=await auftragTonErsetzen(auftrag,arg);auftraege.aendern(id,patch);await tg.senden(auftrag.chatId,"✅ Ton aktualisiert: "+AUDIO_MODI[arg]+(patch.audioKanal?`\nDer hörbare Kanal (${patch.audioKanal}) liegt jetzt auf beiden Seiten.`:""));}
         catch(e) {console.error(e);await tg.senden(auftrag.chatId,"❌ Ton konnte nicht aktualisiert werden: "+html(e.message));}
         await neuesMenue(auftraege.aendern(id,{status:"vorschau"}));
       });return;

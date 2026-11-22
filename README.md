@@ -39,6 +39,8 @@ Größenempfehlungen, harte Grenzen, unterstützte Provider und Patch-Anleitung:
 Im Videoentwurf unter **Video-Titelbild → Porträt-Thumbnail erstellen** eine Überschrift schicken
 (maximal 70 Zeichen). Eine zweite Zeile ist optional und ersetzt die voreingestellte Unterzeile.
 Die Vorlage kombiniert Porträt, transparentes Logo und einen schrägen schwarz-orangen Titelbalken.
+Der Titel ist linksbündig, der Kasten richtet sich nach seiner Breite und trägt nur links und unten
+einen schmalen orangefarbenen Versatz. Seine Neigung entspricht der Referenzvorlage (etwa 8 Grad).
 Orange bleibt Akzent auf neutralem Anthrazit. Foto-Hintergründe werden entsättigt und hinter
 dem Logo sanft abgedunkelt; das Porträt behält seine Originalfarben.
 Hochkantcover und die benötigten Quercover werden getrennt gestaltet; das Video wird nicht neu gerendert.
@@ -407,7 +409,7 @@ Pi-Skripte stammen aus [eu-piraten-abstimmungen](https://github.com/vwt1812-glit
 
 ## Tonkorrektur für Videos
 
-**Ton verbessern** im Videoentwurf bietet Originalton, reinen Lautstärkeausgleich und
+**Ton verbessern** im Videoentwurf bietet Originalton, **Nur stumme Stereoseite reparieren**, reinen Lautstärkeausgleich und
 **Sprache behutsam verbessern**. Letzteres reduziert tiefe Störgeräusche und leichtes Rauschen,
 glättet die Dynamik sanft und normalisiert in zwei Durchgängen auf −16 LUFS bei höchstens
 −1,5 dBTP Zielspitze. Raumhall lässt sich mit dieser behutsamen Bearbeitung nur begrenzt mindern.
@@ -418,3 +420,16 @@ vorhandene Bildspur und bearbeitet immer den Ton des Originals; wiederholte Korr
 sich nicht. Feed und Hochkantfassung werden gemeinsam aktualisiert. Bei Fehlern bleiben die
 bisherigen Dateien erhalten. Untertitel und Coverbilder bleiben erhalten; vorbereitete Uploads
 und Story-Teile werden neu aufgebaut. `AUDIO_TUNING=original` deaktiviert die Vorgabe.
+
+Alle drei Korrekturmodi prüfen vor der Bearbeitung beide Stereokanäle über die gesamte Aufnahme.
+Ist eine Seite praktisch stumm, wird die hörbare Seite unvermischt auf links und rechts kopiert.
+Die reine Kanalreparatur verändert den Pegel nicht; Lautstärkeausgleich und Sprachverbesserung
+messen erst nach dieser Reparatur, damit die gemeinsame Lautheit stimmt. Originalton stellt
+die ursprüngliche Kanalverteilung wieder her. `AUDIO_TUNING=kanaele` wählt nur die Kanalreparatur
+als Vorgabe für neue Videos.
+
+Die Erkennung ist bewusst zurückhaltend: leiser Kanal höchstens −65 dBFS RMS und −35 dBFS Spitze,
+mindestens 35 dB Abstand; hörbarer Kanal mindestens −45 dBFS RMS und −30 dBFS Spitze. Normales Stereo,
+vollständig stille Aufnahmen, Mono, Mehrkanalton und eine zweite Stimme mit deutlichen Spitzen
+werden dadurch nicht automatisch umverteilt. Kanalmessungen werden anhand der Originaldatei
+zwischengespeichert; fehlgeschlagene Messungen übernehmen keine neue Videofassung.
