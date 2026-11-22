@@ -70,8 +70,9 @@ der ursprüngliche helle Hintergrund keinen Saum bildet. Innen bleiben die Origi
 Der erste Start dauert durch die lokale Vorbereitung länger; weitere Aufrufe verwenden den Cache.
 Alte Freistellungen werden nicht wiederverwendet. Eine manuell hinterlegte Standard-PNG dagegen bewusst
 ersetzen oder entfernen, damit der Bot sie neu erzeugt. Transparente PNGs
-werden direkt übernommen. Unter **Schrift wählen** stehen eine klassische Arial-ähnliche
-Schrift (Liberation Sans Bold, Standard) und Inter zur Auswahl. Die Schrift betrifft nur das
+werden direkt übernommen. Unter **Schrift wählen** stehen PoliticsHead Bold (Standard, Überschriften in Großbuchstaben),
+Liberation Sans Bold und Inter zur Auswahl. Unterzeilen verwenden DejaVu Sans Condensed,
+die freie Alternative zur DejaRip aus dem Styleguide. Der Titel hat großzügige Innenabstände. Die Schrift betrifft nur das
 Thumbnail. Das kleine Modell und die Schriften samt Lizenzen sind mitgeliefert; Bilder bleiben lokal.
 
 ### Entwürfe, Archiv und Quellen

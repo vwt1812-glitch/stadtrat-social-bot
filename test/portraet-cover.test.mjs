@@ -12,16 +12,22 @@ import {thumbnailsErstellen,THUMBNAIL_PROFILE,originalProfil} from "../src/thumb
 import {ausfuehren,untersuche} from "../src/video.mjs";
 
 test("Porträt-Titel bleibt vollständig und groß, auch mit Umlauten und Satzzeichen",()=>{
-  for(const schrift of ["klassisch","inter"])for(const quer of [false,true]) {
+  for(const schrift of ["politics","klassisch","inter"])for(const quer of [false,true]) {
     const text="Nürnberger Haushalt: Demokratie-Sparkurs?",fit=portraetTitel(text,quer,schrift);
-    assert.equal(fit.zeilen.join(" "),text);
+    assert.equal(fit.zeilen.join(" "),schrift==="politics"?text.toLocaleUpperCase("de-DE"):text);
     assert.ok(fit.size>=58);
-    assert.ok(fit.zeilen.every(z=>portraetTextBreite(z,fit.size,schrift)<=(quer?850:940)));
+    assert.ok(fit.zeilen.every(z=>portraetTextBreite(z,fit.size,schrift)<=(quer?800:840)));
   }
+  assert.equal(portraetTitel("Größere Straße!").zeilen.join(" "),"GRÖSSERE STRASSE!");
   assert.throws(()=>portraetTitel("W".repeat(80)),/kürzen/);
 });
 
 test("Mitgelieferte Schriftmetriken und Freistellungsmodell haben die erwarteten Prüfsummen",async()=>{
+  for(const [font,metrics] of [["PoliticsHead-Bold.ttf","politicshead-metriken.json"],["DejaVuSansCondensed.ttf","dejavu-condensed-metriken.json"]]) {
+    const m=JSON.parse(await fs.readFile(new URL(`../assets/fonts/${metrics}`,import.meta.url)));
+    assert.equal(createHash("sha256").update(await fs.readFile(new URL(`../assets/fonts/${font}`,import.meta.url))).digest("hex"),m.sha256);
+    for(const c of "ÄÖÜẞ!? ".replace("ẞ","SS"))assert.ok(m.advances[c]>0);
+  }
   const m=JSON.parse(await fs.readFile(new URL('../assets/fonts/liberation-bold-metriken.json',import.meta.url)));
   assert.equal(createHash('sha256').update(await fs.readFile(new URL('../assets/fonts/LiberationSans-Bold.ttf',import.meta.url))).digest('hex'),m.sha256);
   assert.equal(createHash('md5').update(await fs.readFile(new URL('../assets/models/u2netp.onnx',import.meta.url))).digest('hex'),'8e83ca70e441ab06c318d82300c84806');

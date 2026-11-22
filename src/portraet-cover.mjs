@@ -26,15 +26,19 @@ export async function portraetFreistellen(eingabe, ordner, python) {
   return ziel;
 }
 
-export const PORTRAET_SCHRIFTEN=Object.freeze({klassisch:"Klassisch (Arial-ähnlich)",inter:"Inter"});
+export const PORTRAET_SCHRIFTEN=Object.freeze({politics:"PoliticsHead (Styleguide)",klassisch:"Klassisch (Arial-ähnlich)",inter:"Inter"});
 const klassisch=JSON.parse(readFileSync(new URL("../assets/fonts/liberation-bold-metriken.json",import.meta.url)));
-export function portraetTextBreite(text,size,schrift="klassisch") {
+const politics=JSON.parse(readFileSync(new URL("../assets/fonts/politicshead-metriken.json",import.meta.url)));
+const bodyFont=JSON.parse(readFileSync(new URL("../assets/fonts/dejavu-condensed-metriken.json",import.meta.url)));
+const breiteMit=(text,size,m)=>[...text].reduce((n,c)=>n+(m.advances[c]??2*m.unitsPerEm),0)*size/m.unitsPerEm;
+export function portraetTextBreite(text,size,schrift="politics") {
   if(schrift==="inter")return untertitelTextBreite(text,size);
-  return [...text].reduce((n,c)=>n+(klassisch.advances[c]??2*klassisch.unitsPerEm),0)*size/klassisch.unitsPerEm;
+  return breiteMit(schrift==="politics"?text.toLocaleUpperCase("de-DE"):text,size,schrift==="politics"?politics:klassisch);
 }
 
-export function portraetTitel(text, quer=false,schrift="klassisch") {
-  const breite=quer?850:940;
+export function portraetTitel(text, quer=false,schrift="politics") {
+  const breite=quer?800:840;
+  if(schrift==="politics")text=text.toLocaleUpperCase("de-DE");
   for(const maxZeilen of [2,3])for(let size=maxZeilen===3?82:quer?98:90;size>=58;size-=4) {
     const zeilen=ausgewogeneZeilen(text,breite/(size*.56));
     if(zeilen.length&&zeilen.length<=maxZeilen&&zeilen.every(z=>portraetTextBreite(z,size,schrift)<=breite))return {size,zeilen};
@@ -42,17 +46,19 @@ export function portraetTitel(text, quer=false,schrift="klassisch") {
   throw Error("Bitte den Porträt-Titel kürzen, damit er groß und vollständig lesbar bleibt.");
 }
 
-export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt,hintergrund="orange",hintergrundBild,quer=false,unterzeile="",schrift="klassisch"}) {
+export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt,hintergrund="orange",hintergrundBild,quer=false,unterzeile="",schrift="politics"}) {
   if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,hintergrund))throw Error("Unbekannter Porträt-Hintergrund.");
   const dir=path.dirname(ausgabe),w=quer?1920:1080,h=quer?1080:1920;
   if(!Object.hasOwn(PORTRAET_SCHRIFTEN,schrift))throw Error("Unbekannte Schrift.");
   const titel=portraetTitel(inhalt.titel,quer,schrift),line=Math.round(titel.size*1.12);
   // Portrait reference: both rectangles continue beyond the right image edge,
   // including for short titles. Orange is a separate rectangle shifted down/left.
-  const panelW=quer?Math.ceil(Math.max(...titel.zeilen.map(z=>portraetTextBreite(z,titel.size,schrift)))+82):1120;
-  const panelH=(titel.zeilen.length-1)*line+Math.ceil(titel.size*.98)+58;
+  const innenX=64,innenY=44,versatzX=14,versatzY=18;
+  const panelW=quer?Math.ceil(Math.max(...titel.zeilen.map(z=>portraetTextBreite(z,titel.size,schrift)))+2*innenX+versatzX):1120;
+  const panelH=(titel.zeilen.length-1)*line+titel.size+2*innenY+versatzY;
   const winkel=-.14,rotH=Math.ceil(panelW*Math.abs(Math.sin(winkel))+panelH*Math.cos(winkel));
-  await fs.copyFile(path.join(layout.schriftOrdner,schrift==="inter"?"Inter-Bold.otf":"LiberationSans-Bold.ttf"),path.join(dir,"portraet-font.otf"));
+  await fs.copyFile(path.join(layout.schriftOrdner,({politics:"PoliticsHead-Bold.ttf",inter:"Inter-Bold.otf",klassisch:"LiberationSans-Bold.ttf"})[schrift]),path.join(dir,"portraet-font.otf"));
+  await fs.copyFile(path.join(layout.schriftOrdner,"DejaVuSansCondensed.ttf"),path.join(dir,"portraet-body.ttf"));
   const foto=await untersuche(hintergrund==="original"?portraet:freigestellt);
   const ph=quer?1050:1590,pw=Math.round(ph*foto.breite/foto.hoehe/2)*2;
   const px=quer?w-pw+60:Math.round((w-pw)/2)+45,py=quer?70:530;
@@ -84,23 +90,23 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     label="marke";index++;
   }
   const zeichnen=[
-    `drawbox=x=0:y=18:w=iw-14:h=ih-18:color=0xF18616:t=fill:replace=1`,
-    `drawbox=x=14:y=0:w=iw-14:h=ih-18:color=black:t=fill:replace=1`,
+    `drawbox=x=0:y=${versatzY}:w=iw-${versatzX}:h=ih-${versatzY}:color=0xF18616:t=fill:replace=1`,
+    `drawbox=x=${versatzX}:y=0:w=iw-${versatzX}:h=ih-${versatzY}:color=black:t=fill:replace=1`,
   ];
   for(const [i,z] of titel.zeilen.entries()) {
     const name=`portraet-titel-${i}.txt`;await fs.writeFile(path.join(dir,name),z);
-    zeichnen.push(`drawtext=fontfile=portraet-font.otf:textfile=${name}:expansion=none:fontsize=${titel.size}:fontcolor=white:x=48:y=${20+i*line}`);
+    zeichnen.push(`drawtext=fontfile=portraet-font.otf:textfile=${name}:expansion=none:fontsize=${titel.size}:fontcolor=white:x=${versatzX+innenX}:y=${innenY+i*line}`);
   }
   filter.push(`color=c=black@0:s=${panelW}x${panelH}:d=1,format=rgba,${zeichnen.join(",")},rotate=${winkel}:ow=rotw(${winkel}):oh=roth(${winkel}):c=none[panel]`);
   filter.push(`[${label}][panel]overlay=${quer?45:60}:${quer?Math.min(560,900-rotH):1680-rotH}:format=rgb[banner]`);
   const body=inhalt.beschreibung||unterzeile;
   if(body) {
     const size=quer?38:36,zeilen=ausgewogeneZeilen(body,quer?42:44);
-    if(zeilen.length>2||zeilen.some(z=>portraetTextBreite(z,size,schrift)>w-100))throw Error("Bitte die Unterzeile kürzen.");
+    if(zeilen.length>2||zeilen.some(z=>breiteMit(z,size,bodyFont)>w-100))throw Error("Bitte die Unterzeile kürzen.");
     const draw=[];
     for(const [i,z] of zeilen.entries()) {
       const name=`portraet-unten-${i}.txt`;await fs.writeFile(path.join(dir,name),z);
-      draw.push(`drawtext=fontfile=portraet-font.otf:textfile=${name}:expansion=none:fontsize=${size}:fontcolor=white:borderw=2:bordercolor=black@0.7:x=${quer?60:"(w-text_w)/2"}:y=${(quer?930:1800)+i*46}`);
+      draw.push(`drawtext=fontfile=portraet-body.ttf:textfile=${name}:expansion=none:fontsize=${size}:fontcolor=white:borderw=1:bordercolor=black@0.7:x=${quer?60:"(w-text_w)/2"}:y=${(quer?930:1800)+i*46}`);
     }
     filter.push(`[banner]${draw.join(",")}[fertig]`);
   } else filter.push("[banner]null[fertig]");

@@ -79,7 +79,7 @@ export function ladeConfig() {
     gesicht: { python: pfad(env("GESICHT_PYTHON", ".venv/bin/python")) },
     thumbnail: {
       python: pfad(env("THUMBNAIL_PYTHON", env("GESICHT_PYTHON", ".venv/bin/python"))),
-      schrift: env("THUMBNAIL_SCHRIFT", "klassisch"),
+      schrift: env("THUMBNAIL_SCHRIFT", "politics"),
       ratssaal: pfad(env("THUMBNAIL_RATSSAAL", "daten/vorlagen/ratssaal.jpg")),
       portraet: pfad(env("THUMBNAIL_PORTRAET", "daten/vorlagen/portraet.jpg")),
       freigestellt: pfad(env("THUMBNAIL_FREIGESTELLT", "daten/vorlagen/portraet.png")),
