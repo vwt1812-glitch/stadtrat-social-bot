@@ -1,3 +1,4 @@
+import {createHash} from 'node:crypto';
 import {test} from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -5,19 +6,25 @@ import os from "node:os";
 import path from "node:path";
 import {execFileSync} from "node:child_process";
 import {fileURLToPath} from "node:url";
-import {portraetTitel,portraetCover,portraetFreistellen,PORTRAET_HINTERGRUENDE} from "../src/portraet-cover.mjs";
+import {portraetTitel,portraetTextBreite,portraetCover,portraetFreistellen,PORTRAET_HINTERGRUENDE} from "../src/portraet-cover.mjs";
 import {untertitelTextBreite} from "../src/untertitel.mjs";
 import {thumbnailsErstellen,THUMBNAIL_PROFILE,originalProfil} from "../src/thumbnail.mjs";
 import {ausfuehren,untersuche} from "../src/video.mjs";
 
 test("Porträt-Titel bleibt vollständig und groß, auch mit Umlauten und Satzzeichen",()=>{
-  for(const quer of [false,true]) {
-    const text="Nürnberger Haushalt: Demokratie-Sparkurs?",fit=portraetTitel(text,quer);
+  for(const schrift of ["klassisch","inter"])for(const quer of [false,true]) {
+    const text="Nürnberger Haushalt: Demokratie-Sparkurs?",fit=portraetTitel(text,quer,schrift);
     assert.equal(fit.zeilen.join(" "),text);
     assert.ok(fit.size>=58);
-    assert.ok(fit.zeilen.every(z=>untertitelTextBreite(z,fit.size)<=(quer?850:940)));
+    assert.ok(fit.zeilen.every(z=>portraetTextBreite(z,fit.size,schrift)<=(quer?850:940)));
   }
   assert.throws(()=>portraetTitel("W".repeat(80)),/kürzen/);
+});
+
+test("Mitgelieferte Schriftmetriken und Freistellungsmodell haben die erwarteten Prüfsummen",async()=>{
+  const m=JSON.parse(await fs.readFile(new URL('../assets/fonts/liberation-bold-metriken.json',import.meta.url)));
+  assert.equal(createHash('sha256').update(await fs.readFile(new URL('../assets/fonts/LiberationSans-Bold.ttf',import.meta.url))).digest('hex'),m.sha256);
+  assert.equal(createHash('md5').update(await fs.readFile(new URL('../assets/models/u2netp.onnx',import.meta.url))).digest('hex'),'8e83ca70e441ab06c318d82300c84806');
 });
 
 test("Hintergründe unterscheiden vorhandenes Video und eigenes Foto",()=>{

@@ -1,4 +1,5 @@
-import { PORTRAET_HINTERGRUENDE } from "./portraet-cover.mjs";
+import {AUDIO_MODI,auftragTonErsetzen} from "./audio.mjs";
+import { PORTRAET_HINTERGRUENDE, PORTRAET_SCHRIFTEN } from "./portraet-cover.mjs";
 // Telegram-Bot: Video, Fotos oder Text rein → Vorschau mit Logo, Untertiteln und
 // Caption zurück → per Knopfdruck sofort oder geplant über Postiz veröffentlichen.
 
@@ -406,6 +407,7 @@ async function menueInhalt(auftrag) {
         (hochkantMoeglich(auftrag) && kanaele.some((k) => config.hochkant.netze.includes(k.identifier))))) {
     optionen.push(knopf("📐 Videoformat ändern", auftrag, "videoformat"));
   }
+  if(art(auftrag)==="video"&&!auftrag.grafikAnimation&&auftrag.masse?.hatTon!==false)optionen.push(knopf("🎚️ Ton verbessern",auftrag,"audio"));
   for (const taste of optionen) zeilen.push([taste]);
   zeilen.push([knopf("🗃️ Entwurf archivieren", auftrag, "archiv"), knopf("🗑️ Entwurf verwerfen", auftrag, "verwerfen")]);
   return { text, reply_markup: { inline_keyboard: zeilen } };
@@ -462,7 +464,7 @@ async function thumbnailMenue(a) {
       [knopf("📷 Foto als Titelbild hochladen", a, "thumbbild")],
       ...(t ? [
         [knopf("✏️ Text im Titelbild ändern", a, "thumbtext")],
-        ...(t.modus==="portraet"?[[knopf("🏛️ Hintergrund wählen",a,"thumbhintergrund")],[knopf("👤 Anderes Porträt hochladen",a,"thumbportraetbild")]]:[]),
+        ...(t.modus==="portraet"?[[knopf("🏛️ Hintergrund wählen",a,"thumbhintergrund")],[knopf("👤 Anderes Porträt hochladen",a,"thumbportraetbild")],[knopf("🔤 Schrift wählen",a,"thumbschrift")]]:[]),
         ...(t.modus==="portraet"&&t.hintergrund==="video"?[[knopf("🎞️ Hintergrund-Bildzeit ändern",a,"thumbhinterzeit")]]:[]),
         [knopf("🔄 Titelbilder neu berechnen", a, "thumbneu")],
         [knopf(t.quer ? "🖥️ Zusätzliche Querdatei entfernen" : "🖥️ Querdatei zusätzlich erstellen", a, "thumbquer")],
@@ -720,7 +722,7 @@ async function neuesVideo(msg, video) {
   auftraege.aendern(auftrag.id, {
     art: "video", mitLogo: false, statusNachricht: status.message_id, dateiName: video.file_name ?? "video.mp4",
     bauchbinde: config.bauchbinde.standard ? standardBauchbinde() : null,
-    hochkant: config.hochkant.standard,
+    hochkant: config.hochkant.standard, audioTuning:config.video.audioModus,
   });
   einreihen(() => verarbeiten(auftrag.id, video.file_id));
 }
@@ -860,7 +862,7 @@ async function storyFassung(auftrag) {
   }
   const ziel = datei(auftrag, "story.mp4");
   await rendern({
-    eingabe: auftrag.original, ausgabe: ziel, ass, masse, layout, video: config.video,
+    eingabe: auftrag.original, ausgabe: ziel, ass, masse, layout, video: {...config.video,audioModus:auftrag.audioTuning??"original"},
     bauchbinde: auftrag.bauchbinde, story: !nativ,
   });
   return ziel;
@@ -936,7 +938,7 @@ async function renderUndVorschau(id, { gesichtNeu = false } = {}) {
     }
     const fertig = datei(auftrag, "fertig.mp4");
     await rendern({
-      eingabe: auftrag.original, ausgabe: fertig, ass, masse, layout, video: config.video,
+      eingabe: auftrag.original, ausgabe: fertig, ass, masse, layout, video: {...config.video,audioModus:auftrag.audioTuning??"original"},
       bauchbinde: auftrag.bauchbinde, quer: querAn(auftrag),
     });
     auftraege.aendern(id, { medien: [fertig], hochgeladen: null, videoFormatFehler: false }); // neues Video → neu hochladen
@@ -1266,6 +1268,17 @@ async function knopfGedrueckt(cq) {
   };
 
   switch (aktion) {
+    case "audio": {
+      if(art(auftrag)!=="video"||auftrag.grafikAnimation||auftrag.masse?.hatTon===false)return antwort("Für dieses Video ist keine Tonkorrektur verfügbar.",true);
+      if(!arg) {await zeigeMenue(auftrag,{text:"<b>Ton für dein Video</b>\nLautstärke ausgleichen oder Sprache behutsam verbessern: weniger tiefe Störgeräusche, leichtes Entrauschen und sanfter Lautstärkeausgleich. Die Bildspur wird dabei übernommen. Originalton lässt sich jederzeit wiederherstellen.",reply_markup:{inline_keyboard:[...Object.entries(AUDIO_MODI).map(([key,name])=>[knopf(`${(auftrag.audioTuning??"original")===key?"🔘":"⚪"} ${name}`,auftrag,`audio:${key}`)]),[knopf("↩️ Zur Vorschau",auftrag,"zurueck")]]}});return antwort();}
+      if(!Object.hasOwn(AUDIO_MODI,arg))return antwort("Ungültige Tonkorrektur.",true);
+      auftraege.aendern(id,{status:"arbeitet"});await antwort();await tg.senden(auftrag.chatId,"🎚️ Bereite die Tonspur neu auf …");
+      einreihen(async()=>{
+        try {const patch=await auftragTonErsetzen(auftrag,arg);auftraege.aendern(id,patch);await tg.senden(auftrag.chatId,"✅ Ton aktualisiert: "+AUDIO_MODI[arg]);}
+        catch(e) {console.error(e);await tg.senden(auftrag.chatId,"❌ Ton konnte nicht aktualisiert werden: "+html(e.message));}
+        await neuesMenue(auftraege.aendern(id,{status:"vorschau"}));
+      });return;
+    }
     case "videoformat":
       if (art(auftrag) !== "video" || auftrag.nurStory || auftrag.grafikAnimation) return antwort("Videoformate sind hier nicht verfügbar.", true);
       await zeigeMenue(auftrag, await videoFormatMenue(auftrag));
@@ -1279,14 +1292,20 @@ async function knopfGedrueckt(cq) {
       const datei=auftrag.thumbnail?.portraet??config.thumbnail.portraet;
       try {await fs.access(datei);} catch {
         auftraege.aendern(id,{wartetAuf:"thumbnailPortraet"});await antwort();
-        return tg.senden(auftrag.chatId,"Schick dein Porträt als JPG vor hellem, ruhigem Hintergrund oder als freigestelltes PNG (max. 12 MB). Danach kannst du Hintergrund und Titel ändern.");
+        return tg.senden(auftrag.chatId,"Schick dein Porträt als JPG oder als freigestelltes PNG (max. 12 MB). Danach kannst du Hintergrund und Titel ändern.");
       }
       auftraege.aendern(id,{wartetAuf:"thumbnailText",thumbnailTextModus:"portraet"});await antwort();
       return tg.senden(auftrag.chatId,"Überschrift für dein Porträt-Thumbnail schicken (max. 70 Zeichen). Optional zweite Zeile als Unterzeile. Danach kannst du den Hintergrund auswählen. Dein Video und der Beitragstext bleiben erhalten.");
     }
+    case "thumbschrift": {
+      if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
+      if(!arg) {await zeigeMenue(auftrag,{text:"<b>Schrift für dein Thumbnail</b>",reply_markup:{inline_keyboard:[...Object.entries(PORTRAET_SCHRIFTEN).map(([key,name])=>[knopf(`${(auftrag.thumbnail.schrift??config.thumbnail.schrift)===key?"🔘":"⚪"} ${name}`,auftrag,`thumbschrift:${key}`)]),[knopf("↩️ Zum Titelbild",auftrag,"thumb")]]}});return antwort();}
+      if(!Object.hasOwn(PORTRAET_SCHRIFTEN,arg))return antwort("Ungültige Schrift.",true);
+      await antwort();return thumbnailBauen(auftrag,{...auftrag.thumbnail,schrift:arg});
+    }
     case "thumbportraetbild":
       auftraege.aendern(id,{wartetAuf:"thumbnailPortraet"});await antwort();
-      return tg.senden(auftrag.chatId,"Schick ein Porträt vor hellem, ruhigem Hintergrund oder ein freigestelltes PNG (max. 12 MB).");
+      return tg.senden(auftrag.chatId,"Schick ein gut erkennbares Porträt oder ein freigestelltes PNG (max. 12 MB).");
     case "thumbhinterzeit":
       if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
       auftraege.aendern(id,{wartetAuf:"thumbnailHintergrundZeit"});await antwort();

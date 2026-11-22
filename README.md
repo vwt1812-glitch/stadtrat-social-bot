@@ -55,10 +55,11 @@ freigestellte Version unter `daten/vorlagen/portraet.png` ablegen; eigene Pfade 
 `THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen.
 Ein dauerhaft auswählbares Saalfoto liegt unter `daten/vorlagen/ratssaal.jpg` (alternativ
 `THUMBNAIL_RATSSAAL`). Die Auswahl „Sitzungssaal“ erscheint, sobald die Datei vorhanden ist. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
-Die Bilder gehören nicht ins Git-Repository. Die lokale Freistellung verwendet das bereits für die
-Gesichtssuche vorhandene Python mit OpenCV und funktioniert für ruhige, helle Studiohintergründe.
-Für andere Motive ein transparentes PNG verwenden. Die Farbpixel des Porträts bleiben unverändert;
-nur Transparenz und äußere Ränder werden angepasst. Es werden keine Bilder an eine Bild-KI übertragen.
+Die Bilder gehören nicht ins Git-Repository. Die lokale Freistellung verwendet U2Netp über das vorhandene Python mit OpenCV. Die Maske
+wird an den Originalkanten verfeinert; helle Hintergrundsäume werden bereinigt. Transparente PNGs
+werden direkt übernommen. Unter **Schrift wählen** stehen eine klassische Arial-ähnliche
+Schrift (Liberation Sans Bold, Standard) und Inter zur Auswahl. Die Schrift betrifft nur das
+Thumbnail. Modell und Schriften samt Lizenzen sind mitgeliefert; Bilder bleiben lokal.
 
 ### Entwürfe, Archiv und Quellen
 
@@ -394,3 +395,17 @@ Tests: `npm test`
 
 Kontrolle nach dem Posten, Mastodon direkt, Zählweise, Kanalauswahl per Name, Anfragenlimit und die
 Pi-Skripte stammen aus [eu-piraten-abstimmungen](https://github.com/vwt1812-glitch/eu-piraten-abstimmungen).
+
+## Tonkorrektur für Videos
+
+**Ton verbessern** im Videoentwurf bietet Originalton, reinen Lautstärkeausgleich und
+**Sprache behutsam verbessern**. Letzteres reduziert tiefe Störgeräusche und leichtes Rauschen,
+glättet die Dynamik sanft und normalisiert in zwei Durchgängen auf −16 LUFS bei höchstens
+−1,5 dBTP Zielspitze. Raumhall lässt sich mit dieser behutsamen Bearbeitung nur begrenzt mindern.
+
+Neue Videos verwenden standardmäßig die Sprachkorrektur (`AUDIO_TUNING=sprache`). Bestehende
+Entwürfe behalten ihre Einstellung, bis der Ton umgeschaltet wird. Umschalten übernimmt die
+vorhandene Bildspur und bearbeitet immer den Ton des Originals; wiederholte Korrekturen addieren
+sich nicht. Feed und Hochkantfassung werden gemeinsam aktualisiert. Bei Fehlern bleiben die
+bisherigen Dateien erhalten. Untertitel und Coverbilder bleiben erhalten; vorbereitete Uploads
+und Story-Teile werden neu aufgebaut. `AUDIO_TUNING=original` deaktiviert die Vorgabe.

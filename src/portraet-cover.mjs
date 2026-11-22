@@ -1,3 +1,4 @@
+import {readFileSync} from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,7 +13,7 @@ export const PORTRAET_HINTERGRUENDE = Object.freeze({
 
 export async function portraetFreistellen(eingabe, ordner, python) {
   const daten=await fs.readFile(eingabe),hash=createHash("sha256").update(daten).digest("hex").slice(0,16);
-  const ziel=path.join(ordner,`portraet-v1-${hash}.png`);
+  const ziel=path.join(ordner,`portraet-v2-${hash}.png`);
   try {await fs.access(ziel);return ziel;} catch {}
   // Bereits transparente PNGs brauchen weder OpenCV noch eine neue Segmentierung.
   if(daten.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))&&[4,6].includes(daten[25])) {
@@ -25,20 +26,28 @@ export async function portraetFreistellen(eingabe, ordner, python) {
   return ziel;
 }
 
-export function portraetTitel(text, quer=false) {
+export const PORTRAET_SCHRIFTEN=Object.freeze({klassisch:"Klassisch (Arial-ähnlich)",inter:"Inter"});
+const klassisch=JSON.parse(readFileSync(new URL("../assets/fonts/liberation-bold-metriken.json",import.meta.url)));
+export function portraetTextBreite(text,size,schrift="klassisch") {
+  if(schrift==="inter")return untertitelTextBreite(text,size);
+  return [...text].reduce((n,c)=>n+(klassisch.advances[c]??2*klassisch.unitsPerEm),0)*size/klassisch.unitsPerEm;
+}
+
+export function portraetTitel(text, quer=false,schrift="klassisch") {
   const breite=quer?850:940;
   for(const maxZeilen of [2,3])for(let size=maxZeilen===3?86:quer?102:106;size>=58;size-=4) {
     const zeilen=ausgewogeneZeilen(text,breite/(size*.56));
-    if(zeilen.length&&zeilen.length<=maxZeilen&&zeilen.every(z=>untertitelTextBreite(z,size)<=breite))return {size,zeilen};
+    if(zeilen.length&&zeilen.length<=maxZeilen&&zeilen.every(z=>portraetTextBreite(z,size,schrift)<=breite))return {size,zeilen};
   }
   throw Error("Bitte den Porträt-Titel kürzen, damit er groß und vollständig lesbar bleibt.");
 }
 
-export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt,hintergrund="orange",hintergrundBild,quer=false,unterzeile=""}) {
+export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt,hintergrund="orange",hintergrundBild,quer=false,unterzeile="",schrift="klassisch"}) {
   if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,hintergrund))throw Error("Unbekannter Porträt-Hintergrund.");
   const dir=path.dirname(ausgabe),w=quer?1920:1080,h=quer?1080:1920;
-  const titel=portraetTitel(inhalt.titel,quer),line=Math.round(titel.size*1.16),panelH=titel.zeilen.length*line+64;
-  await fs.copyFile(path.join(layout.schriftOrdner,"Inter-Bold.otf"),path.join(dir,"portraet-font.otf"));
+  if(!Object.hasOwn(PORTRAET_SCHRIFTEN,schrift))throw Error("Unbekannte Schrift.");
+  const titel=portraetTitel(inhalt.titel,quer,schrift),line=Math.round(titel.size*1.16),panelH=titel.zeilen.length*line+64;
+  await fs.copyFile(path.join(layout.schriftOrdner,schrift==="inter"?"Inter-Bold.otf":"LiberationSans-Bold.ttf"),path.join(dir,"portraet-font.otf"));
   const foto=await untersuche(hintergrund==="original"?portraet:freigestellt);
   const ph=quer?1050:1590,pw=Math.round(ph*foto.breite/foto.hoehe/2)*2;
   const px=quer?w-pw+60:Math.round((w-pw)/2)+45,py=quer?70:530;
@@ -79,7 +88,7 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
   const body=inhalt.beschreibung||unterzeile;
   if(body) {
     const size=quer?38:36,zeilen=ausgewogeneZeilen(body,quer?42:44);
-    if(zeilen.length>2||zeilen.some(z=>untertitelTextBreite(z,size)>w-100))throw Error("Bitte die Unterzeile kürzen.");
+    if(zeilen.length>2||zeilen.some(z=>portraetTextBreite(z,size,schrift)>w-100))throw Error("Bitte die Unterzeile kürzen.");
     const draw=[];
     for(const [i,z] of zeilen.entries()) {
       const name=`portraet-unten-${i}.txt`;await fs.writeFile(path.join(dir,name),z);

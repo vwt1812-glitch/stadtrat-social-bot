@@ -123,7 +123,7 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
       }
       eingabe = path.join(ausgabeDir, `${key}-grafik.jpg`);
       if(optionen.modus==="portraet") {
-        await portraetCover({ausgabe:eingabe,inhalt,layout,portraet,freigestellt,hintergrund:optionen.hintergrund??"orange",hintergrundBild,quer:profil.breite>profil.hoehe,unterzeile:vorlagen.unterzeile??""});
+        await portraetCover({ausgabe:eingabe,inhalt,layout,portraet,freigestellt,hintergrund:optionen.hintergrund??"orange",hintergrundBild,quer:profil.breite>profil.hoehe,unterzeile:vorlagen.unterzeile??"",schrift:optionen.schrift??vorlagen.schrift??"klassisch"});
       } else if (optionen.modus !== "text" && optionen.vorlage !== "grafik") {
         await fotoCover({ ausgabe: eingabe, inhalt, layout, bild, quer: profil.breite > profil.hoehe,
           gesichter: funde?.gesichter ?? [], textPosition: optionen.textPosition ?? "auto" });
