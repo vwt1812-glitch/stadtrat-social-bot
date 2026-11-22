@@ -8,7 +8,7 @@ import { ausgewogeneZeilen, logoFuerGrafik } from "./grafik-text.mjs";
 import { untertitelTextBreite } from "./untertitel.mjs";
 
 export const PORTRAET_HINTERGRUENDE = Object.freeze({
-  original: "Originalfoto", orange: "Anthrazit mit Orange", dunkel: "Anthrazit", ratssaal: "Sitzungssaal", video: "Stadtrat / Videobild", eigen: "Eigenes Foto",
+  original: "Originalfoto", orange: "Mit Akzentfarbe", dunkel: "Anthrazit", ratssaal: "Sitzungssaal", video: "Stadtrat / Videobild", eigen: "Eigenes Foto",
 });
 
 export async function portraetFreistellen(eingabe, ordner, python) {
@@ -26,17 +26,17 @@ export async function portraetFreistellen(eingabe, ordner, python) {
   return ziel;
 }
 
-export const PORTRAET_SCHRIFTEN=Object.freeze({politics:"PoliticsHead (Styleguide)",klassisch:"Klassisch (Arial-ähnlich)",inter:"Inter"});
+export const PORTRAET_SCHRIFTEN=Object.freeze({politics:"PoliticsHead (Großbuchstaben)",klassisch:"Klassisch (Arial-ähnlich)",inter:"Inter"});
 const klassisch=JSON.parse(readFileSync(new URL("../assets/fonts/liberation-bold-metriken.json",import.meta.url)));
 const politics=JSON.parse(readFileSync(new URL("../assets/fonts/politicshead-metriken.json",import.meta.url)));
 const bodyFont=JSON.parse(readFileSync(new URL("../assets/fonts/dejavu-condensed-metriken.json",import.meta.url)));
 const breiteMit=(text,size,m)=>[...text].reduce((n,c)=>n+(m.advances[c]??2*m.unitsPerEm),0)*size/m.unitsPerEm;
-export function portraetTextBreite(text,size,schrift="politics") {
+export function portraetTextBreite(text,size,schrift="inter") {
   if(schrift==="inter")return untertitelTextBreite(text,size);
   return breiteMit(schrift==="politics"?text.toLocaleUpperCase("de-DE"):text,size,schrift==="politics"?politics:klassisch);
 }
 
-export function portraetTitel(text, quer=false,schrift="politics") {
+export function portraetTitel(text, quer=false,schrift="inter") {
   const breite=quer?800:840;
   if(schrift==="politics")text=text.toLocaleUpperCase("de-DE");
   for(const maxZeilen of [2,3])for(let size=maxZeilen===3?82:quer?98:90;size>=58;size-=4) {
@@ -46,8 +46,10 @@ export function portraetTitel(text, quer=false,schrift="politics") {
   throw Error("Bitte den Porträt-Titel kürzen, damit er groß und vollständig lesbar bleibt.");
 }
 
-export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt,hintergrund="orange",hintergrundBild,quer=false,unterzeile="",schrift="politics"}) {
+export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt,hintergrund="dunkel",hintergrundBild,quer=false,unterzeile="",schrift="inter",akzentFarbe="#2563EB",grundFarbe="#1D1D1B"}) {
   if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,hintergrund))throw Error("Unbekannter Porträt-Hintergrund.");
+  if(![akzentFarbe,grundFarbe].every(f=>/^#[0-9a-f]{6}$/i.test(f)))throw Error("Thumbnail-Farben als #RRGGBB angeben.");
+  const akzentHex="0x"+akzentFarbe.slice(1),grundHex="0x"+grundFarbe.slice(1);
   const dir=path.dirname(ausgabe),w=quer?1920:1080,h=quer?1080:1920;
   if(!Object.hasOwn(PORTRAET_SCHRIFTEN,schrift))throw Error("Unbekannte Schrift.");
   const titel=portraetTitel(inhalt.titel,quer,schrift),line=Math.round(titel.size*1.12);
@@ -71,9 +73,9 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     const licht="(0.12+0.68*max(0,(Y/H-0.30)/0.70))";
     filter.push(`[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=${hintergrund==="ratssaal"?3:10}:1,hue=s=0,format=rgb24,geq=r='r(X,Y)*${licht}':g='g(X,Y)*${licht}':b='b(X,Y)*${licht}',setsar=1[grund]`);
   } else {
-    // Orange bleibt Markenakzent; die Logofläche ist neutral und kontrastreich.
-    const farbe=hintergrund==="original"?"0xE5E6E7":"0x1D1D1B";
-    const akzent=hintergrund==="orange"?`,drawbox=x=0:y=0:w=24:h=ih:color=0xF18616:t=fill,drawbox=x=0:y=ih-16:w=iw:h=16:color=0xF18616:t=fill`:"";
+    // Die optionale Akzentfarbe stammt aus der privaten Konfiguration.
+    const farbe=hintergrund==="original"?"0xE5E6E7":grundHex;
+    const akzent=hintergrund==="orange"?`,drawbox=x=0:y=0:w=24:h=ih:color=${akzentHex}:t=fill,drawbox=x=0:y=ih-16:w=iw:h=16:color=${akzentHex}:t=fill`:"";
     filter.push(`color=c=${farbe}:s=${w}x${h}:d=1${akzent}[grund]`);
   }
   args.push("-i",hintergrund==="original"?portraet:freigestellt);
@@ -90,7 +92,7 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
     label="marke";index++;
   }
   const zeichnen=[
-    `drawbox=x=0:y=${versatzY}:w=iw-${versatzX}:h=ih-${versatzY}:color=0xF18616:t=fill:replace=1`,
+    `drawbox=x=0:y=${versatzY}:w=iw-${versatzX}:h=ih-${versatzY}:color=${akzentHex}:t=fill:replace=1`,
     `drawbox=x=${versatzX}:y=0:w=iw-${versatzX}:h=ih-${versatzY}:color=black:t=fill:replace=1`,
   ];
   for(const [i,z] of titel.zeilen.entries()) {

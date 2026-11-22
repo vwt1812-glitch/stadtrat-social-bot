@@ -456,7 +456,7 @@ async function thumbnailMenue(a) {
   });
   return {
     text: "<b>Video-Titelbild</b>\n" + (t ? `Quelle: ${{ text: "Nur Text", frame: "Bild aus dem Video", bild: "Hochgeladenes Foto", portraet: "Porträt-Vorlage" }[t.modus] ?? html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` +
-      `Gestaltung: ${t.modus === "portraet" ? "Porträt mit schrägem Titelbalken · "+html(PORTRAET_HINTERGRUENDE[t.hintergrund??"orange"]??"Hintergrund") : t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Text"}\n` +
+      `Gestaltung: ${t.modus === "portraet" ? "Porträt mit schrägem Titelbalken · "+html(PORTRAET_HINTERGRUENDE[t.hintergrund??config.thumbnail.hintergrund]??"Hintergrund") : t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Text"}\n` +
       `Zusätzliche Querdatei zum Download: ${t.quer ? "ja" : "nein"}\n` : "Noch kein eigenes Titelbild.\n") +
       "Foto mit Text: Hochkant bleibt das Foto vollflächig; im Querformat stehen Bild und Text nebeneinander. Titelbildtext und Beitragstext werden getrennt bearbeitet. Die zusätzliche Querdatei dient nur dem Download und ändert das Videoformat nicht.\n" + infos.join("\n") +
       "\nJPEG-Ausgaben: höchstens 2 MiB. Kanäle ohne Cover-Unterstützung erhalten kein zusätzliches Feedbild. Shorts-Cover werden für Studio exportiert.",
@@ -1362,7 +1362,7 @@ async function knopfGedrueckt(cq) {
       if(!arg) {
         let hatRatssaal=false;try {await fs.access(config.thumbnail.ratssaal);hatRatssaal=true;}catch {}
         await zeigeMenue(auftrag,{text:"<b>Hintergrund wählen</b>\n„Stadtrat / Videobild“ verwendet ein Bild aus deinem Video, keinen erfundenen Sitzungssaal. Ein eigenes Hintergrundfoto kannst du hochladen.",reply_markup:{inline_keyboard:[
-          ...Object.entries(PORTRAET_HINTERGRUENDE).filter(([key])=>key!=="ratssaal"||hatRatssaal).map(([key,name])=>[knopf(`${(auftrag.thumbnail.hintergrund??"orange")===key?"🔘":"⚪"} ${name}`,auftrag,`thumbhintergrund:${key}`)]),
+          ...Object.entries(PORTRAET_HINTERGRUENDE).filter(([key])=>key!=="ratssaal"||hatRatssaal).map(([key,name])=>[knopf(`${(auftrag.thumbnail.hintergrund??config.thumbnail.hintergrund)===key?"🔘":"⚪"} ${name}`,auftrag,`thumbhintergrund:${key}`)]),
           [knopf("↩️ Zum Titelbild",auftrag,"thumb")]]}});return antwort();
       }
       if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,arg))return antwort("Ungültiger Hintergrund.",true);
@@ -1592,6 +1592,7 @@ async function knopfGedrueckt(cq) {
       });
       return antwort();
     case "logo":
+      if(!config.layout.logo&&(art(auftrag)==="video"?!videoMitLogo(auftrag):!auftrag.mitLogo))return antwort("Bitte zuerst ein eigenes Logo über LOGO in der privaten Konfiguration hinterlegen.",true);
       if (!["foto", "video"].includes(art(auftrag))) return antwort("Logo ist hier nicht umschaltbar.", true);
       if (auftrag.grafikModus) {
         auftrag = auftraege.aendern(id, { mitLogo: !auftrag.mitLogo, status: "arbeitet", plan: null,

@@ -74,6 +74,7 @@ export async function jpegProfil(eingabe, ausgabe, profil) {
 }
 
 export async function thumbnailsErstellen({ ordner, video, quelle = video, layout, optionen, kanaele, mastodonPatch = false, gesicht = null, vorlagen = {} }) {
+  if(optionen.modus==="portraet")optionen={...optionen,hintergrund:optionen.hintergrund??vorlagen.hintergrund??"dunkel",schrift:optionen.schrift??vorlagen.schrift??"inter",akzentFarbe:optionen.akzentFarbe??vorlagen.akzentFarbe??"#2563EB",grundFarbe:optionen.grundFarbe??vorlagen.grundFarbe??"#1D1D1B"};
   const masse = await untersuche(video);
   const stand = await videoStand(video);
   const ausgabeDir = path.join(ordner, `cover-${randomBytes(4).toString("hex")}`);
@@ -90,7 +91,7 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
     portraet=optionen.portraet??vorlagen.portraet;
     if(!portraet)throw Error("Bitte zuerst ein Porträt hochladen.");
     try {await fs.access(portraet);} catch {throw Error("Bitte zuerst ein Porträt hochladen.");}
-    const bg=optionen.hintergrund??"orange";
+    const bg=optionen.hintergrund??"dunkel";
     if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,bg))throw Error("Unbekannter Porträt-Hintergrund.");
     if(bg!=="original") {
       if(!optionen.portraet&&vorlagen.freigestellt)try {await fs.access(vorlagen.freigestellt);freigestellt=vorlagen.freigestellt;}catch {}
@@ -123,7 +124,7 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
       }
       eingabe = path.join(ausgabeDir, `${key}-grafik.jpg`);
       if(optionen.modus==="portraet") {
-        await portraetCover({ausgabe:eingabe,inhalt,layout,portraet,freigestellt,hintergrund:optionen.hintergrund??"orange",hintergrundBild,quer:profil.breite>profil.hoehe,unterzeile:vorlagen.unterzeile??"",schrift:optionen.schrift??vorlagen.schrift??"politics"});
+        await portraetCover({ausgabe:eingabe,inhalt,layout,portraet,freigestellt,hintergrund:optionen.hintergrund??"dunkel",hintergrundBild,quer:profil.breite>profil.hoehe,unterzeile:vorlagen.unterzeile??"",schrift:optionen.schrift??vorlagen.schrift??"inter",akzentFarbe:optionen.akzentFarbe,grundFarbe:optionen.grundFarbe});
       } else if (optionen.modus !== "text" && optionen.vorlage !== "grafik") {
         await fotoCover({ ausgabe: eingabe, inhalt, layout, bild, quer: profil.breite > profil.hoehe,
           gesichter: funde?.gesichter ?? [], textPosition: optionen.textPosition ?? "auto" });

@@ -18,7 +18,7 @@ test("Porträt-Titel bleibt vollständig und groß, auch mit Umlauten und Satzze
     assert.ok(fit.size>=58);
     assert.ok(fit.zeilen.every(z=>portraetTextBreite(z,fit.size,schrift)<=(quer?800:840)));
   }
-  assert.equal(portraetTitel("Größere Straße!").zeilen.join(" "),"GRÖSSERE STRASSE!");
+  assert.equal(portraetTitel("Größere Straße!",false,"politics").zeilen.join(" "),"GRÖSSERE STRASSE!");
   assert.throws(()=>portraetTitel("W".repeat(80)),/kürzen/);
 });
 
@@ -53,7 +53,7 @@ test("Weiche Porträttransparenz bleibt im fertigen Thumbnail erhalten",{skip:!f
   const dir=await fs.mkdtemp(path.join(os.tmpdir(),'portraet-weich-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));
   const bild=path.join(dir,'weich.png'),ziel=path.join(dir,'cover.jpg');
   await ausfuehren('ffmpeg',['-y','-v','error','-f','lavfi','-i','color=c=red@0.5:s=240x400,format=rgba','-frames:v','1',bild]);
-  await portraetCover({ausgabe:ziel,inhalt:{titel:'Test'},layout:{schriftOrdner:path.resolve('assets/fonts')},portraet:bild,freigestellt:bild,hintergrund:'dunkel'});
+  await portraetCover({ausgabe:ziel,inhalt:{titel:'Test'},layout:{schriftOrdner:path.resolve('assets/fonts')},portraet:bild,freigestellt:bild,hintergrund:'dunkel',akzentFarbe:'#F18616'});
   const pixel=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=2:2:600:800,scale=1:1','-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1'],{binaer:true});
   for(const [i,expected] of [142,15,14].entries())assert.ok(Math.abs(pixel[i]-expected)<5,`50% Alpha muss mit Anthrazit gemischt werden: ${[...pixel]}`);
   const banner=await ausfuehren('ffmpeg',['-v','error','-i',ziel,'-vf','crop=980:400:50:1280','-frames:v','1','-f','rawvideo','-pix_fmt','gray','pipe:1'],{binaer:true});
@@ -77,6 +77,7 @@ test("Porträt-Thumbnail rendert Hoch-/Querprofile und Raster, ohne Video oder P
   const layout={schriftOrdner:path.resolve("assets/fonts"),logo:path.resolve("assets/logos/quer-hell.png")};
   const optionen={modus:"portraet",text:"Mehr Transparenz\nÖffentliche Sitzungen",hintergrund:"video",frameMs:0};
   const c=await thumbnailsErstellen({ordner:dir,video,layout,optionen,kanaele:[{identifier:"instagram"},{identifier:"youtube"}],vorlagen:{portraet,freigestellt:portraet}});
+  assert.equal(c.schrift,"inter");assert.equal(c.akzentFarbe,"#2563EB");
   assert.equal(c.modus,"portraet");assert.equal(c.text,optionen.text);assert.deepEqual(c.hochgeladen,{});
   for(const [key,datei] of Object.entries(c.dateien)) {
     const p=key==="original"?originalProfil({breite:320,hoehe:180}):THUMBNAIL_PROFILE[key],m=await untersuche(datei);

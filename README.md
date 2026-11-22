@@ -1,5 +1,10 @@
 # Stadtrat Social-Media-Bot
 
+Neue Installationen haben **kein Standardlogo** und keine persönliche Unterzeile. Eigene Bilder,
+Logos und Texte werden ausschließlich lokal unter `daten/` und in der privaten `.env` eingerichtet.
+`assets/logos/` enthält optionale Partei-Beispiele aus der ursprünglichen Installation; sie werden
+nicht automatisch verwendet. Die öffentliche Beispielkonfiguration enthält keine Personendaten.
+
 Neue Beiträge starten **ohne Logo**; „Logo hinzufügen“ ist für Fotos, Videos, Storys,
 Sharepics und Animationen verfügbar.
 
@@ -38,16 +43,18 @@ Größenempfehlungen, harte Grenzen, unterstützte Provider und Patch-Anleitung:
 
 Im Videoentwurf unter **Video-Titelbild → Porträt-Thumbnail erstellen** eine Überschrift schicken
 (maximal 70 Zeichen). Eine zweite Zeile ist optional und ersetzt die voreingestellte Unterzeile.
-Die Vorlage kombiniert Porträt, transparentes Logo und einen schrägen schwarz-orangen Titelbalken.
+Die Vorlage kombiniert ein selbst hinterlegtes Porträt, ein optionales eigenes Logo und einen schrägen Titelbalken.
+Standard sind die neutrale Schrift Inter, ein dunkler Hintergrund, ein blauer Akzent und keine Unterzeile.
+Über `THUMBNAIL_SCHRIFT`, `THUMBNAIL_HINTERGRUND`, `THUMBNAIL_AKZENT_FARBE` und
+`THUMBNAIL_GRUND_FARBE` lassen sich Schrift und Farben an jedes eigene Erscheinungsbild anpassen.
 Der Titel ist linksbündig. Im Hochkantbild läuft der schwarze Kasten auch bei kurzen Titeln über
-die rechte Bildkante hinaus. Dahinter liegt ein eigenes, gleich großes orangefarbenes Rechteck,
-um 14 Pixel nach links und 18 Pixel nach unten versetzt. Seine Neigung entspricht der
-Referenzvorlage (etwa 8 Grad). Hintergrund, Porträt und Logo behalten dabei ihre Positionen.
-Orange bleibt Akzent auf neutralem Anthrazit. Foto-Hintergründe werden entsättigt und hinter
+die rechte Bildkante hinaus. Dahinter liegt ein eigenes, gleich großes Rechteck in der eingestellten Akzentfarbe,
+um 14 Pixel nach links und 18 Pixel nach unten versetzt. Seine Neigung beträgt etwa 8 Grad. Hintergrund, Porträt und Logo behalten dabei ihre Positionen.
+Die gewählte Farbe bleibt Akzent auf neutralem Hintergrund. Foto-Hintergründe werden entsättigt und hinter
 dem Logo sanft abgedunkelt; das Porträt behält seine Originalfarben.
 Hochkantcover und die benötigten Quercover werden getrennt gestaltet; das Video wird nicht neu gerendert.
 
-Unter **Hintergrund wählen** stehen Originalfoto, Anthrazit mit Orange, Anthrazit, ein hinterlegtes Sitzungssaalfoto, ein Videobild oder ein eigenes
+Unter **Hintergrund wählen** stehen Originalfoto, ein Hintergrund mit Akzentfarbe, Anthrazit, ein hinterlegtes Sitzungssaalfoto, ein Videobild oder ein eigenes
 Hintergrundfoto zur Auswahl. „Stadtrat / Videobild“ entnimmt ein Bild aus dem vorhandenen Originalvideo;
 es ist keine Aufnahme eines anderen oder erfundenen Sitzungssaals. Über **Hintergrund-Bildzeit ändern**
 lässt sich ein anderer Zeitpunkt wählen. Ein eigenes Foto aus dem Saal kann als Hintergrund hochgeladen werden.
@@ -59,7 +66,8 @@ freigestellte Version unter `daten/vorlagen/portraet.png` ablegen; eigene Pfade 
 `THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen.
 Ein dauerhaft auswählbares Saalfoto liegt unter `daten/vorlagen/ratssaal.jpg` (alternativ
 `THUMBNAIL_RATSSAAL`). Die Auswahl „Sitzungssaal“ erscheint, sobald die Datei vorhanden ist. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
-Die Bilder gehören nicht ins Git-Repository. Für die genaue Freistellung einmal `bash pi/portraet-einrichten.sh`
+Die Bilder gehören nicht ins Git-Repository. Auch Testexporte, private Konfigurationskopien
+und versehentlich im Repository-Hauptordner abgelegte Medien werden durch `.gitignore` ausgeschlossen. Für die genaue Freistellung einmal `bash pi/portraet-einrichten.sh`
 ausführen und `THUMBNAIL_PYTHON=.venv-portraet/bin/python` setzen. Das richtet eine separate Bildumgebung
 mit OpenCV und PyMatting ein und lädt IS-Net (ca. 171 MiB, geprüfte Prüfsumme) nach
 `daten/modelle/isnet-general-use.onnx`. Quelle: [IS-Net / DIS](https://github.com/xuebinqin/DIS),
@@ -70,9 +78,9 @@ der ursprüngliche helle Hintergrund keinen Saum bildet. Innen bleiben die Origi
 Der erste Start dauert durch die lokale Vorbereitung länger; weitere Aufrufe verwenden den Cache.
 Alte Freistellungen werden nicht wiederverwendet. Eine manuell hinterlegte Standard-PNG dagegen bewusst
 ersetzen oder entfernen, damit der Bot sie neu erzeugt. Transparente PNGs
-werden direkt übernommen. Unter **Schrift wählen** stehen PoliticsHead Bold (Standard, Überschriften in Großbuchstaben),
-Liberation Sans Bold und Inter zur Auswahl. Unterzeilen verwenden DejaVu Sans Condensed,
-die freie Alternative zur DejaRip aus dem Styleguide. Der Titel hat großzügige Innenabstände. Die Schrift betrifft nur das
+werden direkt übernommen. Unter **Schrift wählen** stehen Inter (Standard), Liberation Sans Bold und
+optional PoliticsHead Bold für Überschriften in Großbuchstaben zur Auswahl. Die mitgelieferten
+Schriften haben ihre jeweiligen Lizenzen und Herkunftshinweise. Unterzeilen verwenden DejaVu Sans Condensed. Der Titel hat großzügige Innenabstände. Die Schrift betrifft nur das
 Thumbnail. Das kleine Modell und die Schriften samt Lizenzen sind mitgeliefert; Bilder bleiben lokal.
 
 ### Entwürfe, Archiv und Quellen
@@ -126,7 +134,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🪪 Bauchbinde | nur Video: Name und Funktion am Anfang einblenden – Standard aus `BAUCHBINDE_NAME`/`_FUNKTION` oder ein anderer Name, z. B. für Gäste |
 | 📝 Untertitel | nur Video: schickt alle Untertitel als nummerierte Liste. Kopieren, Fehler ändern, zurückschicken – geändert wird genau der Untertitel mit dieser Nummer, die Zeit bleibt (auch nur einzelne Zeilen wie `4 Ob das klappt?`; `4 -` löscht). `falsch => richtig` ohne Nummer ersetzt überall, alternativ eine .srt-Datei. Das Video wird danach neu gebaut |
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
-| 👤 Kunde | Postiz-Kunde wählen, z. B. „Lukas Küffner“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
+| 👤 Kunde | Postiz-Kunde wählen, z. B. „Beispielkunde“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
 | 📺 Kanäle | Kanäle des gewählten Kunden an-/abwählen |
 | ✂️ Pro Kanal | eigener Text je Kanal (siehe unten) |
 | 🤝 Collab | Instagram-Collab-Partner (bis zu 3), z. B. `@piraten_nuernberg` – erscheint, wenn ein Instagram-Kanal gewählt ist |
@@ -141,7 +149,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 ### Texte pro Kanal
 
 Der Vorschlag ist der **Haupttext**; er gilt für alle Kanäle ohne eigene Fassung. Unter **✂️ Pro Kanal** steht jeder
-gewählte Kanal mit seiner Zeichenzahl, z. B. `⚠️ X Lukas · 372/280`. Dort kannst du
+gewählte Kanal mit seiner Zeichenzahl, z. B. `⚠️ X-Konto · 372/280`. Dort kannst du
 
 - **🤖 Alle per KI anpassen** – eine eigene Fassung je Netzwerk, passend zu Länge und Ton (X kurz und pointiert,
   LinkedIn sachlich, Instagram persönlich …). Mehrere Konten desselben Netzwerks bekommen denselben Text.
