@@ -1,3 +1,4 @@
+import {hintergrundSammlung} from "../../src/hintergrund-sammlung.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,7 +10,9 @@ import {Postiz} from "../../src/postiz.mjs";
 import * as video from "../../src/video.mjs";
 import * as thumbnail from "../../src/thumbnail.mjs";
 const [dir,modus]=process.argv.slice(2),portrait=path.join(dir,"vorlage.png");fs.writeFileSync(portrait,"Privates Porträt");
-Object.assign(process.env,{DATEN_DIR:dir,TELEGRAM_BOT_TOKEN:"test",ERLAUBTE_NUTZER:"123",POSTIZ_URL:"https://postiz.invalid",POSTIZ_API_KEY:"test",WHISPER_MODELL:"test",CAPTION_ANBIETER:"",ANTHROPIC_API_KEY:"",OPENAI_API_KEY:"",MASTODON_TOKEN:"",THUMBNAIL_RATSSAAL:modus==="ohne-saal"?path.join(dir,"fehlt.jpg"):portrait,THUMBNAIL_PORTRAET:portrait});
+const sammlung=path.join(dir,"hintergruende");
+if(modus==="mit-sammlung"){fs.mkdirSync(sammlung);for(let i=1;i<=10;i++)fs.writeFileSync(path.join(sammlung,`${String(i).padStart(2,"0")}_Hintergrund_${i}.jpg`),"Privates Motiv");}
+Object.assign(process.env,{THUMBNAIL_HINTERGRUENDE:sammlung,DATEN_DIR:dir,TELEGRAM_BOT_TOKEN:"test",ERLAUBTE_NUTZER:"123",POSTIZ_URL:"https://postiz.invalid",POSTIZ_API_KEY:"test",WHISPER_MODELL:"test",CAPTION_ANBIETER:"",ANTHROPIC_API_KEY:"",OPENAI_API_KEY:"",MASTODON_TOKEN:"",THUMBNAIL_RATSSAAL:modus==="ohne-saal"?path.join(dir,"fehlt.jpg"):portrait,THUMBNAIL_PORTRAET:portrait});
 const s=new Auftraege(dir),a=s.neu(123),original=path.join(a.ordner,"original.mp4");fs.writeFileSync(original,"Originalvideo");
 s.aendern(a.id,{art:"video",status:"vorschau",caption:"Beitrag bleibt",original,medien:[original],masse:{breite:1920,hoehe:1080,dauer:5},kanaele:["ig"],menueNachricht:1});
 const stand=()=>JSON.parse(fs.readFileSync(path.join(dir,"auftraege.json")))[a.id];
@@ -43,8 +46,15 @@ mock.method(Telegram.prototype,"aufruf",async(method,payload)=>{
     if(step===8&&b.status==="vorschau"&&renders.length===4){assert.equal(fs.readFileSync(b.thumbnail.portraet,"utf8"),"Neues Porträt");step++;return callback("thumbhintergrund:dunkel");}
     if(step===9&&b.status==="vorschau"&&renders.length===5){
       assert.equal(b.thumbnail.hintergrund,"eigen");assert.equal(b.caption,"Beitrag bleibt");assert.equal(fs.readFileSync(original,"utf8"),"Originalvideo");
-      assert.equal(b.thumbnail.text,"Mehr Transparenz\nÖffentlich erklären");process.exit(0);
+      assert.equal(b.thumbnail.text,"Mehr Transparenz\nÖffentlich erklären");
+      if(modus!=="mit-sammlung")process.exit(0);
+      step++;return callback("thumbhintergrund");
     }
+    if(step===10&&buttons.some(x=>x.includes("Gespeicherte Hintergründe"))){step++;return callback("thumbhintergrund:sammlung");}
+    if(step===11&&menus.some(x=>x.includes("Seite 1/2"))){step++;return callback("thumbsammlung:1");}
+    if(step===12&&menus.some(x=>x.includes("Seite 2/2"))){step++;return callback("thumbmotiv:"+(await hintergrundSammlung(sammlung))[9].id);}
+    if(step===13&&b.status==="vorschau"&&renders.length===6){assert.equal(b.thumbnail.hintergrund,"sammlung");assert.equal(b.thumbnail.hintergrundName,"Hintergrund 10");step++;return callback("thumbmotiv:../fremd");}
+    if(step===14&&menus.some(x=>x.includes("Motiv nicht mehr verfügbar"))){assert.equal(renders.length,6);assert.equal(b.thumbnail.hintergrundName,"Hintergrund 10");assert.equal(b.caption,"Beitrag bleibt");process.exit(0);}
   }
 });
 setTimeout(()=>{console.error("Porträtworkflow hängt",step,stand());process.exit(1);},18000).unref();

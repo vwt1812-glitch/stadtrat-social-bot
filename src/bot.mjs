@@ -1,3 +1,4 @@
+import {hintergrundSammlung,hintergrundMotiv,hintergrundSeite} from "./hintergrund-sammlung.mjs";
 import {versandBedarf,versandVideo,versandQuellen} from "./versand-video.mjs";
 import {postizDiagnose,kanalVorpruefung,DIAGNOSE_TEXTE} from "./postiz-diagnose.mjs";
 import {AUDIO_MODI,AUDIO_VERSION,auftragTonErsetzen} from "./audio.mjs";
@@ -456,7 +457,7 @@ async function thumbnailMenue(a) {
   });
   return {
     text: "<b>Video-Titelbild</b>\n" + (t ? `Quelle: ${{ text: "Nur Text", frame: "Bild aus dem Video", bild: "Hochgeladenes Foto", portraet: "Porträt-Vorlage" }[t.modus] ?? html(t.modus)}${t.frameMs != null ? ` bei ${t.frameMs / 1000} s` : ""}\n` +
-      `Gestaltung: ${t.modus === "portraet" ? "Porträt mit schrägem Titelbalken · "+html(PORTRAET_HINTERGRUENDE[t.hintergrund??config.thumbnail.hintergrund]??"Hintergrund") : t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Text"}\n` +
+      `Gestaltung: ${t.modus === "portraet" ? "Porträt mit schrägem Titelbalken · "+html(t.hintergrund==="sammlung"?t.hintergrundName??"Gespeicherter Hintergrund":PORTRAET_HINTERGRUENDE[t.hintergrund??config.thumbnail.hintergrund]??"Hintergrund") : t.modus === "text" ? "Textgrafik" : !t.mitText ? "Bild ohne zusätzlichen Text" : t.vorlage === "grafik" ? "Textgrafik auf dem Bild" : "Foto mit Text"}\n` +
       `Zusätzliche Querdatei zum Download: ${t.quer ? "ja" : "nein"}\n` : "Noch kein eigenes Titelbild.\n") +
       "Foto mit Text: Hochkant bleibt das Foto vollflächig; im Querformat stehen Bild und Text nebeneinander. Titelbildtext und Beitragstext werden getrennt bearbeitet. Die zusätzliche Querdatei dient nur dem Download und ändert das Videoformat nicht.\n" + infos.join("\n") +
       "\nJPEG-Ausgaben: höchstens 2 MiB. Kanäle ohne Cover-Unterstützung erhalten kein zusätzliches Feedbild. Shorts-Cover werden für Studio exportiert.",
@@ -480,6 +481,17 @@ async function thumbnailMenue(a) {
       [knopf("↩️ Zur Vorschau", a, "zurueck")],
     ] },
   };
+}
+
+async function hintergrundSammlungMenue(a,seite=0) {
+  const alle=await hintergrundSammlung(config.thumbnail.hintergruende),page=hintergrundSeite(alle,seite);
+  const zeilen=page.bilder.map(b=>[knopf(`${a.thumbnail?.hintergrund==="sammlung"&&a.thumbnail.hintergrundVorlage===b.id?"🔘":"⚪"} ${b.name}`,a,`thumbmotiv:${b.id}`)]);
+  const navigation=[];
+  if(page.seite>0)navigation.push(knopf("←",a,`thumbsammlung:${page.seite-1}`));
+  if(page.seite+1<page.seiten)navigation.push(knopf("→",a,`thumbsammlung:${page.seite+1}`));
+  if(navigation.length)zeilen.push(navigation);
+  zeilen.push([knopf("↩️ Zu den Hintergründen",a,"thumbhintergrund")]);
+  await zeigeMenue(a,{text:`<b>Gespeicherte Hintergründe</b>\n${alle.length} eigene Motive · Seite ${page.seite+1}/${page.seiten}\nMotiv wählen – danach kommt die fertige Titelbild-Vorschau.`,reply_markup:{inline_keyboard:zeilen}});
 }
 
 async function thumbnailBauen(a, optionen) {
@@ -1357,15 +1369,25 @@ async function knopfGedrueckt(cq) {
       if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
       auftraege.aendern(id,{wartetAuf:"thumbnailHintergrundZeit"});await antwort();
       return tg.senden(auftrag.chatId,"Zeitpunkt für das Hintergrundbild schicken, als Sekunden oder MM:SS. Es wird ein Bild aus deinem Originalvideo verwendet.");
+    case "thumbsammlung":
+      if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
+      await antwort();return hintergrundSammlungMenue(auftrag,Number(arg));
+    case "thumbmotiv": {
+      if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
+      let motiv;try{motiv=await hintergrundMotiv(config.thumbnail.hintergruende,arg);}catch{return antwort("Motiv nicht mehr verfügbar. Bitte die Hintergrundauswahl neu öffnen.",true);}
+      await antwort();return thumbnailBauen(auftrag,{...auftrag.thumbnail,hintergrund:"sammlung",hintergrundVorlage:motiv.id,hintergrundName:motiv.name});
+    }
     case "thumbhintergrund": {
       if(auftrag.thumbnail?.modus!=="portraet")return antwort("Bitte zuerst ein Porträt-Thumbnail erstellen.");
       if(!arg) {
+        const motive=await hintergrundSammlung(config.thumbnail.hintergruende);
         let hatRatssaal=false;try {await fs.access(config.thumbnail.ratssaal);hatRatssaal=true;}catch {}
         await zeigeMenue(auftrag,{text:"<b>Hintergrund wählen</b>\n„Stadtrat / Videobild“ verwendet ein Bild aus deinem Video, keinen erfundenen Sitzungssaal. Ein eigenes Hintergrundfoto kannst du hochladen.",reply_markup:{inline_keyboard:[
-          ...Object.entries(PORTRAET_HINTERGRUENDE).filter(([key])=>key!=="ratssaal"||hatRatssaal).map(([key,name])=>[knopf(`${(auftrag.thumbnail.hintergrund??config.thumbnail.hintergrund)===key?"🔘":"⚪"} ${name}`,auftrag,`thumbhintergrund:${key}`)]),
+          ...Object.entries(PORTRAET_HINTERGRUENDE).filter(([key])=>(key!=="ratssaal"||hatRatssaal)&&(key!=="sammlung"||motive.length)).map(([key,name])=>[knopf(`${(auftrag.thumbnail.hintergrund??config.thumbnail.hintergrund)===key?"🔘":"⚪"} ${name}`,auftrag,`thumbhintergrund:${key}`)]),
           [knopf("↩️ Zum Titelbild",auftrag,"thumb")]]}});return antwort();
       }
       if(!Object.hasOwn(PORTRAET_HINTERGRUENDE,arg))return antwort("Ungültiger Hintergrund.",true);
+      if(arg==="sammlung") {await antwort();return hintergrundSammlungMenue(auftrag);}
       if(arg==="eigen") {auftraege.aendern(id,{wartetAuf:"thumbnailHintergrund"});await antwort();return tg.senden(auftrag.chatId,"Schick ein Hintergrundfoto als JPG oder PNG (max. 12 MB), zum Beispiel aus dem Sitzungssaal.");}
       await antwort();return thumbnailBauen(auftrag,{...auftrag.thumbnail,hintergrund:arg});
     }

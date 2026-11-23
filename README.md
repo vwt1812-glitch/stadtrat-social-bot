@@ -65,7 +65,13 @@ Für die Standardvorlage das private Original unter `daten/vorlagen/portraet.jpg
 freigestellte Version unter `daten/vorlagen/portraet.png` ablegen; eigene Pfade lassen sich über
 `THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen.
 Ein dauerhaft auswählbares Saalfoto liegt unter `daten/vorlagen/ratssaal.jpg` (alternativ
-`THUMBNAIL_RATSSAAL`). Die Auswahl „Sitzungssaal“ erscheint, sobald die Datei vorhanden ist. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
+`THUMBNAIL_RATSSAAL`). Die Auswahl „Sitzungssaal“ erscheint, sobald die Datei vorhanden ist.
+Für mehrere Motive eigene JPG-, PNG- oder WebP-Dateien direkt in `daten/vorlagen/hintergruende/`
+ablegen (anderer Ordner über `THUMBNAIL_HINTERGRUENDE`). Dann erscheint unter **Hintergrund wählen →
+Gespeicherte Hintergründe** eine Auswahl mit acht Motiven pro Seite. Dateinamen werden als lesbare
+Bezeichnungen angezeigt; ein führender Nummernpräfix wird ausgeblendet. Bilder und deren Namen
+werden ausschließlich aus dem privaten Ordner geladen. Fehlt ein gewähltes Motiv später, bleibt
+das bisherige Titelbild erhalten und der Bot fordert eine neue Auswahl an. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
 Die Bilder gehören nicht ins Git-Repository. Auch Testexporte, private Konfigurationskopien
 und versehentlich im Repository-Hauptordner abgelegte Medien werden durch `.gitignore` ausgeschlossen. Für die genaue Freistellung einmal `bash pi/portraet-einrichten.sh`
 ausführen und `THUMBNAIL_PYTHON=.venv-portraet/bin/python` setzen. Das richtet eine separate Bildumgebung

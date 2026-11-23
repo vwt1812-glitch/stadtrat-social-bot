@@ -1,3 +1,4 @@
+import {hintergrundMotiv} from "./hintergrund-sammlung.mjs";
 import { portraetCover, portraetFreistellen, PORTRAET_HINTERGRUENDE } from "./portraet-cover.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -101,6 +102,9 @@ export async function thumbnailsErstellen({ ordner, video, quelle = video, layou
       const ms=frameZeit(String((optionen.frameMs??0)/1000),masse.dauer);
       hintergrundBild=path.join(ausgabeDir,"hintergrund.jpg");
       await ausfuehren("ffmpeg",["-y","-v","error","-ss",String(ms/1000),"-i",quelle,"-frames:v","1","-q:v","2",hintergrundBild]);
+    } else if(bg==="sammlung") {
+      const motiv=await hintergrundMotiv(vorlagen.hintergruende,optionen.hintergrundVorlage);
+      hintergrundBild=motiv.datei;optionen={...optionen,hintergrundName:motiv.name};
     } else if(bg==="eigen")hintergrundBild=optionen.hintergrundBild;
     else if(bg==="ratssaal") {
       hintergrundBild=vorlagen.ratssaal;

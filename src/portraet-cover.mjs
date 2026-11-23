@@ -8,7 +8,7 @@ import { ausgewogeneZeilen, logoFuerGrafik } from "./grafik-text.mjs";
 import { untertitelTextBreite } from "./untertitel.mjs";
 
 export const PORTRAET_HINTERGRUENDE = Object.freeze({
-  original: "Originalfoto", orange: "Mit Akzentfarbe", dunkel: "Anthrazit", ratssaal: "Sitzungssaal", video: "Stadtrat / Videobild", eigen: "Eigenes Foto",
+  original: "Originalfoto", orange: "Mit Akzentfarbe", dunkel: "Anthrazit", ratssaal: "Sitzungssaal", video: "Stadtrat / Videobild", eigen: "Eigenes Foto", sammlung: "Gespeicherte Hintergründe",
 });
 
 export async function portraetFreistellen(eingabe, ordner, python) {
@@ -67,11 +67,11 @@ export async function portraetCover({ausgabe,inhalt,layout,portraet,freigestellt
   const args=["-y","-v","error"];
   const filter=[];
   let index=0;
-  if(["video","eigen","ratssaal"].includes(hintergrund)) {
+  if(["video","eigen","ratssaal","sammlung"].includes(hintergrund)) {
     if(!hintergrundBild)throw Error("Bitte zuerst ein Hintergrundfoto auswählen.");
     args.push("-i",hintergrundBild);index++;
     const licht="(0.12+0.68*max(0,(Y/H-0.30)/0.70))";
-    filter.push(`[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=${hintergrund==="ratssaal"?3:10}:1,hue=s=0,format=rgb24,geq=r='r(X,Y)*${licht}':g='g(X,Y)*${licht}':b='b(X,Y)*${licht}',setsar=1[grund]`);
+    filter.push(`[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},boxblur=${["ratssaal","sammlung"].includes(hintergrund)?3:10}:1,hue=s=0,format=rgb24,geq=r='r(X,Y)*${licht}':g='g(X,Y)*${licht}':b='b(X,Y)*${licht}',setsar=1[grund]`);
   } else {
     // Die optionale Akzentfarbe stammt aus der privaten Konfiguration.
     const farbe=hintergrund==="original"?"0xE5E6E7":grundHex;

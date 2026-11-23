@@ -84,6 +84,7 @@ export function ladeConfig() {
       hintergrund: env("THUMBNAIL_HINTERGRUND", "dunkel"),
       akzentFarbe: env("THUMBNAIL_AKZENT_FARBE", "#2563EB"),
       grundFarbe: env("THUMBNAIL_GRUND_FARBE", "#1D1D1B"),
+      hintergruende: pfad(env("THUMBNAIL_HINTERGRUENDE", "daten/vorlagen/hintergruende")),
       ratssaal: pfad(env("THUMBNAIL_RATSSAAL", "daten/vorlagen/ratssaal.jpg")),
       portraet: pfad(env("THUMBNAIL_PORTRAET", "daten/vorlagen/portraet.jpg")),
       freigestellt: pfad(env("THUMBNAIL_FREIGESTELLT", "daten/vorlagen/portraet.png")),
