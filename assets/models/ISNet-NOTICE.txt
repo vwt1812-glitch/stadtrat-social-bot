@@ -1,0 +1,9 @@
+IS-Net / DIS by Xuebin Qin et al. (Apache-2.0): https://github.com/xuebinqin/DIS
+Optional isnet-general-use.onnx conversion distributed by rembg:
+https://github.com/danielgatis/rembg/releases/tag/v0.0.0
+Downloaded locally by src/portraet-modell-laden.py; not stored in this repository.
+MD5: fc16ebd8b0c10d971d3513d564d01e29
+
+Soft alpha and foreground colour estimation uses PyMatting (MIT):
+https://github.com/pymatting/pymatting
+The installed Python package includes its license.

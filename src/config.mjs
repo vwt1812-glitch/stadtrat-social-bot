@@ -36,15 +36,15 @@ function captionConfig() {
     openaiUrl: env("OPENAI_BASE_URL"),
     modell: env("CAPTION_MODELL", anbieter === "openai" ? "gpt-5.5" : "claude-opus-5-5"),
     stil: env("CAPTION_STIL", ""),
-    hashtags: env("CAPTION_HASHTAGS", "#Nürnberg #Stadtrat"),
+    hashtags: env("CAPTION_HASHTAGS", "#Stadtrat"),
   };
 }
 
 /** Logo-Datei; die frühere Vorgabe assets/logo.png gibt es nicht mehr. */
 function logoPfad() {
-  const wert = env("LOGO", "assets/logos/quer-dunkel.png");
+  const wert = env("LOGO", "");
   if (/(^|\/)assets\/logo\.png$/.test(wert)) return pfad("assets/logos/quer-dunkel.png");
-  return pfad(wert);
+  return wert ? pfad(wert) : null;
 }
 
 export function ladeConfig() {
@@ -66,6 +66,7 @@ export function ladeConfig() {
       maxAnfragen: Number(env("POSTIZ_MAX_ANFRAGEN", "28")),
       einstellungen: pfad(env("KANAL_EINSTELLUNGEN", "kanaele.json")),
       // Nur nach Installation des dokumentierten Postiz-Patches einschalten.
+      diagnoseContainer: env("POSTIZ_DIAGNOSE_CONTAINER", ""),
       mastodonThumbnails: env("POSTIZ_MASTODON_THUMBNAILS", "nein") === "ja",
     },
     whisper: {
@@ -77,6 +78,18 @@ export function ladeConfig() {
     glossar: pfad(env("GLOSSAR", "glossar.txt")),
     // Python mit OpenCV für die Gesichtssuche (pi/install.sh legt es an); fehlt es, bleibt die Suche aus
     gesicht: { python: pfad(env("GESICHT_PYTHON", ".venv/bin/python")) },
+    thumbnail: {
+      python: pfad(env("THUMBNAIL_PYTHON", env("GESICHT_PYTHON", ".venv/bin/python"))),
+      schrift: env("THUMBNAIL_SCHRIFT", "inter"),
+      hintergrund: env("THUMBNAIL_HINTERGRUND", "dunkel"),
+      akzentFarbe: env("THUMBNAIL_AKZENT_FARBE", "#2563EB"),
+      grundFarbe: env("THUMBNAIL_GRUND_FARBE", "#1D1D1B"),
+      hintergruende: pfad(env("THUMBNAIL_HINTERGRUENDE", "daten/vorlagen/hintergruende")),
+      ratssaal: pfad(env("THUMBNAIL_RATSSAAL", "daten/vorlagen/ratssaal.jpg")),
+      portraet: pfad(env("THUMBNAIL_PORTRAET", "daten/vorlagen/portraet.jpg")),
+      freigestellt: pfad(env("THUMBNAIL_FREIGESTELLT", "daten/vorlagen/portraet.png")),
+      unterzeile: env("THUMBNAIL_UNTERZEILE", ""),
+    },
     layout: {
       logo: logoPfad(),
       logoPosition: env("LOGO_POSITION", "oben-links"),
@@ -112,6 +125,7 @@ export function ladeConfig() {
       standard: env("BAUCHBINDE_STANDARD", "nein") === "ja",
     },
     video: {
+      audioModus: env("AUDIO_TUNING", "sprache"),
       encoder: env("VIDEO_ENCODER", "libx264"),
       preset: env("VIDEO_PRESET", "veryfast"),
       crf: env("VIDEO_CRF", "21"),
