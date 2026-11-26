@@ -1,0 +1,3 @@
+opencv-python-headless>=4.10,<5
+pymatting==1.1.16
+Pillow>=11,<14

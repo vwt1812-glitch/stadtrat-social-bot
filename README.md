@@ -1,5 +1,10 @@
 # Stadtrat Social-Media-Bot
 
+Neue Installationen haben **kein Standardlogo** und keine persönliche Unterzeile. Eigene Bilder,
+Logos und Texte werden ausschließlich lokal unter `daten/` und in der privaten `.env` eingerichtet.
+`assets/logos/` enthält optionale Partei-Beispiele aus der ursprünglichen Installation; sie werden
+nicht automatisch verwendet. Die öffentliche Beispielkonfiguration enthält keine Personendaten.
+
 Neue Beiträge starten **ohne Logo**; „Logo hinzufügen“ ist für Fotos, Videos, Storys,
 Sharepics und Animationen verfügbar.
 
@@ -33,6 +38,56 @@ Facebook, X und Bluesky erhalten vorerst ebenfalls nur Cover zum manuellen Verwe
 gesetzten Thumbnails. Shorts-Cover werden für Studio exportiert, nicht ungeprüft automatisch gesetzt.
 
 Größenempfehlungen, harte Grenzen, unterstützte Provider und Patch-Anleitung: [docs/THUMBNAILS.md](docs/THUMBNAILS.md).
+
+#### Porträt-Thumbnails mit auswählbarem Hintergrund
+
+Im Videoentwurf unter **Video-Titelbild → Porträt-Thumbnail erstellen** eine Überschrift schicken
+(maximal 70 Zeichen). Eine zweite Zeile ist optional und ersetzt die voreingestellte Unterzeile.
+Die Vorlage kombiniert ein selbst hinterlegtes Porträt, ein optionales eigenes Logo und einen schrägen Titelbalken.
+Standard sind die neutrale Schrift Inter, ein dunkler Hintergrund, ein blauer Akzent und keine Unterzeile.
+Über `THUMBNAIL_SCHRIFT`, `THUMBNAIL_HINTERGRUND`, `THUMBNAIL_AKZENT_FARBE` und
+`THUMBNAIL_GRUND_FARBE` lassen sich Schrift und Farben an jedes eigene Erscheinungsbild anpassen.
+Der Titel ist linksbündig. Im Hochkantbild läuft der schwarze Kasten auch bei kurzen Titeln über
+die rechte Bildkante hinaus. Dahinter liegt ein eigenes, gleich großes Rechteck in der eingestellten Akzentfarbe,
+um 14 Pixel nach links und 18 Pixel nach unten versetzt. Seine Neigung beträgt etwa 8 Grad. Hintergrund, Porträt und Logo behalten dabei ihre Positionen.
+Die gewählte Farbe bleibt Akzent auf neutralem Hintergrund. Foto-Hintergründe werden entsättigt und hinter
+dem Logo sanft abgedunkelt; das Porträt behält seine Originalfarben.
+Hochkantcover und die benötigten Quercover werden getrennt gestaltet; das Video wird nicht neu gerendert.
+
+Unter **Hintergrund wählen** stehen Originalfoto, ein Hintergrund mit Akzentfarbe, Anthrazit, ein hinterlegtes Sitzungssaalfoto, ein Videobild oder ein eigenes
+Hintergrundfoto zur Auswahl. „Stadtrat / Videobild“ entnimmt ein Bild aus dem vorhandenen Originalvideo;
+es ist keine Aufnahme eines anderen oder erfundenen Sitzungssaals. Über **Hintergrund-Bildzeit ändern**
+lässt sich ein anderer Zeitpunkt wählen. Ein eigenes Foto aus dem Saal kann als Hintergrund hochgeladen werden.
+**Anderes Porträt hochladen** ersetzt das Motiv nur für diesen Entwurf. Text und Hintergründe bleiben
+weiter bearbeitbar. Misslingt eine Änderung, bleibt das vorherige Titelbild erhalten.
+
+Für die Standardvorlage das private Original unter `daten/vorlagen/portraet.jpg` und optional eine
+freigestellte Version unter `daten/vorlagen/portraet.png` ablegen; eigene Pfade lassen sich über
+`THUMBNAIL_PORTRAET` und `THUMBNAIL_FREIGESTELLT` einstellen.
+Ein dauerhaft auswählbares Saalfoto liegt unter `daten/vorlagen/ratssaal.jpg` (alternativ
+`THUMBNAIL_RATSSAAL`). Die Auswahl „Sitzungssaal“ erscheint, sobald die Datei vorhanden ist.
+Für mehrere Motive eigene JPG-, PNG- oder WebP-Dateien direkt in `daten/vorlagen/hintergruende/`
+ablegen (anderer Ordner über `THUMBNAIL_HINTERGRUENDE`). Dann erscheint unter **Hintergrund wählen →
+Gespeicherte Hintergründe** eine Auswahl mit acht Motiven pro Seite. Dateinamen werden als lesbare
+Bezeichnungen angezeigt; ein führender Nummernpräfix wird ausgeblendet. Bilder und deren Namen
+werden ausschließlich aus dem privaten Ordner geladen. Fehlt ein gewähltes Motiv später, bleibt
+das bisherige Titelbild erhalten und der Bot fordert eine neue Auswahl an. `THUMBNAIL_UNTERZEILE` setzt den Standardtext.
+Die Bilder gehören nicht ins Git-Repository. Auch Testexporte, private Konfigurationskopien
+und versehentlich im Repository-Hauptordner abgelegte Medien werden durch `.gitignore` ausgeschlossen. Für die genaue Freistellung einmal `bash pi/portraet-einrichten.sh`
+ausführen und `THUMBNAIL_PYTHON=.venv-portraet/bin/python` setzen. Das richtet eine separate Bildumgebung
+mit OpenCV und PyMatting ein und lädt IS-Net (ca. 171 MiB, geprüfte Prüfsumme) nach
+`daten/modelle/isnet-general-use.onnx`. Quelle: [IS-Net / DIS](https://github.com/xuebinqin/DIS),
+Apache-2.0, ONNX-Konvertierung aus [rembg](https://github.com/danielgatis/rembg).
+Ohne dieses Modell verwendet die Bildumgebung das kleine mitgelieferte U2Netp.
+Die Maske wird mit weichen Haarkanten und geschätzten Vordergrundfarben verfeinert, damit
+der ursprüngliche helle Hintergrund keinen Saum bildet. Innen bleiben die Originalpixel erhalten.
+Der erste Start dauert durch die lokale Vorbereitung länger; weitere Aufrufe verwenden den Cache.
+Alte Freistellungen werden nicht wiederverwendet. Eine manuell hinterlegte Standard-PNG dagegen bewusst
+ersetzen oder entfernen, damit der Bot sie neu erzeugt. Transparente PNGs
+werden direkt übernommen. Unter **Schrift wählen** stehen Inter (Standard), Liberation Sans Bold und
+optional PoliticsHead Bold für Überschriften in Großbuchstaben zur Auswahl. Die mitgelieferten
+Schriften haben ihre jeweiligen Lizenzen und Herkunftshinweise. Unterzeilen verwenden DejaVu Sans Condensed. Der Titel hat großzügige Innenabstände. Die Schrift betrifft nur das
+Thumbnail. Das kleine Modell und die Schriften samt Lizenzen sind mitgeliefert; Bilder bleiben lokal.
 
 ### Entwürfe, Archiv und Quellen
 
@@ -85,7 +140,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 | 🪪 Bauchbinde | nur Video: Name und Funktion am Anfang einblenden – Standard aus `BAUCHBINDE_NAME`/`_FUNKTION` oder ein anderer Name, z. B. für Gäste |
 | 📝 Untertitel | nur Video: schickt alle Untertitel als nummerierte Liste. Kopieren, Fehler ändern, zurückschicken – geändert wird genau der Untertitel mit dieser Nummer, die Zeit bleibt (auch nur einzelne Zeilen wie `4 Ob das klappt?`; `4 -` löscht). `falsch => richtig` ohne Nummer ersetzt überall, alternativ eine .srt-Datei. Das Video wird danach neu gebaut |
 | 🏷️ Logo drauf / entfernen | nur Fotos: Logo pro Beitrag an- oder abschalten (Standard: `LOGO_AUF_FOTOS`) |
-| 👤 Kunde | Postiz-Kunde wählen, z. B. „Lukas Küffner“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
+| 👤 Kunde | Postiz-Kunde wählen, z. B. „Beispielkunde“ – danach sind dessen Kanäle vorausgewählt (Standard: `POSTIZ_KUNDE`) |
 | 📺 Kanäle | Kanäle des gewählten Kunden an-/abwählen |
 | ✂️ Pro Kanal | eigener Text je Kanal (siehe unten) |
 | 🤝 Collab | Instagram-Collab-Partner (bis zu 3), z. B. `@piraten_nuernberg` – erscheint, wenn ein Instagram-Kanal gewählt ist |
@@ -100,7 +155,7 @@ Danach kommt die Vorschau, darunter die Caption mit Knöpfen:
 ### Texte pro Kanal
 
 Der Vorschlag ist der **Haupttext**; er gilt für alle Kanäle ohne eigene Fassung. Unter **✂️ Pro Kanal** steht jeder
-gewählte Kanal mit seiner Zeichenzahl, z. B. `⚠️ X Lukas · 372/280`. Dort kannst du
+gewählte Kanal mit seiner Zeichenzahl, z. B. `⚠️ X-Konto · 372/280`. Dort kannst du
 
 - **🤖 Alle per KI anpassen** – eine eigene Fassung je Netzwerk, passend zu Länge und Ton (X kurz und pointiert,
   LinkedIn sachlich, Instagram persönlich …). Mehrere Konten desselben Netzwerks bekommen denselben Text.
@@ -369,3 +424,63 @@ Tests: `npm test`
 Kontrolle nach dem Posten, Mastodon direkt, Zählweise, Kanalauswahl per Name, Anfragenlimit und die
 Pi-Skripte stammen aus [eu-piraten-abstimmungen](https://github.com/vwt1812-glitch/eu-piraten-abstimmungen).
 
+## Tonkorrektur für Videos
+
+**Ton verbessern** im Videoentwurf bietet Originalton, **Nur stumme Stereoseite reparieren**, reinen Lautstärkeausgleich und
+**Sprache behutsam verbessern**. Letzteres reduziert tiefe Störgeräusche und leichtes Rauschen,
+glättet die Dynamik sanft und normalisiert in zwei Durchgängen auf −16 LUFS bei höchstens
+−1,5 dBTP Zielspitze. Raumhall lässt sich mit dieser behutsamen Bearbeitung nur begrenzt mindern.
+
+Ein erneuter Klick auf die bereits mit der aktuellen Verarbeitungsversion angewandte Einstellung
+startet keine neue Berechnung. Ältere Fassungen können dieselbe Einstellung erneut anwenden.
+
+Neue Videos verwenden standardmäßig die Sprachkorrektur (`AUDIO_TUNING=sprache`). Bestehende
+Entwürfe behalten ihre Einstellung, bis der Ton umgeschaltet wird. Umschalten übernimmt die
+vorhandene Bildspur und bearbeitet immer den Ton des Originals; wiederholte Korrekturen addieren
+sich nicht. Feed und Hochkantfassung werden gemeinsam aktualisiert. Bei Fehlern bleiben die
+bisherigen Dateien erhalten. Untertitel und Coverbilder bleiben erhalten; vorbereitete Uploads
+und Story-Teile werden neu aufgebaut. `AUDIO_TUNING=original` deaktiviert die Vorgabe.
+
+Alle drei Korrekturmodi prüfen vor der Bearbeitung beide Stereokanäle über die gesamte Aufnahme.
+Ist eine Seite praktisch stumm, wird die hörbare Seite unvermischt auf links und rechts kopiert.
+Die reine Kanalreparatur verändert den Pegel nicht; Lautstärkeausgleich und Sprachverbesserung
+messen erst nach dieser Reparatur, damit die gemeinsame Lautheit stimmt. Originalton stellt
+die ursprüngliche Kanalverteilung wieder her. `AUDIO_TUNING=kanaele` wählt nur die Kanalreparatur
+als Vorgabe für neue Videos.
+
+Die Erkennung ist bewusst zurückhaltend: leiser Kanal höchstens −65 dBFS RMS und −35 dBFS Spitze,
+mindestens 35 dB Abstand; hörbarer Kanal mindestens −45 dBFS RMS und −30 dBFS Spitze. Normales Stereo,
+vollständig stille Aufnahmen, Mono, Mehrkanalton und eine zweite Stimme mit deutlichen Spitzen
+werden dadurch nicht automatisch umverteilt. Kanalmessungen werden anhand der Originaldatei
+zwischengespeichert; fehlgeschlagene Messungen übernehmen keine neue Videofassung.
+
+
+### Versandprüfung und kleinere Videos
+
+Vor der Bestätigung prüft der Bot die Dateigrößen für Mastodon (standardmäßig 40 MB)
+und Postiz-Telegram (48 MB mit Reserve zum normalen Bot-API-Limit). Diese Grenzen
+betreffen den Versand über Postiz, auch wenn der Eingangsbot einen lokalen Telegram-Server nutzt.
+Bei Bedarf entsteht eine vollständige H.264/AAC-Fassung mit höchstens 1280 Pixeln an der
+langen Seite und 30 Bildern pro Sekunde. Zwei Durchgänge berechnen die passende Bitrate;
+Dateigröße, Dauer und vorhandener Ton werden vor der Übernahme geprüft. Es wird nichts
+abgeschnitten und der Ton nicht erneut verbessert. Instagram/Facebook behalten ihre bisherige Datei.
+Benötigen mehrere Kanäle dieselbe Quelle kleiner, teilen sie sich die strengere Fassung.
+Dateien und Uploads werden wiederverwendet, solange Quelle und Dateigrenze gleich bleiben.
+Bei zu geringem Bitbudget oder einem Fehler bricht die Vorbereitung verständlich ab.
+Verstreicht währenddessen ein geplanter Termin, muss ein neuer Termin gewählt werden.
+
+Die Mastodon-Grenze hängt vom Server ab. In `kanaele.json` kann `maxVideoMB` pro Netzwerk
+oder konkreter Kanal-ID gesetzt werden, zum Beispiel `"mastodon": {"maxVideoMB": 40}`.
+Diese lokale Einstellung wird nicht als Provider-Einstellung an Postiz geschickt.
+
+Bei selbst gehostetem Postiz kann `POSTIZ_DIAGNOSE_CONTAINER=postiz` aktiviert werden.
+Der Bot-Benutzer benötigt bereits Docker-Zugriff. Der Helfer fragt ausschließlich Verbindungsflags
+und zugehörige Veröffentlichungsabläufe für die über die API zugänglichen Kanal-/Post-IDs ab.
+Die Public API liefert diese Informationen nicht vollständig. Es werden keine Zugangsdaten,
+Providerantworten oder Header nach Telegram übernommen und keine Datenbankeinträge verändert.
+Eine als erneuerungsbedürftig markierte Verbindung verhindert einen neuen Upload, bis der Kanal
+neu verbunden oder abgewählt ist. Beim letzten X-Versuch erschöpfte API-Credits ergeben einen
+Hinweis; das aktuelle Guthaben ist darüber nicht live prüfbar. Ohne lokale Diagnose oder bei
+deren Ausfall bleiben diese zusätzlichen Prüfungen eingeschränkt. Die bestehende Kontrolle
+nach dem Termin meldet konkrete Ursachen, soweit verfügbar. Bekannte Posts werden dabei
+weder neu angelegt noch automatisch wiederholt; nachträgliche Reparaturen veröffentlichen nichts.

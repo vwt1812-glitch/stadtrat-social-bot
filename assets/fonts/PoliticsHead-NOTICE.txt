@@ -1,0 +1,7 @@
+Politics Head Bold / PoliticsHeadv1_9.ttf
+Author: SG Gestaltung
+License: WTFPL, as explicitly credited by the upstream Piratenkleider theme.
+Upstream credit: https://github.com/xwolfde/Piratenkleider/blob/master/readme.txt
+Unmodified font: https://github.com/xwolfde/Piratenkleider/blob/master/fonts/PoliticsHeadv1_9.ttf
+License information: https://www.wtfpl.net/
+Distributed here as PoliticsHead-Bold.ttf; only the filename was changed.

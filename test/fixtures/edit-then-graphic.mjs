@@ -10,7 +10,7 @@ import { Postiz } from "../../src/postiz.mjs";
 import { ausgewogeneZeilen, logoFuerGrafik } from "../../src/grafik-text.mjs";
 
 const [datenDir, aktion, format] = process.argv.slice(2);
-Object.assign(process.env, {
+Object.assign(process.env, {LOGO:path.resolve("assets/logos/quer-dunkel.png"),
   DATEN_DIR: datenDir, TELEGRAM_BOT_TOKEN: "test", ERLAUBTE_NUTZER: "123",
   POSTIZ_URL: "https://postiz.invalid", POSTIZ_API_KEY: "test", WHISPER_MODELL: "test",
   CAPTION_ANBIETER: "", ANTHROPIC_API_KEY: "", OPENAI_API_KEY: "", MASTODON_TOKEN: "",
