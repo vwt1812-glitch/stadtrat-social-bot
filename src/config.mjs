@@ -103,7 +103,7 @@ export function ladeConfig() {
     },
     // Querformat-Videos für Instagram/TikTok in 9:16 (pro Video im Menü umschaltbar)
     hochkant: {
-      netze: liste("HOCHKANT_NETZE").length ? liste("HOCHKANT_NETZE") : ["instagram", "instagram-standalone", "tiktok", "tiktok-business"],
+      netze: liste("HOCHKANT_NETZE").length ? liste("HOCHKANT_NETZE") : ["instagram", "instagram-standalone", "tiktok", "tiktok-business", "tiktok-buffer"],
       standard: env("HOCHKANT_STANDARD", "nein") === "ja",
     },
     bauchbinde: {
