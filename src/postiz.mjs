@@ -7,9 +7,9 @@ import path from "node:path";
 import twitter from "@ambassify/twitter-text";
 
 /** Netzwerke, die ohne Bild oder Video nichts annehmen. */
-export const BRAUCHT_MEDIEN = ["instagram", "instagram-standalone", "tiktok", "tiktok-business", "youtube", "pinterest"];
+export const BRAUCHT_MEDIEN = ["instagram", "instagram-standalone", "tiktok", "tiktok-business", "tiktok-buffer", "youtube", "pinterest"];
 /** Netzwerke, die nur Videos nehmen. */
-export const NUR_VIDEO = ["youtube"];
+export const NUR_VIDEO = ["youtube", "tiktok-buffer"];
 
 /** Kanäle, die zur Art des Beitrags passen. */
 export function passendeKanaele(kanaele, art) {
@@ -23,6 +23,8 @@ export function passendeKanaele(kanaele, art) {
  * etwa für X Premium.
  */
 export const ZEICHENLIMIT = {
+  "x-buffer": 280,
+  "tiktok-buffer": 2200,
   x: 280,
   bluesky: 300,
   threads: 500,
@@ -51,7 +53,7 @@ export function zeichenLimit(kanal, eigene = {}, {mitMedien=false}={}) {
  * (ein Emoji sind dort meist 2).
  */
 export function zeichenZahl(text, identifier) {
-  if (identifier === "x") return twitter.parseTweet(text).weightedLength;
+  if (identifier === "x" || identifier === "x-buffer") return twitter.parseTweet(text).weightedLength;
   // Mastodon direkt (ohne Postiz): Codepoints, Links 23
   if (identifier === "mastodon-direkt") return [...text.replace(/https?:\/\/\S+/g, "x".repeat(23))].length;
   if (identifier === "threads") return new TextEncoder().encode(text).length;
@@ -118,7 +120,7 @@ export class AnfragenZaehler {
  * Netzwerke, die Videos im Hochformat zeigen (Instagram als Reel, TikTok). Auf Wunsch bekommen sie
  * statt eines Querformat-Videos die eigene 9:16-Fassung; per HOCHKANT_NETZE änderbar.
  */
-export const HOCHKANT = ["instagram", "instagram-standalone", "tiktok", "tiktok-business"];
+export const HOCHKANT = ["instagram", "instagram-standalone", "tiktok", "tiktok-business", "tiktok-buffer"];
 
 /** Netzwerke mit Stories und die Einstellung dafür. */
 export const INSTAGRAM_STORY = ["instagram", "instagram-standalone"];
@@ -210,6 +212,9 @@ const MEDIENTYP = { ".mp4": "video/mp4", ".jpg": "image/jpeg", ".jpeg": "image/j
 export function standardEinstellungen(identifier, caption) {
   const titel = caption.split("\n")[0].replace(/#\S+/g, "").trim();
   switch (identifier) {
+    case "x-buffer":
+    case "tiktok-buffer":
+      return { isAiGenerated: false };
     case "instagram":
     case "instagram-standalone":
       return { post_type: "post", collaborators: [] };
