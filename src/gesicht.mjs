@@ -18,10 +18,10 @@ export const LAGE_REIHENFOLGE = ["unten", "oben", "mitte"];
  * @returns {Promise<{bilder:number, gesichter:{t:number,x:number,y:number,w:number,h:number}[]}|null>}
  *   null, wenn OpenCV fehlt oder etwas schiefgeht – die Gesichtssuche ist nur eine Hilfe
  */
-export async function gesichtSuchen(video, { python }, bilder = 12) {
+export async function gesichtSuchen(video, { python, alleGesichter = false, dicht = false }, bilder = 12) {
   if (!python || !fs.existsSync(python)) return null;
   try {
-    return JSON.parse(await ausfuehren(python, [SKRIPT, video, String(bilder)]));
+    return JSON.parse(await ausfuehren(python, [SKRIPT, video, String(bilder), ...(alleGesichter ? ["--alle"] : []), ...(dicht ? ["--dicht"] : [])]));
   } catch (e) {
     console.error("Gesichtssuche:", e.message);
     return null;
@@ -53,8 +53,9 @@ export function lageWaehlen(funde, { masse, layout }) {
     const b = untertitelBereich(lage, { masse, layout });
     return felder.filter((f) => f.oben < b.unten && f.unten > b.oben).length / felder.length;
   };
-  // Der frühere Logobereich wird erst ohne Logo freigegeben.
-  const lagen = layout.logo ? LAGE_REIHENFOLGE : ["unten", "oben", "logobereich", "mitte"];
+  // Ohne Logo die freie Fläche oberhalb des Kopfes vor der tieferen Lage „oben“
+  // prüfen. Sonst gewinnt „oben“ bereits und der freie Logobereich kommt nie dran.
+  const lagen = layout.logo ? LAGE_REIHENFOLGE : ["unten", "logobereich", "oben", "mitte"];
   const anteile = Object.fromEntries(lagen.map((lage) => [lage, verdeckt(lage)]));
   const frei = lagen.find((lage) => anteile[lage] <= 0.2);
   if (frei) {

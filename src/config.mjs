@@ -85,7 +85,7 @@ export function ladeConfig() {
       logoStil: env("LOGO_STIL", env("LOGO_HINTERGRUND") === "nein" ? "frei" : "karte"),
       karteFarbe: env("KARTE_FARBE", "#1D1D1B"),
       akzentFarbe: env("AKZENT_FARBE", "#F18616"),
-      logoAufFotos: env("LOGO_AUF_FOTOS", "ja") !== "nein",
+      logoAufFotos: env("LOGO_AUF_FOTOS", "nein") !== "nein",
       schrift: env("SCHRIFT", "Inter"),
       schriftOrdner: pfad(env("SCHRIFT_ORDNER", "assets/fonts")),
       farbe: env("UNTERTITEL_FARBE", "#FFFFFF"),

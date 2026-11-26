@@ -1,5 +1,8 @@
 # Stadtrat Social-Media-Bot
 
+Neue Beiträge starten **ohne Logo**; „Logo hinzufügen“ ist für Fotos, Videos, Storys,
+Sharepics und Animationen verfügbar.
+
 Telegram-Bot für den Raspberry Pi: Video, Fotos oder Text reinschicken → Vorschau mit Logo, Untertiteln und
 Caption-Vorschlag zurück → anpassen → mit **Ja** sofort oder zu einer bestimmten Zeit über [Postiz](https://postiz.com) posten.
 Alles läuft lokal, Postiz ist selbst gehostet. Nur wenn ein KI-Schlüssel eingetragen ist (Claude oder OpenAI),
@@ -286,14 +289,51 @@ viele Postiz-Anfragen in der letzten Stunde verbraucht sind. `/kanaele` listet d
 - **Storys:** Instagram und Facebook zeigen oben Fortschrittsbalken und Profil, unten Antworten/Interaktionen.
   Der Bot nutzt dafür konservative Sicherheitsbereiche (oben 14 %, unten 20 %); für Reels/TikTok oben 14 %,
   unten 35 % und rechts 16 %. Das sind Näherungen, die App-Oberflächen können sich ändern.
-  Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung mit unscharfem Hintergrund.
+  Für Fotos und nicht-9:16-Videos baut der Bot eine 1080×1920-Fassung. Bei Querformatvideos prüft er
+  zuerst lokal mit OpenCV/YuNet mindestens zweimal pro Sekunde, ob ein 9:16-Ausschnitt
+  passt. Ruhige Abschnitte von mindestens zwei Sekunden werden getrennt beurteilt. Alle erkannten
+  Köpfe samt seitlichem Abstand müssen in den Ausschnitt passen; der Oberkörper darf angeschnitten werden.
+  Ein fester Ausschnitt bleibt bevorzugt, auch innerhalb einzelner ruhiger Abschnitte. Notwendige
+  Kamerafahrten werden vorausschauend über den ganzen Abschnitt geglättet; sie starten und stoppen
+  nicht mehr an jedem Probebild. Kopfbereiche bleiben dabei geschützt. Kleine Kopfbewegungen lösen
+  bei ausreichend Platz keine zusätzliche Fahrt aus. Anfang oder Ende ohne verlässlichen Gesichtsfund bleiben
+  vollständig sichtbar; die Vorschau nennt den Beginn des Ausschnitts. Bei unsicherer Erkennung,
+  Erkennungslücken, schnellen Bildsprüngen oder weit getrennten Personen bleibt nur die betroffene
+  Stelle vollständig mit unscharfem Hintergrund sichtbar. Danach kann der Ausschnitt wieder einsetzen.
+  Das Ausrichten am Anfang oder ein einzelner Wackler verwirft somit nicht den gut erkannten Rest.
+  Ohne ausreichend lange ruhige Abschnitte oder ohne eingerichtetes OpenCV bleibt das vollständige Bild.
+  Für die Analyse wird nach Möglichkeit die bereits berechnete Feed-Fassung verwendet. Das vermeidet
+  eine weitere vollständige Dekodierung großer HEVC-Originale; gerendert wird weiterhin aus dem Original.
+  Bei kurzen Videos wird die Abtastung erhöht. Die Originalhöhe bleibt erhalten, damit zusätzliches
+  Kopfpolster nicht zum Ablehnen der gesamten Aufnahme oder zum Abschneiden der Haare führt.
+  Ein gewählter 9:16-Ausschnitt füllt die Hochkantfläche vollständig aus. Dafür wird die Person
+  nicht als verkleinerte Kachel auf einem unscharfen Hintergrund dargestellt. Nur unsichere
+  Abschnitte zeigen weiterhin das vollständige Originalbild mit unscharfem Hintergrund.
+  Für die Untertitel im automatischen Hochkant-Ausschnitt gilt das Profil `instagram-organisch`:
+  fester Abstand von 16 % zum unteren Videorand, anhand einer normalen Instagram-Reels-Ansicht
+  geprüft. Rechts bleibt Platz für die Knopfleiste. Der gesamte Text einschließlich Kontur und
+  Schatten wird innerhalb des dafür vorgesehenen Bereichs gehalten; lange Wörter werden bei
+  Bedarf kleiner gesetzt. Aufgeklappter Beitragstext kann weiter ins Bild hineinragen.
+  Logo und andere Profile behalten die konservativen Plattform-Freizonen: oben 14 %, unten
+  35 %, links 6 %, rechts 16 %. Mit `untertitelProfil: "reel-werbung"` im Layout gilt auch für
+  Untertitel wieder dieser strengere Bereich samt automatischer Gesichtsausweichposition.
+  Eine ausdrücklich gewählte Textlage bleibt innerhalb des jeweiligen Textbereichs wählbar.
+  Die normale Querformatfassung behält ihre Position.
+  Die Prüfung erkennt Gesichter, keine wichtigen Schilder, Folien oder sonstigen Bildinhalte.
+  Über **📐 Videoformat ändern → 🖼️ Hochkant mit vollständigem Bild** lässt sich der Ausschnitt
+  abschalten und die Vorschau neu bauen; die automatische Prüfung lässt sich dort wieder aktivieren.
+  **🔄 Ausschnitt neu berechnen** erstellt bei aktiver Automatik die Fassung erneut und verwendet
+  vorhandene Gesichtsfunde weiter. Ein Neustart während dieser Neuberechnung setzt denselben Entwurf fort.
+  Die Vorschau nennt die verwendete Darstellung und bei einem Fallback den Grund. Alte Gesichtsfunde
+  werden beim nächsten Erstellen der automatischen Fassung neu geprüft. Story und zusätzliche Hochkantfassung nutzen dieselbe
+  Auswahl. Fotos behalten ihren unscharfen Hintergrund.
   Fotos werden **direkt aus dem Original** bearbeitet: erst Hintergrund und scharfes Bild, dann das Logo,
   damit es nicht in den unscharfen Hintergrund eingebrannt ist. Das Logo landet bevorzugt auf einer ausreichend
   großen freien unscharfen Fläche; falls keine passt, in einer freien Ecke innerhalb der Sicherheitsbereiche.
   **🖼️ Story-Layout** erlaubt bei Fotos die Positionen automatisch, oben/unten links, mittig oder rechts und
   eine Position für Bildtext. Text wird bevorzugt auf freien Flächen platziert, ohne das Logo zu überdecken.
   In Videos können erkannte Gesichter die Logoposition beeinflussen (auch nach Umrechnung eines Querformats
-  auf 9:16). Bei einem Querformatvideo stehen Untertitel nach Möglichkeit unter dem scharfen Bild,
+  auf 9:16). Bei einem Querformatvideo ohne Ausschnitt stehen Untertitel nach Möglichkeit unter dem scharfen Bild,
   Bauchbinden bleiben möglichst im Bild. Die eigene Story-Fassung wird beim Posten extra hochgeladen.
 - **Querformat für Instagram/TikTok:** Ein Querformat-Video erscheint in Reels und TikTok sonst klein mit Balken.
   Mit **📲 9:16 für Insta** bekommen die Netzwerke aus `HOCHKANT_NETZE` (Standard Instagram und TikTok) die
