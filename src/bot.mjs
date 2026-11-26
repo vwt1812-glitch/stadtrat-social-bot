@@ -113,6 +113,7 @@ async function gewaehlteKanaele(auftrag) {
 /** Stil-Hinweise für die KI, wenn sie eine Fassung für ein Netzwerk schreibt. */
 const NETZ_STIL = {
   x: "Kurz und pointiert, höchstens 2 Hashtags.",
+  "x-buffer": "Kurz und pointiert, höchstens 2 Hashtags.",
   bluesky: "Kurz und pointiert, höchstens 2 Hashtags.",
   threads: "Locker und kurz, wenige Hashtags.",
   mastodon: "Sachlich und kurz, Hashtags in CamelCase (z. B. #StadtratNürnberg).",
@@ -123,6 +124,7 @@ const NETZ_STIL = {
   facebook: "Persönlich und erklärend, höchstens 2 Hashtags.",
   tiktok: "Sehr kurz und locker, 3–5 Hashtags.",
   "tiktok-business": "Sehr kurz und locker, 3–5 Hashtags.",
+  "tiktok-buffer": "Sehr kurz und locker, 3–5 Hashtags.",
   [DIREKT]: "Sachlich und kurz, Hashtags in CamelCase (z. B. #StadtratNürnberg).",
 };
 
