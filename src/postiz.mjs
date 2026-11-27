@@ -346,15 +346,15 @@ export class Postiz {
     const feedPost = (k) => {
       const captionText = captions[k.id] ?? caption;
       const settings = einstellungenFuer(k, { caption: captionText, collabs, repost, eigene });
-      const coverErlaubt = ["instagram", "instagram-standalone", "youtube", "tiktok-business"].includes(k.identifier) || (k.identifier === "mastodon" && mastodonThumbnails);
+      const coverErlaubt = ["instagram", "instagram-standalone", "youtube", "tiktok-business", "reddit"].includes(k.identifier) || (k.identifier === "mastodon" && mastodonThumbnails);
       const cover = coverErlaubt ? thumbnails[k.id] : null;
       const medienFuerKanal = kanalMedien[k.id] ?? (hochkantMedium && hochkantNetze.includes(k.identifier) ? [hochkantMedium] : medien);
       const image = medienFuerKanal.map((m, i) => {
         // Nur Video, nur erstes Medium: nie Cover als zusätzliches Feedbild oder Storymedium senden.
         if (i || !/\.mp4(?:[?#]|$)/i.test(m.path)) return m;
         if (cover) return { ...m, thumbnail: cover.path };
-        if (k.identifier === "tiktok" && settings.content_posting_method === "DIRECT_POST" &&
-            settings.privacy_level === "PUBLIC_TO_EVERYONE" && Number.isSafeInteger(thumbnailTimestamp) && thumbnailTimestamp >= 0) {
+        if ((k.identifier === "tiktok-buffer" || (k.identifier === "tiktok" && settings.content_posting_method === "DIRECT_POST" &&
+            settings.privacy_level === "PUBLIC_TO_EVERYONE")) && Number.isSafeInteger(thumbnailTimestamp) && thumbnailTimestamp >= 0) {
           return { ...m, thumbnailTimestamp };
         }
         return m;

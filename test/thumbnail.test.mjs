@@ -64,6 +64,29 @@ test("Framezeiten validieren auch Null, Dezimalkomma und Videoende", () => {
   for (const s of ["-1", "10", "00:60", "Infinity", "3; rm", "0.0001"]) assert.throws(() => frameZeit(s, 10));
 });
 
+test("TikTok via Buffer bekommt nur Videoframes; Reddit erhält Bildcover", () => {
+  assert.equal(thumbnailZiel({identifier: "tiktok-buffer"}, {modus: "frame"}).zeit, true);
+  assert.equal(thumbnailZiel({identifier: "tiktok-buffer"}, {modus: "bild"}).zeit, false);
+  assert.equal(thumbnailZiel({identifier: "tiktok-buffer"}, {modus: "bild"}).bild, false);
+  assert.equal(thumbnailZiel({identifier: "reddit"}, {modus: "text"}).bild, true);
+});
+
+test("Bot übergibt Buffer-Framezeit inklusive Null und Reddit-Cover getrennt", async (t) => {
+  const sent = [];
+  t.mock.method(globalThis, "fetch", async (_, o) => { const b=JSON.parse(o.body); sent.push(b); return new Response(JSON.stringify(b.posts.map(p=>({postId:p.integration.id})))); });
+  const p = new Postiz({url:"https://postiz",apiKey:"test",einstellungen:"nicht-da.json"});
+  const kanaele=[{id:"t",identifier:"tiktok-buffer"},{id:"r",identifier:"reddit"},{id:"x",identifier:"x-buffer"}];
+  for (const thumbnailTimestamp of [0, 2400]) {
+    await p.beitrag({typ:"draft",zeit:new Date(),caption:"Cover",medien:[{id:"v",path:"https://postiz/video.mp4"}],kanaele,
+      thumbnailTimestamp,thumbnails:{r:{id:"c",path:"https://postiz/cover.jpg"}}});
+    const posts=sent.at(-1).posts;
+    assert.equal(posts[0].value[0].image[0].thumbnailTimestamp,thumbnailTimestamp);
+    assert.equal(posts[0].value[0].image[0].thumbnail,undefined);
+    assert.equal(posts[1].value[0].image[0].thumbnail,"https://postiz/cover.jpg");
+    assert.equal(posts[2].value[0].image[0].thumbnailTimestamp,undefined);
+  }
+});
+
 test("Coveruploads werden pro Profil geteilt und nach Bestätigung nicht neu gezählt", () => {
   const kanaele = ["instagram", "instagram-standalone", "youtube", "mastodon"].map((identifier) => ({ identifier }));
   const t = { dateien: { hochkant: "ig.jpg", youtube: "yt.jpg", original: "native.jpg" }, hochgeladen: {} };

@@ -34,6 +34,12 @@ export function thumbnailZiel(kanal, { modus, youtubeShort = false } = {}, masto
     case "youtube":
       return { profil: youtubeShort ? "youtube-short" : "youtube", bild: !youtubeShort,
         hinweis: youtubeShort ? "Shorts-Cover: für YouTube Studio exportiert; automatische Übernahme nicht bestätigt." : "" };
+    case "reddit":
+      return { profil: "original", bild: true };
+    case "tiktok-buffer":
+      return { profil: "hochkant", zeit: modus === "frame", bild: false, hinweis: modus === "frame"
+        ? "TikTok: der gewählte Videoframe wird als Titelbild übermittelt."
+        : "TikTok: bitte einen vorhandenen Videoframe als Titelbild auswählen. Eigene Bildcover werden nicht übertragen." };
     case "tiktok":
       return { profil: "hochkant", zeit: modus === "frame", hinweis: modus === "frame"
         ? "TikTok: Frame-Auswahl nur bei öffentlichem Direct Post; nicht beim Inbox-Upload."
